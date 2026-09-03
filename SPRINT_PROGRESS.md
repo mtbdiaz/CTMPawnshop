@@ -15,12 +15,17 @@ they're done — don't batch updates.
 
 ## Sprint 1 — Authentication & Access + System Configuration
 
-- [ ] PB-1 Login
-- [ ] PB-2 Password Reset (Admin-assisted)
-- [ ] PB-3 Role-Based Access Control (⚠ flagged not Small — watch for oversized PR)
-- [ ] PB-4 Manage User Accounts
-- [ ] PB-5 Session Timeout
-- [ ] PB-6 Configure Business Rules (interest rate, gold price, LTV%, grace period)
+- [x] PB-1 Login (`app/login`) — Supabase Auth email/password, 3-fail client-side lockout (60s)
+- [x] PB-2 Password Reset (Admin-assisted) — admin issues temp password from Users screen, forces password change on next login (`app/force-password-change`)
+- [x] PB-3 Role-Based Access Control — `profiles.role` + RLS + `requireRole()` server guard + role-aware nav (did not feel oversized; scope was Auth/Settings screens only, more screens reuse the same guard in later sprints)
+- [x] PB-4 Manage User Accounts (`app/dashboard/users`) — create/edit/deactivate staff accounts (deactivation also bans the Supabase Auth user, not just a UI flag)
+- [x] PB-5 Session Timeout — 15 min inactivity auto sign-out (`components/session-timeout-watcher.tsx`)
+- [x] PB-6 Configure Business Rules (`app/dashboard/settings`) — interest rate, gold price, LTV%, grace period, singleton `system_settings` row, admin-only RLS update
+
+Tests: 22 unit tests (Vitest) covering RBAC role logic, login lockout, and
+both validation schemas. `next build` + `tsc --noEmit` + `eslint` all clean.
+Manual: dev server smoke-tested — `/` redirects to `/login`, login page
+renders correctly.
 
 ## Sprint 2 — Customer Management
 

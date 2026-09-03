@@ -108,6 +108,40 @@ Four roles throughout: **Admin, Operator, Cashier, Appraiser**.
   dependency needed for MVP. (Confirmed in Batch B.)
 - Backups (Sprint 10, PB-43): Supabase handles backups server-side —
   documented, not custom-built.
+- Auth/RBAC (Sprint 1): `public.profiles` (id = auth.users.id, `role` enum,
+  `is_active`) is the single source of truth for role checks. `get_my_role()`
+  / `is_admin()` are `SECURITY DEFINER` SQL functions so RLS policies on
+  `profiles` itself don't recurse. Server-side pages call
+  `requireRole(['admin', ...])` (`lib/auth/require-role.ts`); admin always
+  passes regardless of the list (PB-3 AC2).
+- Account deactivation (PB-4) sets `profiles.is_active = false` **and** bans
+  the Supabase Auth user (`ban_duration: '876000h'`) via the admin API, so
+  login is blocked at the auth layer, not just hidden in the UI.
+- Password reset / new accounts (PB-2, PB-4) issue a random temp password
+  and set `user_metadata.force_password_change = true`; the user is routed
+  to `/force-password-change` on next login until they set their own.
+- Session timeout (PB-5): 15 minutes of inactivity (`lib/auth/session-timeout.ts`),
+  client-side timer + `signOut()`. Login lockout (PB-1 AC3): 3 consecutive
+  failed attempts locks that email for 60s, tracked client-side in
+  localStorage (`lib/auth/login-attempts.ts`) — acceptable for a
+  single-location, small-staff shop; revisit if brute-force risk grows.
+- Testing: Vitest for unit tests (no React Testing Library yet — Sprint 1
+  tests target pure logic: validation schemas, RBAC role checks, login
+  lockout). Run with `npm test`.
+
+## Bootstrapping the first Admin account
+
+There's no self-service signup — the very first Admin has to be created
+manually once, from the Supabase dashboard (Authentication → Users → Add
+User), then given the `admin` role:
+
+```sql
+insert into public.profiles (id, full_name, role)
+values ('<auth-user-uuid-from-dashboard>', 'Your Name', 'admin');
+```
+
+After that, all further accounts are created from `/dashboard/users` by an
+Admin (PB-4) — no direct dashboard access needed.
 
 ## Token discipline reminders
 
@@ -117,3 +151,13 @@ Four roles throughout: **Admin, Operator, Cashier, Appraiser**.
 - Build only what the current sprint's backlog rows specify — no speculative
   future-sprint code.
 - Stop after each sprint batch and wait for review before continuing.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
