@@ -18,22 +18,28 @@ not port its code structure.
 - **Hosting**: Vercel
 - **Testing**: to be decided in Sprint 0 scaffold (likely Vitest + React Testing Library)
 
-## Folder structure (planned, set up in Sprint 0)
+## Folder structure (scaffolded in Sprint 0)
 
 ```
 app/                    # Next.js App Router routes
-  (auth)/               # login, password reset
-  (dashboard)/          # role-gated screens per module
+  (auth)/               # login, password reset — added per-feature
+  (dashboard)/          # role-gated screens per module — added per-feature
 lib/
   supabase/
     client.ts           # browser client (anon key)
-    server.ts           # server client (service_role, server-only)
-  validation/           # shared zod/validation schemas
-components/             # shared UI components
+    server.ts           # createClient() = session-bound (RLS); createAdminClient() = service_role, server-only
+    middleware.ts        # session-refresh helper used by proxy.ts
+  validation/           # shared zod/validation schemas — added as needed
+components/             # shared UI components — added as needed
+proxy.ts                # Next.js 16 middleware equivalent; refreshes Supabase session cookie
 supabase/
-  migrations/           # SQL migrations (tables + RLS policies)
+  migrations/           # SQL migrations (tables + RLS policies) — added per-feature
 docs/                   # source-of-truth backlog docs (do not edit)
 ```
+
+Scaffolded with `create-next-app` (TypeScript, Tailwind, ESLint, App Router,
+no `src/` dir). Next.js 16.3.4 — middleware file convention is `proxy.ts`
+(`middleware.ts` is deprecated in this version), function name `proxy`.
 
 ## Branch strategy
 

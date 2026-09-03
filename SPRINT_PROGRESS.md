@@ -6,12 +6,12 @@ they're done — don't batch updates.
 
 ## Sprint 0 — Project Scaffold (not in original backlog, required first)
 
-- [ ] Next.js + TypeScript + Tailwind (App Router) scaffolded
-- [ ] `@supabase/supabase-js` + `@supabase/ssr` installed
-- [ ] `.env.local` placeholders set up (gitignored)
-- [ ] `lib/supabase/client.ts` (browser) + `lib/supabase/server.ts` (service_role)
-- [ ] Branch strategy confirmed in CLAUDE.md
-- [ ] Scaffold committed, pushed, PR opened
+- [x] Next.js + TypeScript + Tailwind (App Router) scaffolded
+- [x] `@supabase/supabase-js` + `@supabase/ssr` installed
+- [x] `.env.local` placeholders set up (gitignored) + `.env.example` committed
+- [x] `lib/supabase/client.ts` (browser) + `lib/supabase/server.ts` (session + service_role admin) + `lib/supabase/middleware.ts` + `proxy.ts` (session refresh)
+- [x] Branch strategy confirmed in CLAUDE.md
+- [x] Scaffold committed, pushed to PR #1
 
 ## Sprint 1 — Authentication & Access + System Configuration
 
