@@ -87,9 +87,12 @@ Build+typecheck+lint clean.
 
 ## Sprint 8 — Compliance and Security
 
-- [ ] PB-31 Log System Transaction (Audit Trail) (⚠ cross-cutting — shared logging utility from the start)
-- [ ] PB-32 Flag & Review Suspicious Activity
-- [ ] PB-33 Send Due-Date Reminder Notification
+- [x] PB-31 Log System Transaction (Audit Trail) (`app/dashboard/compliance/audit`) — generic trigger on every business table, read-only even to Admin; known limitation for service_role writes, see DECISIONS_LOG.md
+- [x] PB-32 Flag & Review Suspicious Activity (`app/dashboard/compliance`) — placeholder AML velocity rule, see DECISIONS_LOG.md
+- [x] PB-33 Send Due-Date Reminder Notification (`app/dashboard/compliance/reminders`) — ⚠ no email/SMS provider configured, in-app log only, see DECISIONS_LOG.md
+
+Tests: +6 unit tests (suspicious-activity velocity rule, reminder due-window).
+Build+typecheck+lint clean.
 
 ## Sprint 9 — Reporting and Management Insights
 

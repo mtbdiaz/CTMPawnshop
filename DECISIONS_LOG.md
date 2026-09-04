@@ -32,6 +32,43 @@ bottom of each section's run.
 - **Domain/project**: kept the existing Vercel project (`ctm-pawnshop`), no
   change needed.
 
+## Sprint 8 — Compliance and Security
+
+- **PB-31 Audit Trail**, built as instructed as a shared, cross-cutting
+  mechanism from the start rather than bolted on: one generic `SECURITY
+  DEFINER` trigger function (`audit_trigger_fn`) attached to every
+  business table (profiles, system_settings, customers, appraisal_items,
+  inventory_items, loans, loan_payments, loan_extensions, cash_flow_entries,
+  physical_inventory_audits, auction_batches). Logs table, record id,
+  action, `auth.uid()`, and the full row as JSON. `audit_log` has **no**
+  update or delete RLS policy for any role, including Admin — the only way
+  rows are ever written is through the trigger itself.
+  - **Known limitation**: writes made through the service_role admin client
+    (`lib/supabase/server.ts:createAdminClient`, used for account
+    creation/deactivation/password reset in PB-2/PB-4) carry no Supabase
+    Auth JWT, so `auth.uid()` is null inside the trigger for those rows —
+    the change is still logged (table/action/data), just with `actor =
+    null` instead of the admin's id. A fuller fix would thread the acting
+    user id through explicitly; out of scope for this pass.
+  - Also technically true: a `service_role` key used directly against the
+    REST/DB API (not through this app's code, which never does this)
+    bypasses RLS entirely and could alter `audit_log`. This is an inherent
+    property of `service_role`, not a gap in the policies themselves.
+- **PB-32 Suspicious Activity**: no real AML pattern-detection engine
+  available — placeholder rule (`lib/compliance/suspicious.ts`): flags a
+  customer opening ≥3 loans within a rolling 24-hour window ("structuring"
+  is a standard AML red flag). Runs inline at loan creation. Admin can
+  Dismiss / mark Investigating / Blacklist (blacklisting reuses PB-11's
+  existing `customers.is_blacklisted` flag).
+- **PB-33 Due-Date Reminders**: no email/SMS provider/connector is
+  configured in this environment, so there is no real notification
+  channel. Implemented as an in-app "Reminders" screen listing loans
+  maturing within `REMINDER_LEAD_DAYS = 3` days with a "Send reminder"
+  action that logs to `reminder_log` (satisfies AC2 — "the event is logged
+  for reference" — without a real delivery channel). **Follow-up**: wire a
+  real email/SMS provider (e.g. via a Supabase Edge Function) when one is
+  available.
+
 ## Sprint 7 — Financial and Accounting
 
 - PB-27's core mechanic (auto cash-flow entry on loan/payment/extension)

@@ -16,6 +16,7 @@ import {
 } from "@/lib/loans/calculations";
 import { verifyLostTicketId } from "@/lib/loans/lost-ticket";
 import { isPastGracePeriod } from "@/lib/loans/default-detection";
+import { isSuspiciousLoanVelocity } from "@/lib/compliance/suspicious";
 
 export type ActionState = { error?: string; success?: boolean; id?: string };
 
@@ -109,6 +110,21 @@ export async function createLoan(
     related_loan_id: loan.id,
     created_by: user.id,
   });
+
+  // PB-32: flag unusually rapid loan-taking by the same customer (placeholder
+  // AML rule — see DECISIONS_LOG.md).
+  const { data: recentLoans } = await supabase
+    .from("loans")
+    .select("created_at")
+    .eq("customer_id", parsed.data.customer_id);
+  const recentTimestamps = (recentLoans ?? []).map((l) => new Date(l.created_at));
+  if (isSuspiciousLoanVelocity(recentTimestamps)) {
+    await supabase.from("suspicious_activity_flags").insert({
+      customer_id: parsed.data.customer_id,
+      loan_id: loan.id,
+      reason: "Unusually high number of loans opened by this customer in a short window",
+    });
+  }
 
   revalidatePath("/dashboard/loans");
   return { success: true, id: loan.id };

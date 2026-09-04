@@ -12,6 +12,90 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          action: string
+          actor: string | null
+          changed_data: Json | null
+          created_at: string
+          id: string
+          record_id: string
+          table_name: string
+        }
+        Insert: {
+          action: string
+          actor?: string | null
+          changed_data?: Json | null
+          created_at?: string
+          id?: string
+          record_id: string
+          table_name: string
+        }
+        Update: {
+          action?: string
+          actor?: string | null
+          changed_data?: Json | null
+          created_at?: string
+          id?: string
+          record_id?: string
+          table_name?: string
+        }
+        Relationships: []
+      }
+      suspicious_activity_flags: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          id: string
+          loan_id: string | null
+          reason: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: Database["public"]["Enums"]["suspicious_flag_status"]
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          loan_id?: string | null
+          reason: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: Database["public"]["Enums"]["suspicious_flag_status"]
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          loan_id?: string | null
+          reason?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: Database["public"]["Enums"]["suspicious_flag_status"]
+        }
+        Relationships: []
+      }
+      reminder_log: {
+        Row: {
+          created_by: string | null
+          id: string
+          loan_id: string
+          sent_at: string
+        }
+        Insert: {
+          created_by?: string | null
+          id?: string
+          loan_id: string
+          sent_at?: string
+        }
+        Update: {
+          created_by?: string | null
+          id?: string
+          loan_id?: string
+          sent_at?: string
+        }
+        Relationships: []
+      }
       inventory_status_history: {
         Row: {
           changed_at: string
@@ -527,6 +611,7 @@ export type Database = {
       cash_flow_type: "loan_disbursement" | "payment_received" | "expense" | "revenue" | "forfeiture"
       cash_flow_direction: "in" | "out"
       inventory_status: "pawned" | "extended" | "redeemed" | "forfeited" | "queued_for_auction"
+      suspicious_flag_status: "open" | "dismissed" | "investigating" | "blacklisted"
     }
     CompositeTypes: {
       [_ in never]: never
