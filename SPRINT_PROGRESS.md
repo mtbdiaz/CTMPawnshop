@@ -50,9 +50,12 @@ validation). Build+typecheck+lint clean.
 
 ## Sprint 4 — Loan and Transaction Management (part 1)
 
-- [ ] PB-17 Create Pawn Loan & Issue Ticket (⚠ flagged not Small — watch for oversized PR)
-- [ ] PB-18 Record Customer Payment
-- [ ] PB-19 Process Loan Extension
+- [x] PB-17 Create Pawn Loan & Issue Ticket (`app/dashboard/loans`) — auto-creates inventory_items + cash_flow_entries rows (see DECISIONS_LOG.md re: those tables built early); printable ticket via `window.print()`
+- [x] PB-18 Record Customer Payment — interest settled first, remainder to principal
+- [x] PB-19 Process Loan Extension — recalculates maturity, charges + logs one additional interest period
+
+Tests: +9 unit tests (loan calculations: maturity date, interest, payment
+application/validation, extension). Build+typecheck+lint clean.
 
 ## Sprint 5 — Loan and Transaction Management (part 2)
 

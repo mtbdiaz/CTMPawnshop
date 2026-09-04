@@ -12,6 +12,186 @@ export type Database = {
   }
   public: {
     Tables: {
+      inventory_items: {
+        Row: {
+          appraisal_item_id: string
+          created_at: string
+          id: string
+          status: Database["public"]["Enums"]["inventory_status"]
+          updated_at: string
+          vault_location: string
+        }
+        Insert: {
+          appraisal_item_id: string
+          created_at?: string
+          id?: string
+          status?: Database["public"]["Enums"]["inventory_status"]
+          updated_at?: string
+          vault_location: string
+        }
+        Update: {
+          appraisal_item_id?: string
+          created_at?: string
+          id?: string
+          status?: Database["public"]["Enums"]["inventory_status"]
+          updated_at?: string
+          vault_location?: string
+        }
+        Relationships: []
+      }
+      cash_flow_entries: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          description: string | null
+          direction: Database["public"]["Enums"]["cash_flow_direction"]
+          entry_type: Database["public"]["Enums"]["cash_flow_type"]
+          id: string
+          related_loan_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          direction: Database["public"]["Enums"]["cash_flow_direction"]
+          entry_type: Database["public"]["Enums"]["cash_flow_type"]
+          id?: string
+          related_loan_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          direction?: Database["public"]["Enums"]["cash_flow_direction"]
+          entry_type?: Database["public"]["Enums"]["cash_flow_type"]
+          id?: string
+          related_loan_id?: string | null
+        }
+        Relationships: []
+      }
+      loans: {
+        Row: {
+          appraisal_item_id: string
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          extension_count: number
+          grace_period_days: number
+          id: string
+          interest_rate_percent: number
+          inventory_item_id: string | null
+          loan_date: string
+          maturity_date: string
+          principal_amount: number
+          principal_balance: number
+          status: Database["public"]["Enums"]["loan_status"]
+          ticket_number: string
+          updated_at: string
+        }
+        Insert: {
+          appraisal_item_id: string
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          extension_count?: number
+          grace_period_days: number
+          id?: string
+          interest_rate_percent: number
+          inventory_item_id?: string | null
+          loan_date?: string
+          maturity_date: string
+          principal_amount: number
+          principal_balance: number
+          status?: Database["public"]["Enums"]["loan_status"]
+          ticket_number: string
+          updated_at?: string
+        }
+        Update: {
+          appraisal_item_id?: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          extension_count?: number
+          grace_period_days?: number
+          id?: string
+          interest_rate_percent?: number
+          inventory_item_id?: string | null
+          loan_date?: string
+          maturity_date?: string
+          principal_amount?: number
+          principal_balance?: number
+          status?: Database["public"]["Enums"]["loan_status"]
+          ticket_number?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      loan_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          interest_portion: number
+          loan_id: string
+          principal_portion: number
+          receipt_number: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          interest_portion?: number
+          loan_id: string
+          principal_portion?: number
+          receipt_number: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          interest_portion?: number
+          loan_id?: string
+          principal_portion?: number
+          receipt_number?: string
+        }
+        Relationships: []
+      }
+      loan_extensions: {
+        Row: {
+          additional_interest_amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          loan_id: string
+          new_maturity_date: string
+          previous_maturity_date: string
+        }
+        Insert: {
+          additional_interest_amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          loan_id: string
+          new_maturity_date: string
+          previous_maturity_date: string
+        }
+        Update: {
+          additional_interest_amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          loan_id?: string
+          new_maturity_date?: string
+          previous_maturity_date?: string
+        }
+        Relationships: []
+      }
       appraisal_items: {
         Row: {
           appraised_by: string | null
@@ -223,6 +403,10 @@ export type Database = {
       staff_role: "admin" | "operator" | "cashier" | "appraiser"
       aml_status: "clear" | "flagged"
       counterfeit_resolution: "pending" | "cleared" | "confirmed"
+      loan_status: "active" | "extended" | "redeemed" | "defaulted" | "forfeited"
+      cash_flow_type: "loan_disbursement" | "payment_received" | "expense" | "revenue" | "forfeiture"
+      cash_flow_direction: "in" | "out"
+      inventory_status: "pawned" | "extended" | "redeemed" | "forfeited" | "queued_for_auction"
     }
     CompositeTypes: {
       [_ in never]: never

@@ -32,6 +32,36 @@ bottom of each section's run.
 - **Domain/project**: kept the existing Vercel project (`ctm-pawnshop`), no
   change needed.
 
+## Sprint 4 — Loan and Transaction Management, part 1
+
+- **PB-17 flagged not Small**: did not split into smaller stories mid-build
+  per instruction — combined loan creation + inventory record + cash flow
+  entry into one server action (`app/dashboard/loans/actions.ts:createLoan`)
+  since the three writes are transactionally related (AC2 requires them
+  together); kept each concern in its own table/function for testability.
+- **`inventory_items` and `cash_flow_entries` tables introduced early**
+  (nominally Sprints 6 and 7): PB-17 AC2 explicitly requires loan creation
+  to auto-create both. Built minimal versions now; Sprints 6-7 add the full
+  audit/reporting UI on top of these same tables rather than duplicating.
+- **Loan term assumption**: no explicit loan term/cycle length in `/docs`.
+  PB-6's "monthly interest rate" implies a 30-day cycle — used
+  `LOAN_TERM_DAYS = 30` (`lib/loans/calculations.ts`), standard PH pawnshop
+  convention. Flagged as an assumption pending client confirmation.
+- **Payment application order**: interest is settled first, remainder
+  reduces principal (standard pawnshop/lending convention; not specified
+  in `/docs`).
+- **Extension = pay-and-renew**: PB-19 AC says additional interest is
+  "calculated and applied" without specifying whether it's paid immediately
+  or capitalized into principal. Assumed immediate payment at the counter
+  (standard practice) — `processExtension` logs a `cash_flow_entries`
+  "payment_received" for the additional interest and leaves
+  `principal_balance` unchanged, rather than capitalizing it.
+- Loan amount is capped at the appraisal's `suggested_loan_max` (derived
+  from PB-14's placeholder formula) — a Cashier cannot create a loan above
+  what the system suggested.
+- Redemption (PB-20) and default/forfeiture (PB-21) are deliberately not
+  implemented yet — Sprint 5.
+
 ## Sprint 3 — Appraisal and Valuation
 
 - **PB-14 valuation formula (flagged not Estimable — no client figures
