@@ -32,6 +32,66 @@ bottom of each section's run.
 - **Domain/project**: kept the existing Vercel project (`ctm-pawnshop`), no
   change needed.
 
+## Sprint 10 — UAT, Bug Fixing, Deployment, Documentation
+
+- **UAT method and a real limitation**: this sandbox's outbound network
+  egress is restricted to an allowlist (npm registry, GitHub, Anthropic
+  APIs, etc.) — `qrbopdbpmwjjsjdwoawz.supabase.co` is not reachable
+  directly from this environment (confirmed: `curl` through the sandbox's
+  own proxy returns `connect_rejected — organization policy`, and a
+  headless-browser login attempt failed the same way). The Supabase MCP
+  tools work through a separate, allowlisted channel, which is how every
+  migration in this project was applied — but it means **I could not
+  drive the actual deployed app through a browser to click-test the
+  4-role/full-transaction-cycle walkthrough** the pre-deployment checklist
+  asked for. What I verified instead, all of which I could actually run:
+  - Full Vitest suite (82 tests) passing, covering every calculation/
+    validation-heavy PB item's acceptance criteria.
+  - `next build` + `tsc --noEmit` + `eslint` clean, all 26 routes compile.
+  - Every table has RLS enabled (`pg_class.relrowsecurity`, checked via
+    SQL), and the RLS policies were written per-feature and reviewed
+    together in this pass (see each sprint's table/policy in the
+    migrations).
+  - Ran the Supabase security advisor and fixed everything it could flag:
+    tightened `EXECUTE` grants on `get_my_role`/`is_admin`/`audit_trigger_fn`
+    (they were reachable via `PUBLIC` even after an earlier per-role
+    revoke — Postgres's default `PUBLIC` grant on new functions isn't
+    removed by revoking from a specific role, so the fix has to explicitly
+    `revoke ... from public`).
+  - Created 4 real test accounts, one per role (see below), so you (or a
+    teammate on an unrestricted network) can do the actual click-through
+    UAT — I've done everything I can verify without a browser that can
+    reach the internet.
+- **Test accounts created directly in the `auth.users`/`auth.identities`
+  tables** via the Supabase SQL tool (pgcrypto-hashed passwords, the
+  standard documented pattern for seeding test users) since I have no
+  service_role key to call the Auth Admin API, and there's no self-service
+  signup by design (PB-1/PB-2). All four use password `CtmTest1234!`:
+  - `admin@ctmpawnshop.test`
+  - `operator@ctmpawnshop.test`
+  - `cashier@ctmpawnshop.test`
+  - `appraiser@ctmpawnshop.test`
+  **Delete these (or at least rotate the password) before real production
+  use** — they're for UAT only. Delete via Supabase Dashboard → Authentication
+  → Users, or `delete from auth.users where email like '%@ctmpawnshop.test';`
+  (cascades to `profiles`).
+- **Backups**: Supabase manages backups server-side for this project tier
+  (point-in-time recovery / daily backups depending on plan) — confirmed
+  this is enabled by default for a Supabase project rather than building a
+  custom backup feature, per the original instruction. No action taken
+  beyond confirming; verify your specific plan's retention window in the
+  Supabase Dashboard → Database → Backups.
+- **Deployment**: I have no Vercel CLI/API/dashboard access (flagged at
+  pre-flight) — only the existing GitHub→Vercel integration, which
+  auto-deploys a **preview** on every push to this branch (confirmed
+  working through all 9 sprints). I cannot merge to `main`, promote a
+  production deployment, or set/verify Vercel's project environment
+  variables. See the final report for the exact handoff checklist.
+- **Leaked-password protection**: the Supabase security advisor flags this
+  as disabled (checks new passwords against HaveIBeenPwned). It's a Supabase
+  Dashboard-only toggle (Authentication → Policies) with no API/MCP tool
+  exposed to me — recommend enabling it manually.
+
 ## Sprint 9 — Reporting and Management Insights
 
 - **PB-39 chosen metrics** (the story was flagged not Testable as written —

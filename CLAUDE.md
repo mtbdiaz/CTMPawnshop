@@ -101,6 +101,12 @@ Four roles throughout: **Admin, Operator, Cashier, Appraiser**.
   will be defined before building in Sprint 9 (candidates: redemption rate,
   average loan size, forfeiture rate).
 
+## Other docs
+
+- `DECISIONS_LOG.md` — every assumption/placeholder/fix made autonomously
+  across Sprints 2-10, in detail. Read this for anything flagged ⚠ below.
+- `USER_GUIDE.md` — staff-facing how-to.
+
 ## Decisions log
 
 - Printed pawn ticket / receipts (PB-17, PB-18): implemented as browser

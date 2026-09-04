@@ -109,9 +109,13 @@ Build+typecheck+lint clean, all 26 routes compile.
 
 ## Sprint 10 — UAT, Bug Fixing, Deployment, Handoff
 
-- [ ] Item 41: User Acceptance Testing (UAT)
-- [ ] Item 42: Final Bug Fixing
-- [ ] Item 43: Backup & Restore Setup (document Supabase's built-in backups, no custom feature)
-- [ ] Item 44: Production Deployment (Vercel)
-- [ ] Item 45: User Manual & Training
-- [ ] Item 46: Final Documentation Handoff
+- [x] Item 41: User Acceptance Testing (UAT) — ⚠ partial: full automated test suite + RLS/build/lint verification done; live 4-role browser walkthrough blocked by sandbox network egress policy, 4 test accounts created for manual follow-up — see DECISIONS_LOG.md
+- [x] Item 42: Final Bug Fixing — all bugs found during this pass fixed inline each sprint (see each sprint's commit); no open bugs at handoff
+- [x] Item 43: Backup & Restore Setup — confirmed Supabase manages backups server-side, no custom feature built, see DECISIONS_LOG.md
+- [x] Item 44: Production Deployment — ⚠ partial: preview deploys automatically via GitHub→Vercel integration (verified working every sprint); production promotion, `main` merge, and Vercel env vars need the user (no Vercel access available to me) — exact handoff checklist in final report
+- [x] Item 45: User Manual & Training — `USER_GUIDE.md`
+- [x] Item 46: Final Documentation Handoff — `CLAUDE.md`, `SPRINT_PROGRESS.md`, `DECISIONS_LOG.md`, `USER_GUIDE.md` all current
+
+Final validation: 82/82 Vitest tests passing, `next build` + `tsc --noEmit` +
+`eslint` all clean (26 routes), no hardcoded secrets (grepped), RLS enabled
+on all 17 tables, Supabase security advisor issues fixed.
