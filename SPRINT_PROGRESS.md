@@ -96,13 +96,16 @@ Build+typecheck+lint clean.
 
 ## Sprint 9 — Reporting and Management Insights
 
-- [ ] PB-34 Generate Outstanding Loans Report
-- [ ] PB-35 Generate Overdue Loans Report
-- [ ] PB-36 Generate Inventory Aging Report
-- [ ] PB-37 Generate Financial Summary
-- [ ] PB-38 Generate Compliance/AML Report
-- [ ] PB-39 View Trends & Analytics Dashboard (⚠ not Testable as written — define concrete metrics first, report choice)
-- [ ] PB-40 Export or Print Reports
+- [x] PB-34 Generate Outstanding Loans Report
+- [x] PB-35 Generate Overdue Loans Report
+- [x] PB-36 Generate Inventory Aging Report
+- [x] PB-37 Generate Financial Summary
+- [x] PB-38 Generate Compliance/AML Report
+- [x] PB-39 View Trends & Analytics Dashboard — metrics chosen: redemption rate, forfeiture rate, average loan size, monthly volume (see DECISIONS_LOG.md)
+- [x] PB-40 Export or Print Reports — `window.print()` on every report page
+
+Tests: +10 unit tests (overdue/aging day math, all 4 analytics metrics).
+Build+typecheck+lint clean, all 26 routes compile.
 
 ## Sprint 10 — UAT, Bug Fixing, Deployment, Handoff
 

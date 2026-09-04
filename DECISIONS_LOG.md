@@ -32,6 +32,29 @@ bottom of each section's run.
 - **Domain/project**: kept the existing Vercel project (`ctm-pawnshop`), no
   change needed.
 
+## Sprint 9 — Reporting and Management Insights
+
+- **PB-39 chosen metrics** (the story was flagged not Testable as written —
+  "spot patterns" is subjective, per the ground rules I defined objective
+  metrics before building rather than after): **redemption rate**
+  (redeemed / concluded loans), **forfeiture rate** (defaulted+forfeited /
+  concluded loans — the complement of redemption rate), **average loan
+  size** (mean principal across all loans), and **monthly loan volume**
+  (count + total principal per calendar month). All four are pure,
+  unit-tested functions (`lib/reports/analytics.ts`) so the dashboard is
+  now objectively verifiable against them.
+- PB-34/35/36/37/38 needed no new tables — every report reads existing
+  tables from Sprints 2-8. All report pages are Admin-only
+  (`requireRole(["admin"])`), matching every PB-34..40 user story's "As an
+  Admin".
+- PB-40 (export/print): reused the same `window.print()` approach as
+  PB-17/18's tickets/receipts (decision already logged) — every report page
+  has a `PrintButton`; "Export" is the browser's own Print → Save as PDF,
+  no separate PDF library needed.
+- Overdue Loans Report also surfaces `defaulted` loans (not just
+  active/extended past due), since a defaulted loan is definitionally the
+  most overdue kind.
+
 ## Sprint 8 — Compliance and Security
 
 - **PB-31 Audit Trail**, built as instructed as a shared, cross-cutting
