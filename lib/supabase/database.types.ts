@@ -84,6 +84,7 @@ export type Database = {
           interest_rate_percent: number
           inventory_item_id: string | null
           loan_date: string
+          lost_ticket_used: boolean
           maturity_date: string
           principal_amount: number
           principal_balance: number
@@ -102,6 +103,7 @@ export type Database = {
           interest_rate_percent: number
           inventory_item_id?: string | null
           loan_date?: string
+          lost_ticket_used?: boolean
           maturity_date: string
           principal_amount: number
           principal_balance: number
@@ -120,6 +122,7 @@ export type Database = {
           interest_rate_percent?: number
           inventory_item_id?: string | null
           loan_date?: string
+          lost_ticket_used?: boolean
           maturity_date?: string
           principal_amount?: number
           principal_balance?: number
@@ -139,6 +142,7 @@ export type Database = {
           loan_id: string
           principal_portion: number
           receipt_number: string
+          verified_via_lost_ticket: boolean
         }
         Insert: {
           amount: number
@@ -149,6 +153,7 @@ export type Database = {
           loan_id: string
           principal_portion?: number
           receipt_number: string
+          verified_via_lost_ticket?: boolean
         }
         Update: {
           amount?: number
@@ -159,6 +164,7 @@ export type Database = {
           loan_id?: string
           principal_portion?: number
           receipt_number?: string
+          verified_via_lost_ticket?: boolean
         }
         Relationships: []
       }

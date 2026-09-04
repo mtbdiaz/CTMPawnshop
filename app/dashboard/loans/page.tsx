@@ -2,9 +2,12 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { NewLoanForm } from "./new-loan-form";
+import { runDefaultDetection } from "./actions";
 
 export default async function LoansPage() {
   await requireRole(["cashier", "operator", "appraiser", "admin"]);
+  // PB-21: opportunistic default detection on page load (see DECISIONS_LOG.md).
+  await runDefaultDetection();
 
   const supabase = await createClient();
   const [{ data: appraisals }, { data: activeLoans }, { data: loans }] = await Promise.all([

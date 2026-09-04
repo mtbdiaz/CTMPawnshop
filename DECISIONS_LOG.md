@@ -32,6 +32,26 @@ bottom of each section's run.
 - **Domain/project**: kept the existing Vercel project (`ctm-pawnshop`), no
   change needed.
 
+## Sprint 5 — Loan and Transaction Management, part 2
+
+- **PB-21 default detection has no scheduler**: this environment has no
+  cron/background-job infrastructure available to me. Implemented
+  `runDefaultDetection()` (`app/dashboard/loans/actions.ts`) as a pure
+  scan over active/extended loans that runs opportunistically on every
+  Loans list page load rather than on a real timer. **Known limitation** —
+  a production deployment should replace this with a Supabase Edge
+  Function + `pg_cron` (or a Vercel Cron Job) running e.g. hourly. Noted
+  again in Sprint 10 as a follow-up.
+- **PB-20 redemption condition**: "fully paid" is interpreted as
+  `principal_balance <= 0`; since `calculateInterestDue(0, rate) = 0`,
+  there's no separate "current period interest" to also clear.
+- **PB-22 lost-ticket verification**: implemented as a checkbox + ID-number
+  confirmation on both the payment and redemption forms, checked against
+  `customers.id_number` server-side (`lib/loans/lost-ticket.ts`). Logged via
+  a `verified_via_lost_ticket` flag on `loan_payments` and a `lost_ticket_used`
+  flag on `loans` — a real audit-trail entry (who/when) is added when PB-31
+  (Sprint 8) is built; this is the data these entries will feed.
+
 ## Sprint 4 — Loan and Transaction Management, part 1
 
 - **PB-17 flagged not Small**: did not split into smaller stories mid-build

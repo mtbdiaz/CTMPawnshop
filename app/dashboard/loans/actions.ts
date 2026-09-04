@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
-import { createLoanSchema, paymentSchema, extensionSchema } from "@/lib/validation/loan";
+import { createLoanSchema, paymentSchema, extensionSchema, redeemSchema } from "@/lib/validation/loan";
 import { getBlacklistStatus } from "@/lib/customers/blacklist";
 import {
   calculateMaturityDate,
@@ -14,6 +14,8 @@ import {
   generateTicketNumber,
   generateReceiptNumber,
 } from "@/lib/loans/calculations";
+import { verifyLostTicketId } from "@/lib/loans/lost-ticket";
+import { isPastGracePeriod } from "@/lib/loans/default-detection";
 
 export type ActionState = { error?: string; success?: boolean; id?: string };
 
@@ -122,14 +124,24 @@ export async function recordPayment(
   const parsed = paymentSchema.safeParse({
     loan_id: formData.get("loan_id"),
     amount: formData.get("amount"),
+    lost_ticket: formData.get("lost_ticket") === "on",
+    id_number_confirm: formData.get("id_number_confirm"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
   const supabase = await createClient();
-  const { data: loan } = await supabase.from("loans").select("*").eq("id", parsed.data.loan_id).single();
+  const { data: loan } = await supabase.from("loans").select("*, customers(id_number)").eq("id", parsed.data.loan_id).single();
   if (!loan) return { error: "Loan not found" };
   if (loan.status !== "active" && loan.status !== "extended") {
     return { error: `Loan is ${loan.status} — no further payments accepted` };
+  }
+
+  // PB-22: lost-ticket alternate verification against the customer's ID on file.
+  if (parsed.data.lost_ticket) {
+    const customerIdNumber = (loan as unknown as { customers: { id_number: string } | null }).customers?.id_number;
+    if (!customerIdNumber || !verifyLostTicketId(parsed.data.id_number_confirm ?? "", customerIdNumber)) {
+      return { error: "ID number does not match our records for this customer. Cannot proceed without the ticket or a matching ID." };
+    }
   }
 
   const interestDue = calculateInterestDue(loan.principal_balance, loan.interest_rate_percent);
@@ -144,11 +156,18 @@ export async function recordPayment(
     principal_portion: breakdown.principalPortion,
     interest_portion: breakdown.interestPortion,
     receipt_number: generateReceiptNumber(),
+    verified_via_lost_ticket: parsed.data.lost_ticket,
     created_by: user.id,
   });
   if (paymentError) return { error: paymentError.message };
 
-  await supabase.from("loans").update({ principal_balance: breakdown.newPrincipalBalance }).eq("id", loan.id);
+  await supabase
+    .from("loans")
+    .update({
+      principal_balance: breakdown.newPrincipalBalance,
+      ...(parsed.data.lost_ticket ? { lost_ticket_used: true } : {}),
+    })
+    .eq("id", loan.id);
 
   await supabase.from("cash_flow_entries").insert({
     entry_type: "payment_received",
@@ -226,4 +245,77 @@ export async function processExtension(
 
   revalidatePath(`/dashboard/loans/${loan.id}`);
   return { success: true, id: loan.id };
+}
+
+// PB-20: redeem a fully-paid loan — closes the loan and releases the item.
+export async function redeemLoan(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["cashier", "admin"]);
+  const parsed = redeemSchema.safeParse({
+    loan_id: formData.get("loan_id"),
+    lost_ticket: formData.get("lost_ticket") === "on",
+    id_number_confirm: formData.get("id_number_confirm"),
+  });
+  if (!parsed.success) return { error: "Invalid input" };
+
+  const supabase = await createClient();
+  const { data: loan } = await supabase
+    .from("loans")
+    .select("*, customers(id_number)")
+    .eq("id", parsed.data.loan_id)
+    .single();
+  if (!loan) return { error: "Loan not found" };
+  if (loan.status !== "active" && loan.status !== "extended") {
+    return { error: `Loan is ${loan.status} — cannot be redeemed` };
+  }
+  if (loan.principal_balance > 0) {
+    return { error: `Loan still has an outstanding balance of ${loan.principal_balance}` };
+  }
+
+  if (parsed.data.lost_ticket) {
+    const customerIdNumber = (loan as unknown as { customers: { id_number: string } | null }).customers?.id_number;
+    if (!customerIdNumber || !verifyLostTicketId(parsed.data.id_number_confirm ?? "", customerIdNumber)) {
+      return { error: "ID number does not match our records for this customer. Cannot proceed without the ticket or a matching ID." };
+    }
+  }
+
+  const { error } = await supabase
+    .from("loans")
+    .update({ status: "redeemed", ...(parsed.data.lost_ticket ? { lost_ticket_used: true } : {}) })
+    .eq("id", loan.id);
+  if (error) return { error: error.message };
+
+  if (loan.inventory_item_id) {
+    await supabase.from("inventory_items").update({ status: "redeemed" }).eq("id", loan.inventory_item_id);
+  }
+
+  revalidatePath(`/dashboard/loans/${loan.id}`);
+  return { success: true, id: loan.id };
+}
+
+// PB-21: detect loans past maturity + grace period with no redemption/
+// extension, mark them defaulted, and move the item toward forfeiture.
+// No cron/scheduler infra is available in this environment (see
+// DECISIONS_LOG.md) — this runs opportunistically whenever a Cashier/Admin
+// loads the Loans list, an accepted stand-in for a real scheduled job for
+// this project's scope.
+export async function runDefaultDetection(): Promise<void> {
+  const supabase = await createClient();
+  const { data: loans } = await supabase
+    .from("loans")
+    .select("id, maturity_date, grace_period_days, inventory_item_id")
+    .in("status", ["active", "extended"]);
+  if (!loans) return;
+
+  const now = new Date();
+  for (const loan of loans) {
+    if (isPastGracePeriod(new Date(loan.maturity_date), loan.grace_period_days, now)) {
+      await supabase.from("loans").update({ status: "defaulted" }).eq("id", loan.id);
+      if (loan.inventory_item_id) {
+        await supabase.from("inventory_items").update({ status: "forfeited" }).eq("id", loan.inventory_item_id);
+      }
+    }
+  }
 }

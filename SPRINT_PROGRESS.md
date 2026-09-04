@@ -59,9 +59,12 @@ application/validation, extension). Build+typecheck+lint clean.
 
 ## Sprint 5 — Loan and Transaction Management (part 2)
 
-- [ ] PB-20 Redeem Pawned Item
-- [ ] PB-21 Process Loan Default & Forfeiture
-- [ ] PB-22 Lost Ticket Alternate Verification
+- [x] PB-20 Redeem Pawned Item — closes loan, releases inventory item
+- [x] PB-21 Process Loan Default & Forfeiture — ⚠ runs on page load, not a real scheduler, see DECISIONS_LOG.md
+- [x] PB-22 Lost Ticket Alternate Verification — ID-number check against customer record on payment/redemption
+
+Tests: +7 unit tests (grace-period detection, lost-ticket ID matching).
+Build+typecheck+lint clean.
 
 ## Sprint 6 — Inventory and Collateral Tracking
 

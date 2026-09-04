@@ -11,6 +11,9 @@ export type CreateLoanInput = z.infer<typeof createLoanSchema>;
 export const paymentSchema = z.object({
   loan_id: z.string().uuid(),
   amount: z.coerce.number().gt(0, "Payment amount must be greater than 0"),
+  // PB-22: lost-ticket alternate verification.
+  lost_ticket: z.boolean().default(false),
+  id_number_confirm: z.string().trim().optional(),
 });
 export type PaymentInput = z.infer<typeof paymentSchema>;
 
@@ -18,3 +21,10 @@ export const extensionSchema = z.object({
   loan_id: z.string().uuid(),
 });
 export type ExtensionInput = z.infer<typeof extensionSchema>;
+
+export const redeemSchema = z.object({
+  loan_id: z.string().uuid(),
+  lost_ticket: z.boolean().default(false),
+  id_number_confirm: z.string().trim().optional(),
+});
+export type RedeemInput = z.infer<typeof redeemSchema>;

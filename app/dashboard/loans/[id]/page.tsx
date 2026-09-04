@@ -3,7 +3,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { calculateInterestDue } from "@/lib/loans/calculations";
 import { PrintButton } from "@/components/print-button";
-import { PaymentForm, ExtensionForm } from "./payment-form";
+import { PaymentForm, ExtensionForm, RedeemForm } from "./payment-form";
 
 export default async function LoanDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireRole(["cashier", "operator", "appraiser", "admin"]);
@@ -78,10 +78,18 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
         </div>
       </div>
 
+      {(loan.status === "defaulted" || loan.status === "forfeited") && (
+        <div className="print:hidden rounded-md bg-red-50 p-4 text-sm text-red-800">
+          This loan is {loan.status} — past its maturity date and grace period without
+          redemption or extension. The item has moved toward forfeiture.
+        </div>
+      )}
+
       {canTransact && (
         <div className="print:hidden space-y-4">
           <PaymentForm loanId={loan.id} interestDue={interestDue} />
           <ExtensionForm loanId={loan.id} />
+          <RedeemForm loanId={loan.id} canRedeem={loan.principal_balance <= 0} />
         </div>
       )}
 
