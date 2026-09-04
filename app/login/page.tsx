@@ -3,12 +3,6 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import {
-  getLockoutRemaining,
-  recordFailedAttempt,
-  clearAttempts,
-  localStorageAttemptStore,
-} from "@/lib/auth/login-attempts";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -21,12 +15,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
 
-    const remaining = getLockoutRemaining(localStorageAttemptStore, email);
-    if (remaining > 0) {
-      setError(`Too many failed attempts. Try again in ${Math.ceil(remaining / 1000)}s.`);
-      return;
-    }
-
     setLoading(true);
     const supabase = createClient();
     const { data, error: authError } = await supabase.auth.signInWithPassword({
@@ -36,16 +24,9 @@ export default function LoginPage() {
     setLoading(false);
 
     if (authError || !data.user) {
-      const justLocked = recordFailedAttempt(localStorageAttemptStore, email);
-      setError(
-        justLocked
-          ? "Too many failed attempts. Account temporarily locked for 60s."
-          : "Invalid email or password.",
-      );
+      setError(authError?.message ?? "Invalid email or password.");
       return;
     }
-
-    clearAttempts(localStorageAttemptStore, email);
 
     if (data.user.user_metadata?.force_password_change) {
       router.push("/force-password-change");
