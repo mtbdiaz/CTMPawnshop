@@ -12,6 +12,120 @@ export type Database = {
   }
   public: {
     Tables: {
+      inventory_status_history: {
+        Row: {
+          changed_at: string
+          id: string
+          inventory_item_id: string
+          new_status: Database["public"]["Enums"]["inventory_status"]
+          old_status: Database["public"]["Enums"]["inventory_status"] | null
+        }
+        Insert: {
+          changed_at?: string
+          id?: string
+          inventory_item_id: string
+          new_status: Database["public"]["Enums"]["inventory_status"]
+          old_status?: Database["public"]["Enums"]["inventory_status"] | null
+        }
+        Update: {
+          changed_at?: string
+          id?: string
+          inventory_item_id?: string
+          new_status?: Database["public"]["Enums"]["inventory_status"]
+          old_status?: Database["public"]["Enums"]["inventory_status"] | null
+        }
+        Relationships: []
+      }
+      physical_inventory_audits: {
+        Row: {
+          created_at: string
+          discrepancy_count: number
+          id: string
+          notes: string | null
+          performed_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          discrepancy_count?: number
+          id?: string
+          notes?: string | null
+          performed_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          discrepancy_count?: number
+          id?: string
+          notes?: string | null
+          performed_by?: string | null
+        }
+        Relationships: []
+      }
+      physical_inventory_audit_items: {
+        Row: {
+          audit_id: string
+          expected_status: Database["public"]["Enums"]["inventory_status"]
+          found: boolean
+          id: string
+          inventory_item_id: string
+          notes: string | null
+        }
+        Insert: {
+          audit_id: string
+          expected_status: Database["public"]["Enums"]["inventory_status"]
+          found: boolean
+          id?: string
+          inventory_item_id: string
+          notes?: string | null
+        }
+        Update: {
+          audit_id?: string
+          expected_status?: Database["public"]["Enums"]["inventory_status"]
+          found?: boolean
+          id?: string
+          inventory_item_id?: string
+          notes?: string | null
+        }
+        Relationships: []
+      }
+      auction_batches: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+        }
+        Relationships: []
+      }
+      auction_batch_items: {
+        Row: {
+          batch_id: string
+          id: string
+          inventory_item_id: string
+        }
+        Insert: {
+          batch_id: string
+          id?: string
+          inventory_item_id: string
+        }
+        Update: {
+          batch_id?: string
+          id?: string
+          inventory_item_id?: string
+        }
+        Relationships: []
+      }
       inventory_items: {
         Row: {
           appraisal_item_id: string

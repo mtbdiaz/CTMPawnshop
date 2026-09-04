@@ -68,10 +68,12 @@ Build+typecheck+lint clean.
 
 ## Sprint 6 — Inventory and Collateral Tracking
 
-- [ ] PB-23 Register Pawned Item in Inventory
-- [ ] PB-24 Update Item Status
-- [ ] PB-25 Perform Physical Inventory Audit
-- [ ] PB-26 Prepare Forfeited Items for Auction
+- [x] PB-23 Register Pawned Item in Inventory (`app/dashboard/inventory`) — auto-created in Sprint 4's loan creation, screen added here
+- [x] PB-24 Update Item Status — auto-updated through Sprints 4-5's loan lifecycle actions; `inventory_status_history` trigger added for timestamped logging
+- [x] PB-25 Perform Physical Inventory Audit (`app/dashboard/inventory/audit`)
+- [x] PB-26 Prepare Forfeited Items for Auction (`app/dashboard/inventory/auction`)
+
+Tests: +3 unit tests (audit discrepancy counting). Build+typecheck+lint clean.
 
 ## Sprint 7 — Financial and Accounting
 

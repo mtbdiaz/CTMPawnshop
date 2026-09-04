@@ -32,6 +32,24 @@ bottom of each section's run.
 - **Domain/project**: kept the existing Vercel project (`ctm-pawnshop`), no
   change needed.
 
+## Sprint 6 — Inventory and Collateral Tracking
+
+- PB-23/24's core mechanics (auto-create on loan, auto-update status through
+  the lifecycle) were already built in Sprints 4-5 since PB-17/19/20/21's
+  own AC required it. This sprint added the screens on top: the Vault
+  Inventory list, and a `inventory_status_history` table + trigger so every
+  status change is timestamped and logged (PB-24 AC2), not just reflected
+  in `updated_at`.
+- PB-25 physical audit: one `physical_inventory_audits` header row +
+  `physical_inventory_audit_items` lines (expected status, found y/n,
+  notes). `discrepancy_count` is computed from unchecked ("not found")
+  items — pure logic extracted to `lib/inventory/audit.ts` for testing.
+  No automatic remediation (e.g. auto-flagging a loan) on a discrepancy —
+  out of scope; an Admin reviews audit notes manually.
+- PB-26 auction batches: only `forfeited` items are selectable; batching
+  moves them to `queued_for_auction` (a status already added to the enum
+  in Sprint 4 for exactly this).
+
 ## Sprint 5 — Loan and Transaction Management, part 2
 
 - **PB-21 default detection has no scheduler**: this environment has no
