@@ -29,11 +29,13 @@ renders correctly.
 
 ## Sprint 2 — Customer Management
 
-- [ ] PB-7 Register New Customer
-- [ ] PB-8 Verify Customer Identity (AML)
-- [ ] PB-9 Update Customer Profile
-- [ ] PB-10 View Transaction History
-- [ ] PB-11 Check Blacklist Status
+- [x] PB-7 Register New Customer (`app/dashboard/customers`)
+- [x] PB-8 Verify Customer Identity (AML) — placeholder rule-based check (`lib/customers/aml.ts`), see DECISIONS_LOG.md
+- [x] PB-9 Update Customer Profile (`app/dashboard/customers/[id]`)
+- [x] PB-10 View Transaction History — screen scaffolded with empty state; wired to real loan data in Sprint 4-5
+- [x] PB-11 Check Blacklist Status — `lib/customers/blacklist.ts` guard (reused at loan/appraisal creation), Admin-only toggle + banner on customer detail page
+
+Tests: +9 unit tests (AML check, customer validation). Build+typecheck+lint clean.
 
 ## Sprint 3 — Appraisal and Valuation
 

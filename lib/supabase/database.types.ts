@@ -12,6 +12,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      customers: {
+        Row: {
+          address: string
+          aml_checked_at: string | null
+          aml_notes: string | null
+          aml_status: Database["public"]["Enums"]["aml_status"]
+          blacklist_reason: string | null
+          contact_number: string
+          created_at: string
+          created_by: string | null
+          date_of_birth: string | null
+          email: string | null
+          full_name: string
+          id: string
+          id_number: string
+          id_type: string
+          is_blacklisted: boolean
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          aml_checked_at?: string | null
+          aml_notes?: string | null
+          aml_status?: Database["public"]["Enums"]["aml_status"]
+          blacklist_reason?: string | null
+          contact_number: string
+          created_at?: string
+          created_by?: string | null
+          date_of_birth?: string | null
+          email?: string | null
+          full_name: string
+          id?: string
+          id_number: string
+          id_type: string
+          is_blacklisted?: boolean
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          aml_checked_at?: string | null
+          aml_notes?: string | null
+          aml_status?: Database["public"]["Enums"]["aml_status"]
+          blacklist_reason?: string | null
+          contact_number?: string
+          created_at?: string
+          created_by?: string | null
+          date_of_birth?: string | null
+          email?: string | null
+          full_name?: string
+          id?: string
+          id_number?: string
+          id_type?: string
+          is_blacklisted?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -90,6 +147,7 @@ export type Database = {
     }
     Enums: {
       staff_role: "admin" | "operator" | "cashier" | "appraiser"
+      aml_status: "clear" | "flagged"
     }
     CompositeTypes: {
       [_ in never]: never
