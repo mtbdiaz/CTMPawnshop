@@ -39,11 +39,14 @@ Tests: +9 unit tests (AML check, customer validation). Build+typecheck+lint clea
 
 ## Sprint 3 — Appraisal and Valuation
 
-- [ ] PB-12 Record Gold Item Details
-- [ ] PB-13 Capture Item Photo and Notes
-- [ ] PB-14 Calculate Valuation & Loan Range (⚠ not Estimable — placeholder formula + TODO, flag when reached)
-- [ ] PB-15 Flag Counterfeit Risk
-- [ ] PB-16 Resolve Counterfeit Flag
+- [x] PB-12 Record Gold Item Details (`app/dashboard/appraisals`)
+- [x] PB-13 Capture Item Photo and Notes — Supabase Storage bucket `item-photos`
+- [x] PB-14 Calculate Valuation & Loan Range — ⚠ PLACEHOLDER FORMULA, see DECISIONS_LOG.md, needs real client confirmation
+- [x] PB-15 Flag Counterfeit Risk — placeholder purity-tolerance table, see DECISIONS_LOG.md
+- [x] PB-16 Resolve Counterfeit Flag (Admin) (`app/dashboard/appraisals/[id]`)
+
+Tests: +14 unit tests (valuation formula, counterfeit range logic, appraisal
+validation). Build+typecheck+lint clean.
 
 ## Sprint 4 — Loan and Transaction Management (part 1)
 

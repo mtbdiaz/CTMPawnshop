@@ -32,4 +32,23 @@ bottom of each section's run.
 - **Domain/project**: kept the existing Vercel project (`ctm-pawnshop`), no
   change needed.
 
+## Sprint 3 — Appraisal and Valuation
+
+- **PB-14 valuation formula (flagged not Estimable — no client figures
+  provided)**: `value = weight_grams × (purity_percent/100) × gold_price_per_gram`,
+  `suggested_loan_max = value × (ltv_percent/100)`, `suggested_loan_min =
+  suggested_loan_max × 0.9` (placeholder 10% appraiser-negotiation buffer,
+  also unconfirmed). Implemented in `lib/appraisal/valuation.ts` with
+  `// TODO: confirm formula with CTM Pawnshop`. **Needs real client
+  confirmation before production use — flagged per project ground rules.**
+- **PB-15 counterfeit tolerance ranges**: no client-provided tolerance
+  bands, so used standard gold fineness tables (24k≈99.9%, 22k≈91.6%,
+  21k≈87.5%, 18k≈75%, 14k≈58.3%, 10k≈41.7%) with a ±3-5 point band per
+  karat as the "expected range." Also a placeholder pending confirmation.
+- Photo storage: private Supabase Storage bucket `item-photos`, RLS
+  mirrors `appraisal_items` (any authenticated staff read/write). Detail
+  page uses 1-hour signed URLs rather than public URLs.
+- PB-11 blacklist guard (`lib/customers/blacklist.ts`, built in Sprint 2)
+  is now wired into appraisal creation as its first real caller.
+
 ## Sprint 2 — Customer Management

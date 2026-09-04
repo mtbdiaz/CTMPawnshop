@@ -12,6 +12,80 @@ export type Database = {
   }
   public: {
     Tables: {
+      appraisal_items: {
+        Row: {
+          appraised_by: string | null
+          computed_value: number
+          condition_notes: string | null
+          counterfeit_resolution: Database["public"]["Enums"]["counterfeit_resolution"] | null
+          counterfeit_resolved_at: string | null
+          counterfeit_resolved_by: string | null
+          created_at: string
+          customer_id: string
+          gold_price_used: number
+          id: string
+          is_counterfeit_risk: boolean
+          karat: number
+          ltv_percent_used: number
+          photo_paths: string[]
+          purity_percent: number
+          suggested_loan_max: number
+          suggested_loan_min: number
+          updated_at: string
+          weight_grams: number
+        }
+        Insert: {
+          appraised_by?: string | null
+          computed_value: number
+          condition_notes?: string | null
+          counterfeit_resolution?: Database["public"]["Enums"]["counterfeit_resolution"] | null
+          counterfeit_resolved_at?: string | null
+          counterfeit_resolved_by?: string | null
+          created_at?: string
+          customer_id: string
+          gold_price_used: number
+          id?: string
+          is_counterfeit_risk?: boolean
+          karat: number
+          ltv_percent_used: number
+          photo_paths?: string[]
+          purity_percent: number
+          suggested_loan_max: number
+          suggested_loan_min: number
+          updated_at?: string
+          weight_grams: number
+        }
+        Update: {
+          appraised_by?: string | null
+          computed_value?: number
+          condition_notes?: string | null
+          counterfeit_resolution?: Database["public"]["Enums"]["counterfeit_resolution"] | null
+          counterfeit_resolved_at?: string | null
+          counterfeit_resolved_by?: string | null
+          created_at?: string
+          customer_id?: string
+          gold_price_used?: number
+          id?: string
+          is_counterfeit_risk?: boolean
+          karat?: number
+          ltv_percent_used?: number
+          photo_paths?: string[]
+          purity_percent?: number
+          suggested_loan_max?: number
+          suggested_loan_min?: number
+          updated_at?: string
+          weight_grams?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appraisal_items_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address: string
@@ -148,6 +222,7 @@ export type Database = {
     Enums: {
       staff_role: "admin" | "operator" | "cashier" | "appraiser"
       aml_status: "clear" | "flagged"
+      counterfeit_resolution: "pending" | "cleared" | "confirmed"
     }
     CompositeTypes: {
       [_ in never]: never
