@@ -32,6 +32,24 @@ bottom of each section's run.
 - **Domain/project**: kept the existing Vercel project (`ctm-pawnshop`), no
   change needed.
 
+## Sprint 7 — Financial and Accounting
+
+- PB-27's core mechanic (auto cash-flow entry on loan/payment/extension)
+  was already built in Sprints 4-5. **Forfeiture does not generate a cash
+  flow entry** — a defaulted/forfeited loan is a loss of collateral, not a
+  cash movement, so there's nothing to log there; documented as a
+  deliberate reading of "cash flow" (money in/out), not "event log" (that's
+  PB-31's job in Sprint 8).
+- PB-28 (daily cash position) and PB-30 (formal ledger) are one screen
+  (`app/dashboard/finance`) over the same `cash_flow_entries` table — a
+  running-balance ledger view IS the daily position at any point in it, so
+  building them separately would duplicate the same data. Pure calculation
+  logic (`lib/finance/ledger.ts`) is unit-tested to reconcile: the ledger's
+  last running balance equals the cash-position net for the same entries.
+- PB-29: relaxed the `cash_flow_entries` insert RLS policy (Sprint 4 had it
+  cashier/admin only, since only loan actions wrote to it then) to also
+  allow `operator`, per PB-29's user story ("As an Operator...").
+
 ## Sprint 6 — Inventory and Collateral Tracking
 
 - PB-23/24's core mechanics (auto-create on loan, auto-update status through

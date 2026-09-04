@@ -33,6 +33,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <Link href="/dashboard/inventory" className="hover:text-slate-900">
               Inventory
             </Link>
+            <Link href="/dashboard/finance" className="hover:text-slate-900">
+              Finance
+            </Link>
             {isAdmin && (
               <>
                 <Link href="/dashboard/settings" className="hover:text-slate-900">

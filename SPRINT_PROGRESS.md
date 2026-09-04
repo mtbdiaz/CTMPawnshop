@@ -77,10 +77,13 @@ Tests: +3 unit tests (audit discrepancy counting). Build+typecheck+lint clean.
 
 ## Sprint 7 — Financial and Accounting
 
-- [ ] PB-27 Record Cash Flow Transaction
-- [ ] PB-28 Track Daily Cash Position
-- [ ] PB-29 Record Operating Expenses & Revenue
-- [ ] PB-30 Generate Financial Ledger Entries
+- [x] PB-27 Record Cash Flow Transaction — auto-logged since Sprint 4/5 (loan/payment/extension); forfeiture deliberately produces no cash entry, see DECISIONS_LOG.md
+- [x] PB-28 Track Daily Cash Position (`app/dashboard/finance`)
+- [x] PB-29 Record Operating Expenses & Revenue
+- [x] PB-30 Generate Financial Ledger Entries — same screen/table as PB-28, running-balance ledger
+
+Tests: +4 unit tests (cash position, running balance, reconciliation).
+Build+typecheck+lint clean.
 
 ## Sprint 8 — Compliance and Security
 
