@@ -15,7 +15,7 @@ they're done — don't batch updates.
 
 ## Sprint 1 — Authentication & Access + System Configuration
 
-- [x] PB-1 Login (`app/login`) — Supabase Auth email/password, 3-fail client-side lockout (60s)
+- [x] PB-1 Login (`app/login`) — Supabase Auth email/password. ⚠ The 3-fail/60s client-side lockout mentioned in earlier notes was removed by the project owner post-launch (see QA_LOG.md); login now surfaces the real Supabase auth error on failure.
 - [x] PB-2 Password Reset (Admin-assisted) — admin issues temp password from Users screen, forces password change on next login (`app/force-password-change`)
 - [x] PB-3 Role-Based Access Control — `profiles.role` + RLS + `requireRole()` server guard + role-aware nav (did not feel oversized; scope was Auth/Settings screens only, more screens reuse the same guard in later sprints)
 - [x] PB-4 Manage User Accounts (`app/dashboard/users`) — create/edit/deactivate staff accounts (deactivation also bans the Supabase Auth user, not just a UI flag)
@@ -32,7 +32,7 @@ renders correctly.
 - [x] PB-7 Register New Customer (`app/dashboard/customers`)
 - [x] PB-8 Verify Customer Identity (AML) — placeholder rule-based check (`lib/customers/aml.ts`), see DECISIONS_LOG.md
 - [x] PB-9 Update Customer Profile (`app/dashboard/customers/[id]`)
-- [x] PB-10 View Transaction History — screen scaffolded with empty state; wired to real loan data in Sprint 4-5
+- [x] PB-10 View Transaction History — wired to real loan/payment/extension data on the customer detail page (fixed in post-Sprint-10 QA sweep — was still a hardcoded placeholder, see QA_LOG.md)
 - [x] PB-11 Check Blacklist Status — `lib/customers/blacklist.ts` guard (reused at loan/appraisal creation), Admin-only toggle + banner on customer detail page
 
 Tests: +9 unit tests (AML check, customer validation). Build+typecheck+lint clean.
@@ -119,3 +119,49 @@ Build+typecheck+lint clean, all 26 routes compile.
 Final validation: 82/82 Vitest tests passing, `next build` + `tsc --noEmit` +
 `eslint` all clean (26 routes), no hardcoded secrets (grepped), RLS enabled
 on all 17 tables, Supabase security advisor issues fixed.
+
+## Post-Sprint-10 Production Incident Fixes
+
+- Vercel deployment 404 root-caused to a stale `framework: null` project
+  setting from before Next.js existed — fixed via `vercel.json`.
+- Production `permission denied for table X` errors root-caused to missing
+  base Postgres GRANTs on `anon`/`authenticated`/`service_role` for all
+  public-schema tables (side effect of a key/JWT rotation) — restored via
+  `supabase/migrations/0010_restore_table_grants.sql`.
+- `inventory_status_history` insert trigger fixed to run `SECURITY DEFINER`
+  (`supabase/migrations/0011_fix_inventory_status_history_trigger.sql`) —
+  was blocking loan creation for non-admin roles.
+- Login lockout feature removed at the project owner's request; login now
+  surfaces the real Supabase auth error.
+- ~1 week of realistic demo data seeded across every module for UI
+  verification.
+
+## Post-Sprint-10 Full QA Sweep — Result: 40/40 PB items PASS
+
+Full acceptance-criteria audit + fixes across all 40 backlog items. See
+`QA_LOG.md` for the complete report. Summary of what changed:
+
+- **PB-10** (View Transaction History) — was still a hardcoded placeholder
+  despite this checklist marking it done; now genuinely wired to real
+  loan/payment/extension data.
+- **PB-11** (Blacklist Status) and **PB-16** (Resolve Counterfeit Flag) — RLS
+  policies allowed non-admin roles to bypass the admin-only app-layer guard
+  by calling the table directly; both closed at the RLS layer
+  (`supabase/migrations/0012_qa_part1_rls_fixes.sql`).
+- **PB-17** (Create Pawn Loan) — the loan/inventory/cash-flow triple-write
+  was non-transactional; replaced with an atomic `create_pawn_loan()`
+  Postgres RPC (`supabase/migrations/0014_atomic_create_loan.sql`) so a
+  partial failure can no longer leave orphaned/inconsistent records.
+- **PB-31** (Audit Trail) — 5 tables added in later sprints
+  (`inventory_status_history`, `physical_inventory_audit_items`,
+  `auction_batch_items`, `suspicious_activity_flags`, `reminder_log`) had
+  never been wired into the audit trigger and had zero log coverage; fixed
+  in `supabase/migrations/0013_qa_part3_audit_trigger_coverage.sql`.
+- All other 35 items verified PASS as built. Known, intentionally-flagged
+  placeholders (PB-8 AML, PB-14 valuation formula, PB-15 counterfeit
+  tolerance, PB-21 scheduler, PB-33 reminders) reconfirmed unchanged — not
+  silently finalized, see QA_LOG.md "Known Limitations".
+
+Final validation after the sweep: 82/82 tests passing, `tsc`/`next build`
+typecheck clean, lint clean, Supabase security advisor clean, no hardcoded
+secrets found.
