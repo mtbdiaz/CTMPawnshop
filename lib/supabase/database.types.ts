@@ -602,6 +602,21 @@ export type Database = {
         Returns: Database["public"]["Enums"]["staff_role"]
       }
       is_admin: { Args: never; Returns: boolean }
+      create_pawn_loan: {
+        Args: {
+          p_customer_id: string
+          p_appraisal_item_id: string
+          p_vault_location: string
+          p_principal_amount: number
+          p_interest_rate_percent: number
+          p_grace_period_days: number
+          p_loan_date: string
+          p_maturity_date: string
+          p_ticket_number: string
+          p_created_by: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       staff_role: "admin" | "operator" | "cashier" | "appraiser"

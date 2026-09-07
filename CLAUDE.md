@@ -127,13 +127,14 @@ Four roles throughout: **Admin, Operator, Cashier, Appraiser**.
   and set `user_metadata.force_password_change = true`; the user is routed
   to `/force-password-change` on next login until they set their own.
 - Session timeout (PB-5): 15 minutes of inactivity (`lib/auth/session-timeout.ts`),
-  client-side timer + `signOut()`. Login lockout (PB-1 AC3): 3 consecutive
-  failed attempts locks that email for 60s, tracked client-side in
-  localStorage (`lib/auth/login-attempts.ts`) — acceptable for a
-  single-location, small-staff shop; revisit if brute-force risk grows.
+  client-side timer + `signOut()`. Login lockout (PB-1 AC3): the original
+  3-fail/60s client-side lockout was **removed** by the project owner
+  post-launch (login now surfaces the real Supabase auth error on every
+  failed attempt instead) — see QA_LOG.md. Do not reintroduce it without
+  being asked.
 - Testing: Vitest for unit tests (no React Testing Library yet — Sprint 1
-  tests target pure logic: validation schemas, RBAC role checks, login
-  lockout). Run with `npm test`.
+  tests target pure logic: validation schemas, RBAC role checks). Run with
+  `npm test`.
 
 ## Bootstrapping the first Admin account
 
