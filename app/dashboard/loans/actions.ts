@@ -76,40 +76,28 @@ export async function createLoan(
   const loanDate = new Date();
   const maturityDate = calculateMaturityDate(loanDate);
 
-  const { data: inventoryItem, error: inventoryError } = await supabase
-    .from("inventory_items")
-    .insert({ appraisal_item_id: parsed.data.appraisal_item_id, vault_location: parsed.data.vault_location, status: "pawned" })
-    .select("id")
-    .single();
-  if (inventoryError || !inventoryItem) return { error: inventoryError?.message ?? "Could not register inventory item" };
-
-  const { data: loan, error: loanError } = await supabase
-    .from("loans")
-    .insert({
-      customer_id: parsed.data.customer_id,
-      appraisal_item_id: parsed.data.appraisal_item_id,
-      inventory_item_id: inventoryItem.id,
-      principal_amount: parsed.data.principal_amount,
-      principal_balance: parsed.data.principal_amount,
-      interest_rate_percent: settings.interest_rate_percent,
-      grace_period_days: settings.grace_period_days,
-      loan_date: loanDate.toISOString().slice(0, 10),
-      maturity_date: maturityDate.toISOString().slice(0, 10),
-      ticket_number: generateTicketNumber(loanDate),
-      created_by: user.id,
-    })
-    .select("id")
-    .single();
-  if (loanError || !loan) return { error: loanError?.message ?? "Could not create loan" };
-
-  await supabase.from("cash_flow_entries").insert({
-    entry_type: "loan_disbursement",
-    direction: "out",
-    amount: parsed.data.principal_amount,
-    description: `Loan disbursed for item ${parsed.data.appraisal_item_id}`,
-    related_loan_id: loan.id,
-    created_by: user.id,
+  // PB-17 AC2: loan + matching inventory record + initial cash flow entry
+  // must all be created together. Done via a single Postgres function
+  // (`create_pawn_loan`, migration 0012) so the three writes commit or roll
+  // back as one transaction — three separate client-side inserts here would
+  // risk an orphaned inventory_items row (or a loan with no cash flow
+  // entry) if a later insert failed after an earlier one had already
+  // committed.
+  const { data: loanId, error: rpcError } = await supabase.rpc("create_pawn_loan", {
+    p_customer_id: parsed.data.customer_id,
+    p_appraisal_item_id: parsed.data.appraisal_item_id,
+    p_vault_location: parsed.data.vault_location,
+    p_principal_amount: parsed.data.principal_amount,
+    p_interest_rate_percent: settings.interest_rate_percent,
+    p_grace_period_days: settings.grace_period_days,
+    p_loan_date: loanDate.toISOString().slice(0, 10),
+    p_maturity_date: maturityDate.toISOString().slice(0, 10),
+    p_ticket_number: generateTicketNumber(loanDate),
+    p_created_by: user.id,
   });
+  if (rpcError || !loanId) return { error: rpcError?.message ?? "Could not create loan" };
+
+  const loan = { id: loanId };
 
   // PB-32: flag unusually rapid loan-taking by the same customer (placeholder
   // AML rule — see DECISIONS_LOG.md).
