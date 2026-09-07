@@ -7,26 +7,30 @@ role-restricted action, checked both the server-action/UI guard AND the
 underlying RLS policy that a client session could hit directly — per project
 rule, RLS is the real enforcement.
 
-## PB-1 Login — **PARTIAL → FIXED**
+## PB-1 Login — **PASS (note: lockout feature intentionally removed by the user)**
 
-- AC checked: valid credentials sign in; invalid credentials show an error;
-  3 consecutive failed attempts lock the account for 60s (AC3).
-- **Finding (BROKEN)**: `lib/auth/login-attempts.ts` implements and
-  unit-tests the lockout logic correctly, but `app/login/page.tsx` never
-  imported or called it — `handleSubmit` went straight to
-  `signInWithPassword` with no lockout check at all. AC3 was silently
-  unenforced in the running app despite `SPRINT_PROGRESS.md`/tests implying
-  otherwise.
-- **Fix**: wired `getLockoutRemaining` (checked before submit),
-  `recordFailedAttempt` (on auth failure), and `clearAttempts` (on success)
-  into `app/login/page.tsx`. Verified against the existing 82-test suite
-  (no changes needed to `login-attempts.ts` itself — its logic was already
-  correct, just unused).
-- Remaining limitation (pre-existing, documented in CLAUDE.md/DECISIONS_LOG):
-  lockout is client-side (`localStorage`), acceptable for a small single-
-  location shop per the logged decision; a determined attacker clearing
-  local storage or using a different browser bypasses it. Not in scope to
-  change without a server-side rate limiter.
+- AC checked: valid credentials sign in; invalid credentials show a clear
+  error.
+- **Initial finding, then corrected**: `app/login/page.tsx` does not call
+  the lockout logic in `lib/auth/login-attempts.ts` at all — I first read
+  this as a regression (CLAUDE.md's decisions log and `SPRINT_PROGRESS.md`
+  both describe a working 3-attempt/60s lockout) and wired it back into the
+  login page. Before committing that, `git log` showed three commits by the
+  actual project owner (`mtbdiaz`) explicitly reverting it:
+  `e2546e2 fix(pb1): remove login lockout feature, surface real auth error`,
+  `3965be8 chore(pb1): remove login lockout implementation (feature removed
+  per request)`, `737009e chore(pb1): remove login lockout tests (feature
+  removed per request)`. This is a deliberate, later human decision that
+  supersedes the stale CLAUDE.md/decisions-log text (which was never
+  updated after the removal). **I reverted my own change** — login now
+  correctly surfaces the real Supabase auth error on every failed attempt,
+  matching the owner's intent, with no client-side lockout.
+- `lib/auth/login-attempts.ts` is leftover dead code (reintroduced by a
+  merge commit, `d4be52d`, after the removal commits) — it is unused and
+  untested (its test file was deleted). Left in place since deleting
+  unreferenced files is outside this pass's scope and it does not affect
+  any acceptance criterion; flagging here so CLAUDE.md/`SPRINT_PROGRESS.md`
+  can be corrected to stop describing a lockout that no longer exists.
 
 ## PB-2 Password Reset — **PASS**
 
@@ -190,8 +194,8 @@ rule, RLS is the real enforcement.
 
 ## Summary
 
-- PASS: PB-2, PB-3, PB-4, PB-5, PB-6, PB-7, PB-8, PB-9, PB-12, PB-13, PB-14, PB-15 (12)
-- PARTIAL → fixed to PASS: PB-1, PB-11, PB-16 (3)
+- PASS: PB-1, PB-2, PB-3, PB-4, PB-5, PB-6, PB-7, PB-8, PB-9, PB-12, PB-13, PB-14, PB-15 (13)
+- PARTIAL → fixed to PASS: PB-11, PB-16 (2)
 - MISSING → fixed to PASS: PB-10 (1)
 - BROKEN: none remaining
 
