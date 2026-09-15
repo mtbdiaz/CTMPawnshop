@@ -129,7 +129,7 @@ export async function recordPayment(
     loan_id: formData.get("loan_id"),
     amount: formData.get("amount"),
     lost_ticket: formData.get("lost_ticket") === "on",
-    id_number_confirm: formData.get("id_number_confirm"),
+    id_number_confirm: formData.get("id_number_confirm") ?? undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
 
@@ -260,7 +260,7 @@ export async function redeemLoan(
   const parsed = redeemSchema.safeParse({
     loan_id: formData.get("loan_id"),
     lost_ticket: formData.get("lost_ticket") === "on",
-    id_number_confirm: formData.get("id_number_confirm"),
+    id_number_confirm: formData.get("id_number_confirm") ?? undefined,
   });
   if (!parsed.success) return { error: "Invalid input" };
 
