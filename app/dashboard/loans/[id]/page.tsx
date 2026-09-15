@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { calculateInterestDue } from "@/lib/loans/calculations";
 import { PrintButton } from "@/components/print-button";
 import { PaymentForm, ExtensionForm, RedeemForm } from "./payment-form";
 
@@ -25,7 +24,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
 
   const customer = (loan as unknown as { customers: { full_name: string; address: string; contact_number: string } | null }).customers;
   const item = (loan as unknown as { appraisal_items: { weight_grams: number; karat: number; purity_percent: number } | null }).appraisal_items;
-  const interestDue = calculateInterestDue(loan.principal_balance, loan.interest_rate_percent);
+  const interestDue = loan.interest_owed;
   const canTransact = loan.status === "active" || loan.status === "extended";
 
   return (
@@ -68,8 +67,16 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
             <div>{loan.maturity_date}</div>
           </div>
           <div>
-            <div className="text-slate-500">Current balance</div>
+            <div className="text-slate-500">Principal balance</div>
             <div>₱{loan.principal_balance.toLocaleString()}</div>
+          </div>
+          <div>
+            <div className="text-slate-500">Interest owed (this period)</div>
+            <div>₱{loan.interest_owed.toLocaleString()}</div>
+          </div>
+          <div>
+            <div className="text-slate-500">Total to redeem</div>
+            <div>₱{(loan.principal_balance + loan.interest_owed).toLocaleString()}</div>
           </div>
           <div>
             <div className="text-slate-500">Status</div>
@@ -89,7 +96,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
         <div className="print:hidden space-y-4">
           <PaymentForm loanId={loan.id} interestDue={interestDue} />
           <ExtensionForm loanId={loan.id} />
-          <RedeemForm loanId={loan.id} canRedeem={loan.principal_balance <= 0} />
+          <RedeemForm loanId={loan.id} canRedeem={loan.principal_balance <= 0 && loan.interest_owed <= 0} />
         </div>
       )}
 
