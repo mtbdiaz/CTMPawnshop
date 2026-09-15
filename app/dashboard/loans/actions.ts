@@ -7,7 +7,6 @@ import { createLoanSchema, paymentSchema, extensionSchema, redeemSchema } from "
 import { getBlacklistStatus } from "@/lib/customers/blacklist";
 import {
   calculateMaturityDate,
-  calculateInterestDue,
   applyPayment,
   validatePaymentAmount,
   calculateExtension,
@@ -148,11 +147,18 @@ export async function recordPayment(
     }
   }
 
-  const interestDue = calculateInterestDue(loan.principal_balance, loan.interest_rate_percent);
+  // Interest due is the period's charge already persisted on the loan
+  // (loan.interest_owed) — NOT recalculated from the current balance here.
+  // Recomputing `principal_balance * rate` on every payment call would
+  // re-charge a fresh period's interest on each partial payment instead of
+  // settling the one period's interest that's actually owed (see
+  // migration 0015 for the incident this fixes).
+  const interestDue = loan.interest_owed;
   const validation = validatePaymentAmount(parsed.data.amount, loan.principal_balance, interestDue);
   if (!validation.ok) return { error: validation.error };
 
   const breakdown = applyPayment(parsed.data.amount, loan.principal_balance, interestDue);
+  const newInterestOwed = Math.round((loan.interest_owed - breakdown.interestPortion) * 100) / 100;
 
   const { error: paymentError } = await supabase.from("loan_payments").insert({
     loan_id: loan.id,
@@ -169,6 +175,7 @@ export async function recordPayment(
     .from("loans")
     .update({
       principal_balance: breakdown.newPrincipalBalance,
+      interest_owed: newInterestOwed,
       ...(parsed.data.lost_ticket ? { lost_ticket_used: true } : {}),
     })
     .eq("id", loan.id);
@@ -225,12 +232,18 @@ export async function processExtension(
   });
   if (extError) return { error: extError.message };
 
+  // Additive, not a reset: any interest already owed from the current
+  // period (unpaid at extension time) doesn't disappear — the new period's
+  // charge stacks on top of it.
+  const newInterestOwed = Math.round((loan.interest_owed + extension.additionalInterestAmount) * 100) / 100;
+
   await supabase
     .from("loans")
     .update({
       maturity_date: extension.newMaturityDate.toISOString().slice(0, 10),
       extension_count: loan.extension_count + 1,
       status: "extended",
+      interest_owed: newInterestOwed,
     })
     .eq("id", loan.id);
 
@@ -274,8 +287,9 @@ export async function redeemLoan(
   if (loan.status !== "active" && loan.status !== "extended") {
     return { error: `Loan is ${loan.status} — cannot be redeemed` };
   }
-  if (loan.principal_balance > 0) {
-    return { error: `Loan still has an outstanding balance of ${loan.principal_balance}` };
+  if (loan.principal_balance > 0 || loan.interest_owed > 0) {
+    const totalOwed = Math.round((loan.principal_balance + loan.interest_owed) * 100) / 100;
+    return { error: `Loan still has an outstanding balance of ${totalOwed}` };
   }
 
   if (parsed.data.lost_ticket) {

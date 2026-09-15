@@ -280,6 +280,7 @@ export type Database = {
           grace_period_days: number
           id: string
           interest_rate_percent: number
+          interest_owed: number
           inventory_item_id: string | null
           loan_date: string
           lost_ticket_used: boolean
@@ -299,6 +300,7 @@ export type Database = {
           grace_period_days: number
           id?: string
           interest_rate_percent: number
+          interest_owed?: number
           inventory_item_id?: string | null
           loan_date?: string
           lost_ticket_used?: boolean
@@ -318,6 +320,7 @@ export type Database = {
           grace_period_days?: number
           id?: string
           interest_rate_percent?: number
+          interest_owed?: number
           inventory_item_id?: string | null
           loan_date?: string
           lost_ticket_used?: boolean
