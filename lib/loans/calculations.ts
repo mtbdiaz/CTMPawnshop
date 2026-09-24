@@ -74,6 +74,31 @@ export function calculateExtension(
   };
 }
 
+export type RenewalResult = ExtensionResult & {
+  /** Interest still owed on the expiring period — collected at the counter. */
+  interestCollectedNow: number;
+  /** One fresh period's interest, owed by the new maturity date. */
+  newInterestOwed: number;
+};
+
+// PB-19 as pay-and-renew: the customer settles whatever interest is still
+// owed for the expiring period, and the loan starts a fresh period with one
+// new period's interest owed. Interest is never both collected and left owing.
+export function calculateRenewal(
+  currentMaturityDate: Date,
+  principalBalance: number,
+  interestOwed: number,
+  interestRatePercent: number,
+  termDays: number = LOAN_TERM_DAYS,
+): RenewalResult {
+  const extension = calculateExtension(currentMaturityDate, principalBalance, interestRatePercent, termDays);
+  return {
+    ...extension,
+    interestCollectedNow: round2(Math.max(0, interestOwed)),
+    newInterestOwed: extension.additionalInterestAmount,
+  };
+}
+
 export function generateTicketNumber(date: Date = new Date()): string {
   const stamp = date.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   return `PT-${stamp}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;

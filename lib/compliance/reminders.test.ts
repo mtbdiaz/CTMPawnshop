@@ -22,3 +22,14 @@ describe("isDueForReminder (PB-33)", () => {
     expect(isDueForReminder(maturity, now)).toBe(false);
   });
 });
+
+describe("isDueForReminder uses calendar days", () => {
+  it("keeps a loan due today on the list all day", () => {
+    expect(isDueForReminder("2026-09-24", "2026-09-24")).toBe(true);
+  });
+
+  it("includes the last day of the lead window and excludes the day after", () => {
+    expect(isDueForReminder("2026-09-27", "2026-09-24")).toBe(true);
+    expect(isDueForReminder("2026-09-28", "2026-09-24")).toBe(false);
+  });
+});

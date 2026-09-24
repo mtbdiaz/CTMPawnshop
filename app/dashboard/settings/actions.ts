@@ -1,11 +1,13 @@
 "use server";
 
+import { validationFailure, type FieldErrors } from "@/lib/validation/errors";
+
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { businessRulesSchema } from "@/lib/validation/settings";
 
-export type SettingsFormState = { error?: string; success?: boolean };
+export type SettingsFormState = { error?: string; fieldErrors?: FieldErrors; success?: boolean };
 
 export async function updateBusinessRules(
   _prevState: SettingsFormState,
@@ -21,7 +23,7 @@ export async function updateBusinessRules(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+    return validationFailure(parsed.error);
   }
 
   const supabase = await createClient();

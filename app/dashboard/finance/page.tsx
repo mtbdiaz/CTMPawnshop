@@ -1,94 +1,132 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { computeCashPosition, computeRunningBalances } from "@/lib/finance/ledger";
+import { formatDateTime, formatPeso, humanize, manilaDayStart } from "@/lib/format";
+import {
+  Card,
+  EmptyState,
+  PageHeader,
+  Pagination,
+  SectionTitle,
+  StatCard,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+  TableLink,
+  pageParam,
+} from "@/components/ui";
 import { CashEntryForm } from "./cash-entry-form";
 
-export default async function FinancePage() {
+export const metadata = { title: "Cash & ledger" };
+
+const PAGE_SIZE = 30;
+
+export default async function FinancePage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   await requireRole(["operator", "cashier", "admin"]);
+  const page = pageParam((await searchParams).page);
 
   const supabase = await createClient();
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  // The running balance depends on every earlier entry, so the full ledger is
+  // loaded oldest-first (paged through PostgREST's row cap) and then shown
+  // newest-first. Previously only the OLDEST 200 rows were loaded, which hid
+  // all recent activity once the ledger grew past 200 entries.
+  const all: NonNullable<Awaited<ReturnType<typeof fetchChunk>>["data"]> = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await fetchChunk(supabase, from);
+    if (error) throw error;
+    all.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
 
-  const [{ data: todayEntries }, { data: allEntries }] = await Promise.all([
-    supabase
-      .from("cash_flow_entries")
-      .select("*")
-      .gte("created_at", todayStart.toISOString())
-      .order("created_at"),
-    supabase.from("cash_flow_entries").select("*").order("created_at").limit(200),
-  ]);
+  const todayStart = new Date(manilaDayStart()).getTime();
+  const today = all.filter((e) => new Date(e.created_at).getTime() >= todayStart);
+  const todayPosition = computeCashPosition(today);
+  const overall = computeCashPosition(all);
+  const balances = computeRunningBalances(all);
 
-  const todayPosition = computeCashPosition(todayEntries ?? []);
-  const ledger = allEntries ?? [];
-  const balances = computeRunningBalances(ledger);
+  const newestFirst = all.map((entry, i) => ({ entry, balance: balances[i] })).reverse();
+  const pageRows = newestFirst.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <div>
-      <h1 className="text-lg font-semibold text-slate-900">Cash Flow &amp; Financial Ledger</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Every loan, payment, and forfeiture event logs a cash flow entry automatically. Record
-        non-loan expenses/revenue below.
-      </p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Cash & ledger"
+        description="Loan disbursements, payments and renewals are logged automatically. Record any other expenses or income below."
+        breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Cash & ledger" }]}
+      />
 
-      <div className="mt-6 grid grid-cols-3 gap-4">
-        <StatCard label="Cash in today" value={todayPosition.totalIn} />
-        <StatCard label="Cash out today" value={todayPosition.totalOut} />
-        <StatCard label="Net position today" value={todayPosition.net} highlight />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Cash in today" value={formatPeso(todayPosition.totalIn)} />
+        <StatCard label="Cash out today" value={formatPeso(todayPosition.totalOut)} />
+        <StatCard label="Net today" value={formatPeso(todayPosition.net)} tone={todayPosition.net < 0 ? "warning" : "gold"} />
+        <StatCard label="Ledger balance" value={formatPeso(overall.net)} hint={`${all.length} entries all-time`} />
       </div>
 
-      <div className="mt-6">
+      <Card>
+        <SectionTitle description="For costs and income not tied to a loan (rent, utilities, supplies, other revenue).">
+          Record expense or revenue
+        </SectionTitle>
         <CashEntryForm />
-      </div>
+      </Card>
 
-      <h2 className="mt-8 text-sm font-medium text-slate-900">Ledger</h2>
-      <table className="mt-2 w-full text-left text-sm">
-        <thead>
-          <tr className="text-xs uppercase text-slate-500">
-            <th className="pb-2 pr-4">Date</th>
-            <th className="pb-2 pr-4">Type</th>
-            <th className="pb-2 pr-4">Description</th>
-            <th className="pb-2 pr-4">In</th>
-            <th className="pb-2 pr-4">Out</th>
-            <th className="pb-2 pr-4">Balance</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ledger.length ? (
-            ledger.map((entry, i) => (
-              <tr key={entry.id} className="border-t border-slate-200">
-                <td className="py-2 pr-4">{new Date(entry.created_at).toLocaleString()}</td>
-                <td className="py-2 pr-4 capitalize">{entry.entry_type.replace("_", " ")}</td>
-                <td className="py-2 pr-4">{entry.description}</td>
-                <td className="py-2 pr-4">
-                  {entry.direction === "in" ? `₱${entry.amount.toLocaleString()}` : ""}
-                </td>
-                <td className="py-2 pr-4">
-                  {entry.direction === "out" ? `₱${entry.amount.toLocaleString()}` : ""}
-                </td>
-                <td className="py-2 pr-4 font-medium">₱{balances[i].toLocaleString()}</td>
-              </tr>
-            ))
+      <section>
+        <SectionTitle description="Newest first. Balance is the running total after each entry.">Ledger</SectionTitle>
+        <Card padded={false}>
+          {pageRows.length > 0 ? (
+            <>
+              <Table minWidth="760px">
+                <THead>
+                  <TH>Date</TH>
+                  <TH>Type</TH>
+                  <TH>Description</TH>
+                  <TH align="right">In</TH>
+                  <TH align="right">Out</TH>
+                  <TH align="right">Balance</TH>
+                </THead>
+                <TBody>
+                  {pageRows.map(({ entry, balance }) => (
+                    <TR key={entry.id}>
+                      <TD className="whitespace-nowrap text-slate-600">{formatDateTime(entry.created_at)}</TD>
+                      <TD>{humanize(entry.entry_type)}</TD>
+                      <TD>
+                        {entry.related_loan_id ? (
+                          <TableLink href={`/dashboard/loans/${entry.related_loan_id}`}>{entry.description ?? "Loan"}</TableLink>
+                        ) : (
+                          entry.description
+                        )}
+                      </TD>
+                      <TD align="right" className="text-emerald-700">
+                        {entry.direction === "in" ? formatPeso(entry.amount) : ""}
+                      </TD>
+                      <TD align="right" className="text-red-700">
+                        {entry.direction === "out" ? formatPeso(entry.amount) : ""}
+                      </TD>
+                      <TD align="right" className="font-medium">
+                        {formatPeso(balance)}
+                      </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+              <Pagination page={page} pageSize={PAGE_SIZE} total={all.length} basePath="/dashboard/finance" />
+            </>
           ) : (
-            <tr>
-              <td colSpan={6} className="py-4 text-sm text-slate-500">
-                No cash flow entries yet.
-              </td>
-            </tr>
+            <EmptyState icon="cash" title="No cash entries yet" description="Entries appear as loans are issued and paid." />
           )}
-        </tbody>
-      </table>
+        </Card>
+      </section>
     </div>
   );
 }
 
-function StatCard({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
-  return (
-    <div className="rounded-md border border-slate-200 bg-white p-4">
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className={highlight ? "text-xl font-semibold text-slate-900" : "text-lg text-slate-700"}>
-        ₱{value.toLocaleString()}
-      </div>
-    </div>
-  );
+function fetchChunk(supabase: Awaited<ReturnType<typeof createClient>>, from: number) {
+  return supabase
+    .from("cash_flow_entries")
+    .select("id, created_at, entry_type, description, direction, amount, related_loan_id")
+    .order("created_at")
+    .order("id")
+    .range(from, from + 999);
 }

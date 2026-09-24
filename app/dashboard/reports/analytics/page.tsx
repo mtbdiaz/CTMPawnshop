@@ -1,6 +1,8 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { PrintButton } from "@/components/print-button";
+import { formatPeso } from "@/lib/format";
+import { ReportHeader } from "@/components/report-header";
+import { Card, EmptyState, SectionTitle, StatCard } from "@/components/ui";
 import {
   computeRedemptionRate,
   computeForfeitureRate,
@@ -8,67 +10,71 @@ import {
   computeMonthlyVolume,
 } from "@/lib/reports/analytics";
 
+export const metadata = { title: "Trends & analytics" };
+
+function monthLabel(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-PH", { month: "short", year: "numeric", timeZone: "UTC" });
+}
+
 export default async function AnalyticsDashboard() {
   await requireRole(["admin"]);
 
   const supabase = await createClient();
-  const { data: loans } = await supabase.from("loans").select("principal_amount, status, loan_date");
+  const { data: loans, error } = await supabase.from("loans").select("principal_amount, status, loan_date");
+  if (error) throw error;
   const rows = loans ?? [];
 
+  const concluded = rows.filter((l) => ["redeemed", "defaulted", "forfeited"].includes(l.status)).length;
   const redemptionRate = computeRedemptionRate(rows);
   const forfeitureRate = computeForfeitureRate(rows);
   const avgLoanSize = computeAverageLoanSize(rows);
-  const monthly = computeMonthlyVolume(rows);
-  const maxCount = Math.max(1, ...monthly.map((m) => m.count));
+  const monthly = computeMonthlyVolume(rows).slice(-12);
+  const maxPrincipal = Math.max(1, ...monthly.map((m) => m.totalPrincipal));
 
   return (
-    <div>
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-slate-900">Trends &amp; Analytics Dashboard</h1>
-        <PrintButton />
-      </div>
-      <p className="mt-1 text-sm text-slate-500 print:hidden">
-        Concrete metrics chosen for this dashboard (PB-39 was flagged not Testable as originally
-        written): redemption rate, forfeiture rate, average loan size, and monthly loan volume.
-        See DECISIONS_LOG.md.
-      </p>
+    <div className="space-y-6">
+      <ReportHeader
+        title="Trends & analytics"
+        description="Portfolio health at a glance. Rates are based on concluded loans (redeemed, defaulted or forfeited)."
+        subtitle={`${rows.length} loans all-time · ${concluded} concluded`}
+      />
 
-      <div className="mt-6 grid grid-cols-3 gap-4 max-w-2xl">
-        <MetricCard label="Redemption rate" value={`${(redemptionRate * 100).toFixed(1)}%`} />
-        <MetricCard label="Forfeiture rate" value={`${(forfeitureRate * 100).toFixed(1)}%`} />
-        <MetricCard label="Average loan size" value={`₱${avgLoanSize.toLocaleString()}`} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Redemption rate" value={`${(redemptionRate * 100).toFixed(1)}%`} tone="success" hint="Concluded loans that were redeemed" />
+        <StatCard label="Forfeiture rate" value={`${(forfeitureRate * 100).toFixed(1)}%`} tone={forfeitureRate > 0.3 ? "danger" : "default"} hint="Concluded loans lost to default" />
+        <StatCard label="Average loan size" value={formatPeso(avgLoanSize)} hint="Mean principal, all loans" />
+        <StatCard label="Loans issued" value={rows.length} hint="All-time" />
       </div>
 
-      <h2 className="mt-8 text-sm font-medium text-slate-900">Monthly loan volume</h2>
-      <div className="mt-2 max-w-2xl space-y-2">
-        {monthly.length ? (
-          monthly.map((m) => (
-            <div key={m.month} className="flex items-center gap-2 text-sm">
-              <span className="w-20 text-slate-500">{m.month}</span>
-              <div className="h-4 flex-1 rounded bg-slate-100">
-                <div
-                  className="h-4 rounded bg-slate-700"
-                  style={{ width: `${(m.count / maxCount) * 100}%` }}
-                />
-              </div>
-              <span className="w-32 text-right text-slate-600">
-                {m.count} loans / ₱{m.totalPrincipal.toLocaleString()}
-              </span>
-            </div>
-          ))
-        ) : (
-          <p className="text-sm text-slate-500">No loan data yet.</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-slate-200 bg-white p-4">
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className="text-xl font-semibold text-slate-900">{value}</div>
+      <section className="break-inside-avoid">
+        <SectionTitle description="Principal disbursed per month (last 12 months with activity).">Monthly loan volume</SectionTitle>
+        <Card>
+          {monthly.length ? (
+            <ul className="space-y-3" aria-label="Monthly loan volume">
+              {monthly.map((m) => (
+                <li key={m.month} className="grid grid-cols-[5.5rem_1fr_auto] items-center gap-3 text-sm">
+                  <span className="text-slate-600">{monthLabel(m.month)}</span>
+                  <span className="h-6 rounded-md bg-slate-100 print:border print:border-slate-300">
+                    <span
+                      className="block h-6 rounded-md bg-gradient-to-r from-navy-700 to-navy-500 print:bg-navy-700"
+                      style={{ width: `${Math.max(2, (m.totalPrincipal / maxPrincipal) * 100)}%` }}
+                    />
+                  </span>
+                  <span className="whitespace-nowrap text-right tabular-nums">
+                    <span className="font-semibold text-navy-900">{formatPeso(m.totalPrincipal)}</span>
+                    <span className="ml-2 text-xs text-slate-500">
+                      {m.count} loan{m.count === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState icon="chart" title="No loan data yet" />
+          )}
+        </Card>
+      </section>
     </div>
   );
 }

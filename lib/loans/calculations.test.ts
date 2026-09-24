@@ -5,6 +5,7 @@ import {
   applyPayment,
   validatePaymentAmount,
   calculateExtension,
+  calculateRenewal,
   LOAN_TERM_DAYS,
 } from "./calculations";
 
@@ -67,5 +68,33 @@ describe("calculateExtension (PB-19)", () => {
     const diffDays = Math.round((result.newMaturityDate.getTime() - current.getTime()) / 86_400_000);
     expect(diffDays).toBe(LOAN_TERM_DAYS);
     expect(result.additionalInterestAmount).toBe(500);
+  });
+});
+
+describe("calculateRenewal (PB-19 pay-and-renew)", () => {
+  const maturity = new Date("2026-10-15T00:00:00Z");
+
+  it("collects the expiring period's unpaid interest and starts one fresh period", () => {
+    const r = calculateRenewal(maturity, 10000, 500, 5);
+    expect(r.interestCollectedNow).toBe(500);
+    expect(r.newInterestOwed).toBe(500);
+  });
+
+  it("collects nothing when the period's interest was already paid", () => {
+    const r = calculateRenewal(maturity, 10000, 0, 5);
+    expect(r.interestCollectedNow).toBe(0);
+    expect(r.newInterestOwed).toBe(500);
+  });
+
+  it("charges the new period on the reduced principal after partial payments", () => {
+    const r = calculateRenewal(maturity, 6000, 120.5, 5);
+    expect(r.interestCollectedNow).toBe(120.5);
+    expect(r.newInterestOwed).toBe(300);
+  });
+
+  it("never leaves interest both collected and still owing (no double count)", () => {
+    const r = calculateRenewal(maturity, 10000, 500, 5);
+    // owed after renewal is only the NEW period, not old + new
+    expect(r.newInterestOwed).not.toBe(r.interestCollectedNow + r.additionalInterestAmount);
   });
 });

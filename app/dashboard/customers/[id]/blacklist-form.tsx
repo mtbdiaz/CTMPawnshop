@@ -1,35 +1,56 @@
 "use client";
 
-import { useActionState } from "react";
-import { setBlacklistStatus, type ActionState } from "../actions";
+import { ActionForm, Field, SubmitButton } from "@/components/form";
+import { setBlacklistStatus } from "../actions";
 import type { Tables } from "@/lib/supabase/database.types";
 
-const initialState: ActionState = {};
-
 export function BlacklistForm({ customer }: { customer: Tables<"customers"> }) {
-  const [state, formAction, pending] = useActionState(setBlacklistStatus, initialState);
+  if (customer.is_blacklisted) {
+    return (
+      <ActionForm action={setBlacklistStatus} successMessage="Customer removed from the blacklist." className="space-y-3">
+        <input type="hidden" name="customer_id" value={customer.id} />
+        <p className="text-sm text-slate-600">
+          Removing the flag lets this customer receive new appraisals and loans again.
+        </p>
+        <SubmitButton
+          variant="secondary"
+          pendingLabel="Updating…"
+          confirm={{
+            title: "Remove from blacklist?",
+            message: `${customer.full_name} will be able to transact again. This change is recorded in the audit trail.`,
+            confirmLabel: "Remove from blacklist",
+            tone: "primary",
+          }}
+        >
+          Remove from blacklist
+        </SubmitButton>
+      </ActionForm>
+    );
+  }
 
   return (
-    <form action={formAction} className="mt-2 space-y-2 rounded-md border border-slate-200 bg-white p-4">
+    <ActionForm action={setBlacklistStatus} successMessage="Customer blacklisted." className="space-y-3">
       <input type="hidden" name="customer_id" value={customer.id} />
-      <label className="flex items-center gap-2 text-sm text-slate-700">
-        <input type="checkbox" name="is_blacklisted" defaultChecked={customer.is_blacklisted} />
-        Blacklisted
-      </label>
-      <input
+      <Field
+        label="Reason for blacklisting"
         name="blacklist_reason"
-        defaultValue={customer.blacklist_reason ?? ""}
-        placeholder="Reason (required to blacklist)"
-        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        required
+        placeholder="e.g. Presented a counterfeit item on 2026-09-12"
+        hint="Required. Shown to staff whenever this customer is looked up."
       />
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 disabled:opacity-50"
+      <SubmitButton
+        variant="danger"
+        name="is_blacklisted"
+        value="on"
+        pendingLabel="Updating…"
+        confirm={{
+          title: "Blacklist this customer?",
+          message: `${customer.full_name} will be blocked from all new appraisals and loans until an Admin removes the flag.`,
+          confirmLabel: "Blacklist customer",
+        }}
       >
-        {pending ? "Saving..." : "Update blacklist status"}
-      </button>
-      {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-    </form>
+        Blacklist customer
+      </SubmitButton>
+    </ActionForm>
   );
 }

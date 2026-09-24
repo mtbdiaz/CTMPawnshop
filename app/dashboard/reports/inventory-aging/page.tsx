@@ -1,70 +1,81 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { PrintButton } from "@/components/print-button";
 import { daysInVault } from "@/lib/reports/loans";
+import { formatDate } from "@/lib/format";
+import { ReportHeader } from "@/components/report-header";
+import { Card, EmptyState, StatusBadge, Table, TBody, TD, TH, THead, TR } from "@/components/ui";
+
+export const metadata = { title: "Inventory aging report" };
 
 const AGING_THRESHOLD_DAYS = 60;
+
+type Row = {
+  id: string;
+  vault_location: string;
+  status: string;
+  created_at: string;
+  appraisal_items: { weight_grams: number; karat: number; customers: { full_name: string } | null } | null;
+};
 
 export default async function InventoryAgingReport() {
   await requireRole(["admin"]);
 
   const supabase = await createClient();
-  const { data: items } = await supabase
+  // Only items physically in the vault — redeemed items have been returned to the customer.
+  const { data, error } = await supabase
     .from("inventory_items")
-    .select("*, appraisal_items(weight_grams, karat, customers(full_name))")
+    .select("id, vault_location, status, created_at, appraisal_items(weight_grams, karat, customers(full_name))")
+    .in("status", ["pawned", "extended", "forfeited", "queued_for_auction"])
     .order("created_at");
+  if (error) throw error;
+  const items = (data ?? []) as unknown as Row[];
+  const aged = items.filter((i) => daysInVault(new Date(i.created_at)) > AGING_THRESHOLD_DAYS).length;
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-slate-900">Inventory Aging Report</h1>
-        <PrintButton />
-      </div>
-      <p className="mt-1 text-sm text-slate-500 print:hidden">
-        How long each item has sat in the vault. Items over {AGING_THRESHOLD_DAYS} days are
-        highlighted.
-      </p>
-
-      <table className="mt-6 w-full text-left text-sm">
-        <thead>
-          <tr className="text-xs uppercase text-slate-500">
-            <th className="pb-2 pr-4">Customer</th>
-            <th className="pb-2 pr-4">Item</th>
-            <th className="pb-2 pr-4">Status</th>
-            <th className="pb-2 pr-4">Days in vault</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items?.length ? (
-            items.map((item) => {
-              const appraisal = (
-                item as unknown as {
-                  appraisal_items: { weight_grams: number; karat: number; customers: { full_name: string } | null } | null;
-                }
-              ).appraisal_items;
-              const days = daysInVault(new Date(item.created_at));
-              return (
-                <tr key={item.id} className="border-t border-slate-200">
-                  <td className="py-2 pr-4">{appraisal?.customers?.full_name ?? "—"}</td>
-                  <td className="py-2 pr-4">
-                    {appraisal?.weight_grams}g {appraisal?.karat}k
-                  </td>
-                  <td className="py-2 pr-4 capitalize">{item.status}</td>
-                  <td className={`py-2 pr-4 ${days > AGING_THRESHOLD_DAYS ? "font-semibold text-red-700" : ""}`}>
-                    {days}
-                  </td>
-                </tr>
-              );
-            })
-          ) : (
-            <tr>
-              <td colSpan={4} className="py-4 text-sm text-slate-500">
-                No inventory items.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <ReportHeader
+        title="Inventory aging"
+        description={`How long each item currently in the vault has been held. Items over ${AGING_THRESHOLD_DAYS} days are highlighted.`}
+        subtitle={`${items.length} item${items.length === 1 ? "" : "s"} in vault · ${aged} over ${AGING_THRESHOLD_DAYS} days`}
+      />
+      <Card padded={false}>
+        {items.length ? (
+          <Table>
+            <THead>
+              <TH>Vault location</TH>
+              <TH>Pawner</TH>
+              <TH>Item</TH>
+              <TH>Status</TH>
+              <TH>Received</TH>
+              <TH align="right">Days held</TH>
+            </THead>
+            <TBody>
+              {items.map((item) => {
+                const days = daysInVault(new Date(item.created_at));
+                const old = days > AGING_THRESHOLD_DAYS;
+                return (
+                  <TR key={item.id} highlight={old ? "warning" : undefined}>
+                    <TD className="font-medium">{item.vault_location}</TD>
+                    <TD>{item.appraisal_items?.customers?.full_name ?? "—"}</TD>
+                    <TD>
+                      {item.appraisal_items?.weight_grams}g · {item.appraisal_items?.karat}k
+                    </TD>
+                    <TD>
+                      <StatusBadge status={item.status} label={item.status === "extended" ? "Renewed" : undefined} />
+                    </TD>
+                    <TD>{formatDate(item.created_at)}</TD>
+                    <TD align="right" className={old ? "font-semibold text-amber-900" : undefined}>
+                      {days}
+                    </TD>
+                  </TR>
+                );
+              })}
+            </TBody>
+          </Table>
+        ) : (
+          <EmptyState icon="vault" title="The vault is empty" />
+        )}
+      </Card>
     </div>
   );
 }

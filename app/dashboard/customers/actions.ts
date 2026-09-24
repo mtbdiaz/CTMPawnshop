@@ -1,12 +1,14 @@
 "use server";
 
+import { validationFailure, type FieldErrors } from "@/lib/validation/errors";
+
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { customerSchema } from "@/lib/validation/customer";
 import { runAmlCheck } from "@/lib/customers/aml";
 
-export type ActionState = { error?: string; success?: boolean; customerId?: string };
+export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; customerId?: string };
 
 function parseCustomerForm(formData: FormData) {
   return customerSchema.safeParse({
@@ -27,7 +29,7 @@ export async function createCustomer(
 ): Promise<ActionState> {
   const user = await requireRole(["operator", "admin"]);
   const parsed = parseCustomerForm(formData);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  if (!parsed.success) return validationFailure(parsed.error);
 
   const aml = runAmlCheck(parsed.data.full_name, parsed.data.id_number);
 
@@ -65,7 +67,7 @@ export async function updateCustomer(
   const customerId = String(formData.get("customer_id") ?? "");
   const parsed = parseCustomerForm(formData);
   if (!customerId) return { error: "Missing customer id" };
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  if (!parsed.success) return validationFailure(parsed.error);
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -99,7 +101,10 @@ export async function setBlacklistStatus(
   const isBlacklisted = formData.get("is_blacklisted") === "on";
   const reason = String(formData.get("blacklist_reason") ?? "").trim();
   if (!customerId) return { error: "Missing customer id" };
-  if (isBlacklisted && !reason) return { error: "A reason is required to blacklist a customer" };
+  if (isBlacklisted && !reason) {
+    const message = "A reason is required to blacklist a customer";
+    return { error: message, fieldErrors: { blacklist_reason: message } };
+  }
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -113,5 +118,6 @@ export async function setBlacklistStatus(
   if (error) return { error: error.message };
 
   revalidatePath(`/dashboard/customers/${customerId}`);
+  revalidatePath("/dashboard/customers");
   return { success: true, customerId };
 }

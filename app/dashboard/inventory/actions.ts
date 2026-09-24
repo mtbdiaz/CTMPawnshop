@@ -1,11 +1,13 @@
 "use server";
 
+import type { FieldErrors } from "@/lib/validation/errors";
+
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { countDiscrepancies } from "@/lib/inventory/audit";
 
-export type ActionState = { error?: string; success?: boolean; id?: string };
+export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; id?: string };
 
 // PB-25: submit a physical inventory audit — one line per item checked.
 export async function submitAudit(

@@ -1,10 +1,12 @@
 "use server";
 
+import type { FieldErrors } from "@/lib/validation/errors";
+
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 
-export type ActionState = { error?: string; success?: boolean };
+export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean };
 
 // PB-32: Admin reviews a suspicious activity flag.
 export async function resolveSuspiciousFlag(

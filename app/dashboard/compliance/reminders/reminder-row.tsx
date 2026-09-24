@@ -1,44 +1,63 @@
 "use client";
 
-import { useActionState } from "react";
+import { ActionForm, SubmitButton } from "@/components/form";
+import { Badge, TD, TR, TableLink } from "@/components/ui";
+import { formatDate, formatPeso } from "@/lib/format";
 import { sendReminder, type ActionState } from "../actions";
-
-const initialState: ActionState = {};
 
 export function ReminderRow({
   loanId,
+  ticketNumber,
   customerName,
+  contactNumber,
   maturityDate,
+  daysLeft,
+  owed,
   alreadySent,
 }: {
   loanId: string;
+  ticketNumber: string;
   customerName: string;
+  contactNumber: string;
   maturityDate: string;
+  daysLeft: number;
+  owed: number;
   alreadySent: boolean;
 }) {
-  const [state, formAction, pending] = useActionState(sendReminder, initialState);
-
   return (
-    <tr className="border-t border-slate-200">
-      <td className="py-2 pr-4">{customerName}</td>
-      <td className="py-2 pr-4">{maturityDate}</td>
-      <td className="py-2 pr-4">
-        {alreadySent || state.success ? (
-          <span className="text-xs text-green-700">Reminder sent</span>
-        ) : (
-          <form action={formAction}>
-            <input type="hidden" name="loan_id" value={loanId} />
-            <button
-              type="submit"
-              disabled={pending}
-              className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 disabled:opacity-50"
-            >
-              {pending ? "Sending..." : "Send reminder"}
-            </button>
-          </form>
-        )}
-        {state.error && <p className="text-xs text-red-600">{state.error}</p>}
-      </td>
-    </tr>
+    <TR highlight={daysLeft === 0 ? "warning" : undefined}>
+      <TD>
+        <span className="font-medium">{customerName}</span>
+        <a href={`tel:${contactNumber}`} className="block text-xs text-navy-700 hover:underline">
+          {contactNumber}
+        </a>
+      </TD>
+      <TD mono>
+        <TableLink href={`/dashboard/loans/${loanId}`}>{ticketNumber}</TableLink>
+      </TD>
+      <TD>
+        {formatDate(maturityDate)}
+        <span className="block text-xs font-medium text-amber-800">
+          {daysLeft === 0 ? "Due today" : `In ${daysLeft} day${daysLeft === 1 ? "" : "s"}`}
+        </span>
+      </TD>
+      <TD align="right">{formatPeso(owed)}</TD>
+      <TD>
+        <ActionForm action={sendReminder} successMessage={`Reminder logged for ${customerName}.`}>
+          {(state: ActionState) =>
+            alreadySent || state.success ? (
+              <Badge tone="success">Reminder logged</Badge>
+            ) : (
+              <>
+                <input type="hidden" name="loan_id" value={loanId} />
+                <SubmitButton variant="secondary" size="sm" pendingLabel="Logging…">
+                  Mark reminded
+                </SubmitButton>
+              </>
+            )
+          }
+        </ActionForm>
+      </TD>
+    </TR>
   );
 }

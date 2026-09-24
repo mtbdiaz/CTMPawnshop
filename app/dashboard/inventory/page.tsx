@@ -1,87 +1,142 @@
-import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
+import { hasRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
+import { formatDate } from "@/lib/format";
+import { daysInVault } from "@/lib/reports/loans";
+import type { Enums } from "@/lib/supabase/database.types";
+import {
+  ButtonLink,
+  Card,
+  EmptyState,
+  FilterTabs,
+  PageHeader,
+  Pagination,
+  StatusBadge,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+  TableLink,
+  pageParam,
+} from "@/components/ui";
+import { Icon } from "@/components/icons";
 
-export default async function InventoryPage() {
-  await requireRole(["operator", "cashier", "appraiser", "admin"]);
+export const metadata = { title: "Vault inventory" };
+
+const PAGE_SIZE = 30;
+const FILTERS: Record<string, { label: string; statuses: Enums<"inventory_status">[] }> = {
+  vault: { label: "In vault", statuses: ["pawned", "extended"] },
+  forfeited: { label: "Forfeited", statuses: ["forfeited"] },
+  auction: { label: "Queued for auction", statuses: ["queued_for_auction"] },
+  released: { label: "Released", statuses: ["redeemed"] },
+  all: { label: "All", statuses: [] },
+};
+
+type Row = {
+  id: string;
+  vault_location: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  appraisal_items: { weight_grams: number; karat: number; customers: { full_name: string } | null } | null;
+  loans: { id: string; ticket_number: string }[];
+};
+
+export default async function InventoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; page?: string }>;
+}) {
+  const user = await requireRole(["operator", "cashier", "appraiser", "admin"]);
+  const params = await searchParams;
+  const status = FILTERS[params.status ?? ""] ? params.status! : "vault";
+  const page = pageParam(params.page);
+  const isOperator = hasRole(user.profile.role, ["operator"]);
 
   const supabase = await createClient();
-  const { data: items } = await supabase
+  let query = supabase
     .from("inventory_items")
-    .select("*, appraisal_items(weight_grams, karat, customers(full_name))")
-    .order("created_at", { ascending: false })
-    .limit(100);
+    .select("id, vault_location, status, created_at, updated_at, appraisal_items(weight_grams, karat, customers(full_name)), loans(id, ticket_number)", {
+      count: "exact",
+    })
+    .order("vault_location")
+    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+  if (FILTERS[status].statuses.length) query = query.in("status", FILTERS[status].statuses);
+  const { data, count, error } = await query;
+  if (error) throw error;
+  const items = (data ?? []) as unknown as Row[];
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-900">Vault Inventory</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Every pawned item, its vault location, and current status.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link
-            href="/dashboard/inventory/audit"
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
-          >
-            Physical audit
-          </Link>
-          <Link
-            href="/dashboard/inventory/auction"
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
-          >
-            Auction prep
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Vault inventory"
+        description="Every pledged item, where it's stored, and its current status. Statuses update automatically as loans are renewed, redeemed or forfeited."
+        breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Inventory" }]}
+        actions={
+          isOperator && (
+            <>
+              <ButtonLink href="/dashboard/inventory/audit">
+                <Icon name="clipboard" className="h-4 w-4" /> Physical audit
+              </ButtonLink>
+              <ButtonLink href="/dashboard/inventory/auction">
+                <Icon name="gavel" className="h-4 w-4" /> Auction prep
+              </ButtonLink>
+            </>
+          )
+        }
+      />
 
-      <table className="mt-6 w-full text-left text-sm">
-        <thead>
-          <tr className="text-xs uppercase text-slate-500">
-            <th className="pb-2 pr-4">Customer</th>
-            <th className="pb-2 pr-4">Item</th>
-            <th className="pb-2 pr-4">Vault location</th>
-            <th className="pb-2 pr-4">Status</th>
-            <th className="pb-2 pr-4">Since</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items?.length ? (
-            items.map((item) => {
-              const appraisal = (
-                item as unknown as {
-                  appraisal_items: { weight_grams: number; karat: number; customers: { full_name: string } | null } | null;
-                }
-              ).appraisal_items;
-              return (
-                <tr key={item.id} className="border-t border-slate-200">
-                  <td className="py-2 pr-4">{appraisal?.customers?.full_name ?? "—"}</td>
-                  <td className="py-2 pr-4">
-                    {appraisal?.weight_grams}g {appraisal?.karat}k
-                  </td>
-                  <td className="py-2 pr-4">{item.vault_location}</td>
-                  <td className="py-2 pr-4">
-                    <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
-                      {item.status}
-                    </span>
-                  </td>
-                  <td className="py-2 pr-4 text-slate-500">
-                    {new Date(item.updated_at).toLocaleDateString()}
-                  </td>
-                </tr>
-              );
-            })
-          ) : (
-            <tr>
-              <td colSpan={5} className="py-4 text-sm text-slate-500">
-                No inventory items yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <Card padded={false}>
+        <div className="border-b border-slate-200 p-4">
+          <FilterTabs
+            current={status}
+            tabs={Object.entries(FILTERS).map(([value, f]) => ({
+              value,
+              label: f.label,
+              href: value === "vault" ? "/dashboard/inventory" : `/dashboard/inventory?status=${value}`,
+            }))}
+          />
+        </div>
+        {items.length > 0 ? (
+          <>
+            <Table>
+              <THead>
+                <TH>Vault location</TH>
+                <TH>Item</TH>
+                <TH>Pawner</TH>
+                <TH>Loan</TH>
+                <TH>Status</TH>
+                <TH align="right">Days held</TH>
+              </THead>
+              <TBody>
+                {items.map((item) => {
+                  const loan = item.loans?.[0];
+                  return (
+                    <TR key={item.id}>
+                      <TD className="font-medium">{item.vault_location}</TD>
+                      <TD>
+                        {item.appraisal_items?.weight_grams}g · {item.appraisal_items?.karat}k
+                      </TD>
+                      <TD>{item.appraisal_items?.customers?.full_name ?? "—"}</TD>
+                      <TD mono>{loan ? <TableLink href={`/dashboard/loans/${loan.id}`}>{loan.ticket_number}</TableLink> : "—"}</TD>
+                      <TD>
+                        <StatusBadge status={item.status} label={item.status === "extended" ? "Renewed" : undefined} />
+                        <span className="mt-0.5 block text-xs text-slate-500">since {formatDate(item.updated_at)}</span>
+                      </TD>
+                      <TD align="right">{daysInVault(new Date(item.created_at))}</TD>
+                    </TR>
+                  );
+                })}
+              </TBody>
+            </Table>
+            <Pagination page={page} pageSize={PAGE_SIZE} total={count ?? 0} basePath="/dashboard/inventory" params={{ status: params.status }} />
+          </>
+        ) : (
+          <EmptyState icon="vault" title={`No items ${FILTERS[status].label.toLowerCase()}`} />
+        )}
+      </Card>
     </div>
   );
 }

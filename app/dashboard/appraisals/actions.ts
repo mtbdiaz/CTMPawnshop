@@ -1,5 +1,7 @@
 "use server";
 
+import { validationFailure, type FieldErrors } from "@/lib/validation/errors";
+
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
@@ -7,7 +9,7 @@ import { appraisalSchema } from "@/lib/validation/appraisal";
 import { calculateValuation, isCounterfeitRisk } from "@/lib/appraisal/valuation";
 import { getBlacklistStatus } from "@/lib/customers/blacklist";
 
-export type ActionState = { error?: string; success?: boolean; appraisalId?: string };
+export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; appraisalId?: string };
 
 // PB-12 + PB-13 + PB-14 + PB-15: record item details/photos, compute
 // valuation from live System Settings, auto-flag counterfeit risk.
@@ -26,7 +28,7 @@ export async function createAppraisal(
     condition_notes: formData.get("condition_notes"),
     photo_paths: photoPaths,
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  if (!parsed.success) return validationFailure(parsed.error);
 
   // PB-11: automatic blacklist check before a new appraisal proceeds.
   const blacklist = await getBlacklistStatus(parsed.data.customer_id);

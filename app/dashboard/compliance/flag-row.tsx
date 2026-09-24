@@ -1,58 +1,58 @@
 "use client";
 
-import { useActionState } from "react";
-import { resolveSuspiciousFlag, type ActionState } from "./actions";
-
-const initialState: ActionState = {};
+import { ActionForm, SubmitButton } from "@/components/form";
+import { TD, TR, TableLink } from "@/components/ui";
+import { formatDateTime } from "@/lib/format";
+import { resolveSuspiciousFlag } from "./actions";
 
 export function FlagRow({
   flagId,
   reason,
+  customerId,
   customerName,
+  createdAt,
+  status,
 }: {
   flagId: string;
   reason: string;
+  customerId: string | null;
   customerName: string;
+  createdAt: string;
+  status: string;
 }) {
-  const [state, formAction, pending] = useActionState(resolveSuspiciousFlag, initialState);
-
   return (
-    <tr className="border-t border-slate-200">
-      <td className="py-2 pr-4">{customerName}</td>
-      <td className="py-2 pr-4">{reason}</td>
-      <td className="py-2 pr-4">
-        <form action={formAction} className="flex gap-2">
+    <TR highlight={status === "open" ? "warning" : undefined}>
+      <TD>
+        {customerId ? <TableLink href={`/dashboard/customers/${customerId}`}>{customerName}</TableLink> : customerName}
+        <span className="block text-xs text-slate-500">{formatDateTime(createdAt)}</span>
+      </TD>
+      <TD>{reason}</TD>
+      <TD>
+        <ActionForm action={resolveSuspiciousFlag} successMessage="Flag updated." className="flex flex-wrap gap-2">
           <input type="hidden" name="flag_id" value={flagId} />
-          <button
-            type="submit"
-            name="decision"
-            value="dismissed"
-            disabled={pending}
-            className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 disabled:opacity-50"
-          >
+          <SubmitButton name="decision" value="dismissed" variant="secondary" size="sm">
             Dismiss
-          </button>
-          <button
-            type="submit"
-            name="decision"
-            value="investigating"
-            disabled={pending}
-            className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 hover:bg-amber-100 disabled:opacity-50"
-          >
-            Investigate
-          </button>
-          <button
-            type="submit"
+          </SubmitButton>
+          {status !== "investigating" && (
+            <SubmitButton name="decision" value="investigating" variant="secondary" size="sm">
+              Mark investigating
+            </SubmitButton>
+          )}
+          <SubmitButton
             name="decision"
             value="blacklisted"
-            disabled={pending}
-            className="rounded border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-800 hover:bg-red-100 disabled:opacity-50"
+            variant="danger"
+            size="sm"
+            confirm={{
+              title: `Blacklist ${customerName}?`,
+              message: "The customer will be blocked from all new appraisals and loans until an Admin removes the flag.",
+              confirmLabel: "Blacklist customer",
+            }}
           >
             Blacklist
-          </button>
-        </form>
-        {state.error && <p className="text-xs text-red-600">{state.error}</p>}
-      </td>
-    </tr>
+          </SubmitButton>
+        </ActionForm>
+      </TD>
+    </TR>
   );
 }

@@ -1,42 +1,65 @@
 "use client";
 
-import { useActionState } from "react";
-import { createAuctionBatch, type ActionState } from "../actions";
+import { useState } from "react";
+import { ActionForm, Field, SubmitButton } from "@/components/form";
+import { createAuctionBatch } from "../actions";
 
-const initialState: ActionState = {};
-
-export function AuctionForm({ items }: { items: { id: string; label: string }[] }) {
-  const [state, formAction, pending] = useActionState(createAuctionBatch, initialState);
+export function AuctionForm({ items }: { items: { id: string; label: string; location: string }[] }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const allSelected = selected.size === items.length;
 
   return (
-    <form action={formAction} className="space-y-4">
-      <div className="space-y-1">
-        {items.map((item) => (
-          <label key={item.id} className="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="item_id" value={item.id} />
-            {item.label}
-          </label>
-        ))}
-      </div>
-      <div>
-        <label htmlFor="notes" className="block text-sm font-medium text-slate-700">
-          Batch notes
+    <ActionForm action={createAuctionBatch} className="space-y-4" successMessage="Auction batch created." onSuccess={() => setSelected(new Set())}>
+      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={(e) => setSelected(e.target.checked ? new Set(items.map((i) => i.id)) : new Set())}
+            className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-navy-500"
+          />
+          Select all ({items.length})
         </label>
-        <input
-          id="notes"
-          name="notes"
-          className="mt-1 w-full max-w-md rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
+        <span className="text-sm text-slate-600">{selected.size} selected</span>
       </div>
-      {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-600">Auction batch created.</p>}
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+      <ul className="divide-y divide-slate-100">
+        {items.map((item) => (
+          <li key={item.id}>
+            <label className="flex cursor-pointer items-center gap-3 py-2.5 text-sm hover:bg-slate-50">
+              <input
+                type="checkbox"
+                name="item_id"
+                value={item.id}
+                checked={selected.has(item.id)}
+                onChange={(e) =>
+                  setSelected((prev) => {
+                    const next = new Set(prev);
+                    if (e.target.checked) next.add(item.id);
+                    else next.delete(item.id);
+                    return next;
+                  })
+                }
+                className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-navy-500"
+              />
+              <span className="flex-1">{item.label}</span>
+              <span className="text-xs text-slate-500">{item.location}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <Field label="Batch notes" name="notes" placeholder="e.g. October auction lot" className="max-w-md" />
+      <SubmitButton
+        pendingLabel="Creating batch…"
+        disabled={selected.size === 0}
+        confirm={{
+          title: "Queue these items for auction?",
+          message: `${selected.size} forfeited item(s) will be marked "queued for auction".`,
+          confirmLabel: "Create batch",
+          tone: "primary",
+        }}
       >
-        {pending ? "Creating..." : "Create auction batch"}
-      </button>
-    </form>
+        Create auction batch
+      </SubmitButton>
+    </ActionForm>
   );
 }

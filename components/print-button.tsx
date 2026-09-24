@@ -1,11 +1,12 @@
 "use client";
 
-export function PrintButton({ label = "Print" }: { label?: string }) {
+import { buttonClasses } from "./ui";
+import { Icon } from "./icons";
+
+export function PrintButton({ label = "Print / Save as PDF" }: { label?: string }) {
   return (
-    <button
-      onClick={() => window.print()}
-      className="print:hidden rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
-    >
+    <button type="button" onClick={() => window.print()} className={buttonClasses("secondary")}>
+      <Icon name="printer" className="h-4 w-4" />
       {label}
     </button>
   );
