@@ -1,35 +1,39 @@
 "use client";
 
-import { useActionState } from "react";
-import { resolveCounterfeitFlag, type ActionState } from "../actions";
-
-const initialState: ActionState = {};
+import { ActionForm, SubmitButton } from "@/components/form";
+import { resolveCounterfeitFlag } from "../actions";
 
 export function ResolveForm({ appraisalId }: { appraisalId: string }) {
-  const [state, formAction, pending] = useActionState(resolveCounterfeitFlag, initialState);
-
   return (
-    <form action={formAction} className="mt-2 flex items-center gap-2">
+    <ActionForm action={resolveCounterfeitFlag} successMessage="Counterfeit flag resolved." className="mt-4 flex flex-wrap gap-2">
       <input type="hidden" name="appraisal_id" value={appraisalId} />
-      <button
-        type="submit"
+      <SubmitButton
         name="decision"
         value="cleared"
-        disabled={pending}
-        className="rounded-md border border-green-300 bg-green-50 px-3 py-1.5 text-sm text-green-800 hover:bg-green-100 disabled:opacity-50"
+        variant="success"
+        pendingLabel="Saving…"
+        confirm={{
+          title: "Clear this flag?",
+          message: "You're confirming the item is genuine. A Cashier will be able to issue a loan against it.",
+          confirmLabel: "Clear flag",
+          tone: "primary",
+        }}
       >
-        Clear flag (false alarm)
-      </button>
-      <button
-        type="submit"
+        Clear flag — item is genuine
+      </SubmitButton>
+      <SubmitButton
         name="decision"
         value="confirmed"
-        disabled={pending}
-        className="rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm text-red-800 hover:bg-red-100 disabled:opacity-50"
+        variant="danger"
+        pendingLabel="Saving…"
+        confirm={{
+          title: "Confirm counterfeit risk?",
+          message: "No loan can ever be issued against this item. Consider also blacklisting the customer.",
+          confirmLabel: "Confirm risk",
+        }}
       >
-        Confirm risk (stop transaction)
-      </button>
-      {state.error && <span className="text-sm text-red-600">{state.error}</span>}
-    </form>
+        Confirm risk — stop transaction
+      </SubmitButton>
+    </ActionForm>
   );
 }

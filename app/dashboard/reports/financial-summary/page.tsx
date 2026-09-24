@@ -1,7 +1,13 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { PrintButton } from "@/components/print-button";
 import { computeCashPosition } from "@/lib/finance/ledger";
+import { formatDate, formatPeso, humanize, manilaDayEnd, manilaDayStart, manilaToday } from "@/lib/format";
+import { ReportHeader } from "@/components/report-header";
+import { Alert, Card, SectionTitle, StatCard, Table, TBody, TD, TH, THead, TR, buttonClasses } from "@/components/ui";
+
+export const metadata = { title: "Financial summary" };
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export default async function FinancialSummaryReport({
   searchParams,
@@ -11,61 +17,99 @@ export default async function FinancialSummaryReport({
   await requireRole(["admin"]);
   const { from, to } = await searchParams;
 
-  const rangeStart = from ?? new Date(new Date().setDate(1)).toISOString().slice(0, 10);
-  const rangeEnd = to ?? new Date().toISOString().slice(0, 10);
+  const today = manilaToday();
+  const rangeStart = from && DATE_RE.test(from) ? from : `${today.slice(0, 8)}01`;
+  const rangeEnd = to && DATE_RE.test(to) ? to : today;
+  const invalidRange = rangeStart > rangeEnd;
 
   const supabase = await createClient();
-  const { data: entries } = await supabase
-    .from("cash_flow_entries")
-    .select("*")
-    .gte("created_at", `${rangeStart}T00:00:00`)
-    .lte("created_at", `${rangeEnd}T23:59:59`);
+  const { data: entries, error } = invalidRange
+    ? { data: [], error: null }
+    : await supabase
+        .from("cash_flow_entries")
+        .select("amount, direction, entry_type")
+        .gte("created_at", manilaDayStart(rangeStart))
+        .lte("created_at", manilaDayEnd(rangeEnd));
+  if (error) throw error;
 
-  const position = computeCashPosition(entries ?? []);
-  const revenue = (entries ?? []).filter((e) => e.entry_type === "revenue").reduce((s, e) => s + e.amount, 0);
-  const expenses = (entries ?? []).filter((e) => e.entry_type === "expense").reduce((s, e) => s + e.amount, 0);
+  const rows = entries ?? [];
+  const position = computeCashPosition(rows);
+  const byType = new Map<string, { direction: string; amount: number; count: number }>();
+  for (const e of rows) {
+    const t = byType.get(e.entry_type) ?? { direction: e.direction, amount: 0, count: 0 };
+    t.amount += Number(e.amount);
+    t.count += 1;
+    byType.set(e.entry_type, t);
+  }
 
   return (
-    <div>
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-slate-900">Financial Summary Report</h1>
-        <PrintButton />
-      </div>
+    <div className="space-y-6">
+      <ReportHeader
+        title="Financial summary"
+        description="Cash in, cash out and net position for a date range (Manila business days)."
+        subtitle={`${formatDate(rangeStart)} – ${formatDate(rangeEnd)}`}
+      />
 
-      <form className="mt-4 flex items-end gap-3 print:hidden" action="/dashboard/reports/financial-summary">
+      <form action="/dashboard/reports/financial-summary" className="flex flex-wrap items-end gap-3 print:hidden">
         <div>
-          <label htmlFor="from" className="block text-xs text-slate-600">From</label>
-          <input id="from" name="from" type="date" defaultValue={rangeStart} className="rounded-md border border-slate-300 px-2 py-1 text-sm" />
+          <label htmlFor="from" className="block text-xs font-medium text-slate-600">
+            From
+          </label>
+          <input id="from" name="from" type="date" defaultValue={rangeStart} max={today} className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <div>
-          <label htmlFor="to" className="block text-xs text-slate-600">To</label>
-          <input id="to" name="to" type="date" defaultValue={rangeEnd} className="rounded-md border border-slate-300 px-2 py-1 text-sm" />
+          <label htmlFor="to" className="block text-xs font-medium text-slate-600">
+            To
+          </label>
+          <input id="to" name="to" type="date" defaultValue={rangeEnd} max={today} className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </div>
-        <button type="submit" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">
-          Apply
+        <button type="submit" className={buttonClasses("primary")}>
+          Update report
         </button>
       </form>
 
-      <p className="mt-4 text-sm text-slate-500">
-        {rangeStart} to {rangeEnd}
-      </p>
+      {invalidRange ? (
+        <Alert tone="warning" title="The start date is after the end date">
+          Pick a start date on or before the end date.
+        </Alert>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <StatCard label="Total cash in" value={formatPeso(position.totalIn)} tone="success" />
+            <StatCard label="Total cash out" value={formatPeso(position.totalOut)} />
+            <StatCard label="Net position" value={formatPeso(position.net)} tone={position.net < 0 ? "danger" : "gold"} />
+          </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4 max-w-md">
-        <SummaryCard label="Total cash in" value={position.totalIn} />
-        <SummaryCard label="Total cash out" value={position.totalOut} />
-        <SummaryCard label="Non-loan revenue" value={revenue} />
-        <SummaryCard label="Non-loan expenses" value={expenses} />
-        <SummaryCard label="Net position" value={position.net} highlight />
-      </div>
-    </div>
-  );
-}
-
-function SummaryCard({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
-  return (
-    <div className="rounded-md border border-slate-200 bg-white p-4">
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className={highlight ? "text-xl font-semibold" : "text-lg"}>₱{value.toLocaleString()}</div>
+          <section>
+            <SectionTitle>Breakdown by type</SectionTitle>
+            <Card padded={false}>
+              <Table minWidth="480px">
+                <THead>
+                  <TH>Type</TH>
+                  <TH align="right">Entries</TH>
+                  <TH align="right">Cash in</TH>
+                  <TH align="right">Cash out</TH>
+                </THead>
+                <TBody>
+                  {[...byType.entries()].map(([type, t]) => (
+                    <TR key={type}>
+                      <TD>{humanize(type)}</TD>
+                      <TD align="right">{t.count}</TD>
+                      <TD align="right">{t.direction === "in" ? formatPeso(t.amount) : ""}</TD>
+                      <TD align="right">{t.direction === "out" ? formatPeso(t.amount) : ""}</TD>
+                    </TR>
+                  ))}
+                  {byType.size === 0 && (
+                    <tr>
+                      <TD className="text-slate-500">No cash activity in this period.</TD>
+                    </tr>
+                  )}
+                </TBody>
+              </Table>
+            </Card>
+          </section>
+        </>
+      )}
     </div>
   );
 }

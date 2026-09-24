@@ -1,37 +1,46 @@
 import { requireRole } from "@/lib/auth/require-role";
+import { Card, PageHeader, SectionTitle, Table, TBody, TH, THead } from "@/components/ui";
 import { listAccounts } from "./actions";
 import { CreateAccountForm } from "./create-account-form";
 import { AccountRow } from "./account-row";
 
+export const metadata = { title: "User accounts" };
+
 export default async function UsersPage() {
-  await requireRole(["admin"]);
+  const user = await requireRole(["admin"]);
   const accounts = await listAccounts();
+  const active = accounts.filter((a) => a.is_active).length;
 
   return (
-    <div>
-      <h1 className="text-lg font-semibold text-slate-900">User Accounts</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Create, edit, and deactivate staff accounts. Deactivated accounts immediately lose
-        system access.
-      </p>
+    <div className="space-y-6">
+      <PageHeader
+        title="User accounts"
+        description="Create staff accounts, change roles, reset passwords, and deactivate accounts when someone leaves. Deactivated accounts can't sign in."
+        breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "User accounts" }]}
+      />
 
-      <div className="mt-6">
+      <Card>
+        <SectionTitle>Add a staff member</SectionTitle>
         <CreateAccountForm />
-      </div>
+      </Card>
 
-      <table className="mt-6 w-full text-left text-sm">
-        <thead>
-          <tr className="text-xs uppercase text-slate-500">
-            <th className="pb-2 pr-4">Account</th>
-            <th className="pb-2 pr-4">Password</th>
-          </tr>
-        </thead>
-        <tbody>
-          {accounts.map((account) => (
-            <AccountRow key={account.id} account={account} />
-          ))}
-        </tbody>
-      </table>
+      <section>
+        <SectionTitle description={`${active} active of ${accounts.length}`}>Staff</SectionTitle>
+        <Card padded={false}>
+          <Table minWidth="820px">
+            <THead>
+              <TH>Name, email &amp; role</TH>
+              <TH>Status</TH>
+              <TH>Access</TH>
+            </THead>
+            <TBody>
+              {accounts.map((account) => (
+                <AccountRow key={account.id} account={account} isSelf={account.id === user.id} />
+              ))}
+            </TBody>
+          </Table>
+        </Card>
+      </section>
     </div>
   );
 }

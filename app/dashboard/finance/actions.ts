@@ -1,11 +1,13 @@
 "use server";
 
+import { validationFailure, type FieldErrors } from "@/lib/validation/errors";
+
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { cashEntrySchema } from "@/lib/validation/cashflow";
 
-export type ActionState = { error?: string; success?: boolean };
+export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean };
 
 // PB-29: Operator records non-loan operating expenses/revenue.
 export async function recordCashEntry(
@@ -18,7 +20,7 @@ export async function recordCashEntry(
     amount: formData.get("amount"),
     description: formData.get("description"),
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  if (!parsed.success) return validationFailure(parsed.error);
 
   const supabase = await createClient();
   const { error } = await supabase.from("cash_flow_entries").insert({

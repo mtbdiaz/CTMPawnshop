@@ -1,100 +1,136 @@
-import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
+import { hasRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
+import { formatDate } from "@/lib/format";
+import {
+  Badge,
+  Card,
+  CreatePanel,
+  EmptyState,
+  PageHeader,
+  Pagination,
+  SearchBar,
+  SortTH,
+  StatusBadge,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+  TableLink,
+  pageParam,
+} from "@/components/ui";
 import { createCustomer } from "./actions";
 import { CustomerForm } from "./customer-form";
+
+export const metadata = { title: "Customers" };
+
+const PAGE_SIZE = 25;
+const SORTS: Record<string, string> = { name: "full_name", registered: "created_at" };
 
 export default async function CustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; sort?: string; dir?: string; new?: string }>;
 }) {
-  await requireRole(["operator", "cashier", "appraiser", "admin"]);
-  const { q } = await searchParams;
+  const user = await requireRole(["operator", "cashier", "appraiser", "admin"]);
+  const params = await searchParams;
+  const q = params.q?.trim();
+  const page = pageParam(params.page);
+  const sort = SORTS[params.sort ?? ""] ? params.sort! : "registered";
+  const dir = params.dir === "asc" ? "asc" : params.dir === "desc" ? "desc" : sort === "name" ? "asc" : "desc";
+  const canRegister = hasRole(user.profile.role, ["operator"]);
 
   const supabase = await createClient();
   let query = supabase
     .from("customers")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(50);
-  if (q) query = query.ilike("full_name", `%${q}%`);
-  const { data: customers } = await query;
+    .select("id, full_name, contact_number, id_type, id_number, aml_status, is_blacklisted, created_at", { count: "exact" })
+    .order(SORTS[sort], { ascending: dir === "asc" })
+    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+  if (q) {
+    const safe = q.replace(/[%,()]/g, " ");
+    query = query.or(`full_name.ilike.%${safe}%,contact_number.ilike.%${safe}%,id_number.ilike.%${safe}%`);
+  }
+  const { data: customers, count, error } = await query;
+  if (error) throw error;
+
+  const listParams = { q, sort: params.sort, dir: params.dir };
 
   return (
     <div>
-      <h1 className="text-lg font-semibold text-slate-900">Customer Management</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Register new customers and manage existing profiles.
-      </p>
+      <PageHeader
+        title="Customers"
+        description="Look up a customer to see their profile, loans and payment history."
+        breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Customers" }]}
+      />
 
-      <details className="mt-6 rounded-md border border-slate-200 bg-white p-4">
-        <summary className="cursor-pointer text-sm font-medium text-slate-900">
-          Register new customer
-        </summary>
-        <div className="mt-4">
+      {canRegister && (
+        <CreatePanel
+          title="Register new customer"
+          description="An AML identity check runs automatically on registration."
+          defaultOpen={params.new === "1"}
+        >
           <CustomerForm action={createCustomer} />
-        </div>
-      </details>
+        </CreatePanel>
+      )}
 
-      <form className="mt-6" action="/dashboard/customers">
-        <input
-          type="search"
-          name="q"
-          defaultValue={q ?? ""}
-          placeholder="Search by name..."
-          className="w-full max-w-xs rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </form>
-
-      <table className="mt-4 w-full text-left text-sm">
-        <thead>
-          <tr className="text-xs uppercase text-slate-500">
-            <th className="pb-2 pr-4">Name</th>
-            <th className="pb-2 pr-4">Contact</th>
-            <th className="pb-2 pr-4">AML</th>
-            <th className="pb-2 pr-4">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {customers?.length ? (
-            customers.map((c) => (
-              <tr key={c.id} className="border-t border-slate-200">
-                <td className="py-2 pr-4">
-                  <Link href={`/dashboard/customers/${c.id}`} className="text-slate-900 hover:underline">
-                    {c.full_name}
-                  </Link>
-                </td>
-                <td className="py-2 pr-4 text-slate-600">{c.contact_number}</td>
-                <td className="py-2 pr-4">
-                  <span
-                    className={
-                      c.aml_status === "flagged"
-                        ? "rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800"
-                        : "rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
-                    }
-                  >
-                    {c.aml_status}
-                  </span>
-                </td>
-                <td className="py-2 pr-4">
-                  {c.is_blacklisted && (
-                    <span className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-800">
-                      Blacklisted
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan={4} className="py-4 text-sm text-slate-500">
-                No customers yet.
-              </td>
-            </tr>
+      <Card padded={false}>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4">
+          <SearchBar action="/dashboard/customers" defaultValue={q} placeholder="Search name, phone or ID number…" />
+          {q && (
+            <p className="text-sm text-slate-500">
+              {count ?? 0} result{count === 1 ? "" : "s"} for &ldquo;{q}&rdquo;
+            </p>
           )}
-        </tbody>
-      </table>
+        </div>
+        {customers && customers.length > 0 ? (
+          <>
+            <Table>
+              <THead>
+                <SortTH label="Name" column="name" current={sort} dir={dir} basePath="/dashboard/customers" params={listParams} />
+                <TH>Contact</TH>
+                <TH>ID on file</TH>
+                <TH>AML check</TH>
+                <TH>Flags</TH>
+                <SortTH label="Registered" column="registered" current={sort} dir={dir} basePath="/dashboard/customers" params={listParams} />
+              </THead>
+              <TBody>
+                {customers.map((c) => (
+                  <TR key={c.id} highlight={c.is_blacklisted ? "danger" : undefined}>
+                    <TD>
+                      <TableLink href={`/dashboard/customers/${c.id}`}>{c.full_name}</TableLink>
+                    </TD>
+                    <TD className="text-slate-600">{c.contact_number}</TD>
+                    <TD className="text-slate-600">
+                      <span className="block text-xs text-slate-500">{c.id_type}</span>
+                      <span className="font-mono text-xs">{c.id_number}</span>
+                    </TD>
+                    <TD>
+                      <StatusBadge status={c.aml_status} label={c.aml_status === "flagged" ? "Flagged" : "Clear"} />
+                    </TD>
+                    <TD>{c.is_blacklisted ? <Badge tone="danger" icon>Blacklisted</Badge> : <span className="text-slate-400">—</span>}</TD>
+                    <TD className="text-slate-600">{formatDate(c.created_at)}</TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+            <Pagination page={page} pageSize={PAGE_SIZE} total={count ?? 0} basePath="/dashboard/customers" params={listParams} />
+          </>
+        ) : (
+          <EmptyState
+            icon="users"
+            title={q ? "No customers match your search" : "No customers yet"}
+            description={
+              q
+                ? "Check the spelling, or search by phone or ID number instead."
+                : canRegister
+                  ? "Register the first customer using the form above."
+                  : "An Operator or Admin registers customers before their first appraisal."
+            }
+          />
+        )}
+      </Card>
     </div>
   );
 }

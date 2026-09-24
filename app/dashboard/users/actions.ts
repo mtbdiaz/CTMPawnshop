@@ -1,11 +1,13 @@
 "use server";
 
+import { validationFailure, type FieldErrors } from "@/lib/validation/errors";
+
 import { revalidatePath } from "next/cache";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAccountSchema, editAccountSchema } from "@/lib/validation/account";
 
-export type ActionState = { error?: string; success?: boolean; tempPassword?: string };
+export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; tempPassword?: string };
 
 function randomTempPassword() {
   return `Ctm-${Math.random().toString(36).slice(2, 10)}!1`;
@@ -24,7 +26,7 @@ export async function createAccount(
     role: formData.get("role"),
     temp_password: randomTempPassword(),
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  if (!parsed.success) return validationFailure(parsed.error);
 
   const admin = createAdminClient();
   const { data, error } = await admin.auth.admin.createUser({
@@ -54,7 +56,7 @@ export async function editAccount(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole(["admin"]);
+  const currentUser = await requireRole(["admin"]);
 
   const userId = String(formData.get("user_id") ?? "");
   const parsed = editAccountSchema.safeParse({
@@ -62,8 +64,10 @@ export async function editAccount(
     role: formData.get("role"),
     is_active: formData.get("is_active") === "on",
   });
-  if (!userId || !parsed.success) {
-    return { error: parsed.success ? "Missing account id" : parsed.error.issues[0]?.message };
+  if (!userId) return { error: "Missing account id" };
+  if (!parsed.success) return validationFailure(parsed.error);
+  if (userId === currentUser.id && (!parsed.data.is_active || parsed.data.role !== "admin")) {
+    return { error: "You can't deactivate or remove Admin rights from your own account — ask another Admin." };
   }
 
   const admin = createAdminClient();
@@ -114,6 +118,13 @@ export async function resetPassword(
 export async function listAccounts() {
   await requireRole(["admin"]);
   const supabase = await createClient();
-  const { data } = await supabase.from("profiles").select("*").order("created_at");
-  return data ?? [];
+  const { data, error } = await supabase.from("profiles").select("*").order("created_at");
+  if (error) throw error;
+
+  // Emails live on auth.users, not profiles — fetched server-side via the admin API.
+  const emails = new Map<string, string>();
+  const { data: authUsers } = await createAdminClient().auth.admin.listUsers({ perPage: 1000 });
+  for (const u of authUsers?.users ?? []) if (u.email) emails.set(u.id, u.email);
+
+  return (data ?? []).map((p) => ({ ...p, email: emails.get(p.id) ?? null }));
 }

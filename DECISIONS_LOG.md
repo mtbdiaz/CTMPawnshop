@@ -258,3 +258,18 @@ bottom of each section's run.
   is now wired into appraisal creation as its first real caller.
 
 ## Sprint 2 — Customer Management
+
+## Post-launch polish pass (2026-09-24)
+
+- **Renewal = pay-and-renew** (PB-19): collect the expiring term's unpaid
+  `interest_owed` at the counter (recorded as a payment with a receipt + cash
+  entry), move maturity +30 days, set `interest_owed` to one fresh term on the
+  current principal. Replaces the Sept 15 version, which both logged the
+  interest as received and added it to `interest_owed`.
+- **One appraisal per loan**: an item that has ever had a loan can't back a new
+  one without a fresh appraisal at the current gold price (UI + server).
+- **Business day = Asia/Manila** for loan dates, "today" cash, report ranges,
+  overdue and reminder checks.
+- **Brand/design system** extends the original prototype (navy + gold,
+  Playfair Display / DM Sans / DM Mono). See QA_LOG.md Pass 3.
+- **Admins can't deactivate/demote themselves** (lock-out prevention).

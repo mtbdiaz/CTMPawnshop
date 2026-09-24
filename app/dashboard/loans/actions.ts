@@ -1,5 +1,7 @@
 "use server";
 
+import { validationFailure, type FieldErrors } from "@/lib/validation/errors";
+
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
@@ -9,15 +11,16 @@ import {
   calculateMaturityDate,
   applyPayment,
   validatePaymentAmount,
-  calculateExtension,
+  calculateRenewal,
   generateTicketNumber,
   generateReceiptNumber,
 } from "@/lib/loans/calculations";
+import { manilaToday } from "@/lib/format";
 import { verifyLostTicketId } from "@/lib/loans/lost-ticket";
 import { isPastGracePeriod } from "@/lib/loans/default-detection";
 import { isSuspiciousLoanVelocity } from "@/lib/compliance/suspicious";
 
-export type ActionState = { error?: string; success?: boolean; id?: string };
+export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; id?: string };
 
 // PB-17: create a pawn loan against an appraised, unflagged item. Also
 // creates the matching inventory record and initial cash flow entry (AC2).
@@ -32,7 +35,7 @@ export async function createLoan(
     principal_amount: formData.get("principal_amount"),
     vault_location: formData.get("vault_location"),
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  if (!parsed.success) return validationFailure(parsed.error);
 
   const blacklist = await getBlacklistStatus(parsed.data.customer_id);
   if (blacklist.isBlacklisted) {
@@ -59,11 +62,18 @@ export async function createLoan(
 
   const { data: existingLoan } = await supabase
     .from("loans")
-    .select("id")
+    .select("id, status")
     .eq("appraisal_item_id", parsed.data.appraisal_item_id)
-    .in("status", ["active", "extended"])
+    .limit(1)
     .maybeSingle();
-  if (existingLoan) return { error: "This item already has an active loan" };
+  if (existingLoan) {
+    return {
+      error:
+        existingLoan.status === "active" || existingLoan.status === "extended"
+          ? "This item already has an active loan"
+          : "This item was already used for a previous loan. Record a fresh appraisal at today's gold price first.",
+    };
+  }
 
   const { data: settings } = await supabase
     .from("system_settings")
@@ -72,7 +82,9 @@ export async function createLoan(
     .single();
   if (!settings) return { error: "System settings unavailable" };
 
-  const loanDate = new Date();
+  // Dates are the shop's (Manila) calendar day, not the server's UTC day.
+  const loanDay = manilaToday();
+  const loanDate = new Date(`${loanDay}T00:00:00Z`);
   const maturityDate = calculateMaturityDate(loanDate);
 
   // PB-17 AC2: loan + matching inventory record + initial cash flow entry
@@ -89,9 +101,9 @@ export async function createLoan(
     p_principal_amount: parsed.data.principal_amount,
     p_interest_rate_percent: settings.interest_rate_percent,
     p_grace_period_days: settings.grace_period_days,
-    p_loan_date: loanDate.toISOString().slice(0, 10),
+    p_loan_date: loanDay,
     p_maturity_date: maturityDate.toISOString().slice(0, 10),
-    p_ticket_number: generateTicketNumber(loanDate),
+    p_ticket_number: generateTicketNumber(),
     p_created_by: user.id,
   });
   if (rpcError || !loanId) return { error: rpcError?.message ?? "Could not create loan" };
@@ -130,7 +142,7 @@ export async function recordPayment(
     lost_ticket: formData.get("lost_ticket") === "on",
     id_number_confirm: formData.get("id_number_confirm") ?? undefined,
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  if (!parsed.success) return validationFailure(parsed.error);
 
   const supabase = await createClient();
   const { data: loan } = await supabase.from("loans").select("*, customers(id_number)").eq("id", parsed.data.loan_id).single();
@@ -193,9 +205,10 @@ export async function recordPayment(
   return { success: true, id: loan.id };
 }
 
-// PB-19: extend a loan before its grace period expires — recalculates
-// maturity and charges one additional interest period (paid at the
-// counter as part of the extension; see DECISIONS_LOG.md).
+// PB-19: extend (renew) a loan before its grace period expires. Pay-and-renew:
+// the expiring period's unpaid interest is collected at the counter (logged as
+// a payment with a receipt), maturity moves out one term, and one fresh
+// period's interest becomes owed. See DECISIONS_LOG.md.
 export async function processExtension(
   _prevState: ActionState,
   formData: FormData,
@@ -210,6 +223,9 @@ export async function processExtension(
   if (loan.status !== "active" && loan.status !== "extended") {
     return { error: `Loan is ${loan.status} — cannot be extended` };
   }
+  if (loan.principal_balance <= 0) {
+    return { error: "This loan is fully paid — redeem the item instead of extending." };
+  }
 
   const graceDeadline = new Date(loan.maturity_date);
   graceDeadline.setDate(graceDeadline.getDate() + loan.grace_period_days);
@@ -217,33 +233,52 @@ export async function processExtension(
     return { error: "Grace period has expired — this loan can no longer be extended" };
   }
 
-  const extension = calculateExtension(
+  const renewal = calculateRenewal(
     new Date(loan.maturity_date),
     loan.principal_balance,
+    loan.interest_owed,
     loan.interest_rate_percent,
   );
+  const newMaturity = renewal.newMaturityDate.toISOString().slice(0, 10);
 
   const { error: extError } = await supabase.from("loan_extensions").insert({
     loan_id: loan.id,
     previous_maturity_date: loan.maturity_date,
-    new_maturity_date: extension.newMaturityDate.toISOString().slice(0, 10),
-    additional_interest_amount: extension.additionalInterestAmount,
+    new_maturity_date: newMaturity,
+    additional_interest_amount: renewal.newInterestOwed,
     created_by: user.id,
   });
   if (extError) return { error: extError.message };
 
-  // Additive, not a reset: any interest already owed from the current
-  // period (unpaid at extension time) doesn't disappear — the new period's
-  // charge stacks on top of it.
-  const newInterestOwed = Math.round((loan.interest_owed + extension.additionalInterestAmount) * 100) / 100;
+  if (renewal.interestCollectedNow > 0) {
+    const { error: paymentError } = await supabase.from("loan_payments").insert({
+      loan_id: loan.id,
+      amount: renewal.interestCollectedNow,
+      principal_portion: 0,
+      interest_portion: renewal.interestCollectedNow,
+      receipt_number: generateReceiptNumber(),
+      verified_via_lost_ticket: false,
+      created_by: user.id,
+    });
+    if (paymentError) return { error: paymentError.message };
+
+    await supabase.from("cash_flow_entries").insert({
+      entry_type: "payment_received",
+      direction: "in",
+      amount: renewal.interestCollectedNow,
+      description: `Renewal interest for loan ${loan.ticket_number}`,
+      related_loan_id: loan.id,
+      created_by: user.id,
+    });
+  }
 
   await supabase
     .from("loans")
     .update({
-      maturity_date: extension.newMaturityDate.toISOString().slice(0, 10),
+      maturity_date: newMaturity,
       extension_count: loan.extension_count + 1,
       status: "extended",
-      interest_owed: newInterestOwed,
+      interest_owed: renewal.newInterestOwed,
     })
     .eq("id", loan.id);
 
@@ -251,16 +286,8 @@ export async function processExtension(
     await supabase.from("inventory_items").update({ status: "extended" }).eq("id", loan.inventory_item_id);
   }
 
-  await supabase.from("cash_flow_entries").insert({
-    entry_type: "payment_received",
-    direction: "in",
-    amount: extension.additionalInterestAmount,
-    description: `Extension interest for loan ${loan.ticket_number}`,
-    related_loan_id: loan.id,
-    created_by: user.id,
-  });
-
   revalidatePath(`/dashboard/loans/${loan.id}`);
+  revalidatePath("/dashboard/loans");
   return { success: true, id: loan.id };
 }
 

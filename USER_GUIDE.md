@@ -20,8 +20,10 @@ sensitive data isn't left on an unattended screen.
 | **Cashier** | Create loans, record payments, process extensions/redemptions, send reminders |
 | **Appraiser** | Record item appraisals, capture photos |
 
-A screen you don't have permission for simply won't appear in your navigation
-bar, and opening its URL directly redirects you back to the dashboard.
+The left sidebar only shows the screens your role can use. Your **Dashboard**
+shows what needs attention today (overdue loans, loans due this week, flagged
+items) plus quick-action buttons for your role. Every page has a breadcrumb
+trail at the top so you can step back.
 
 ## The typical transaction flow
 
@@ -32,13 +34,15 @@ bar, and opening its URL directly redirects you back to the dashboard.
    system calculates a suggested value and loan range from the current gold
    price. If the purity looks wrong for the claimed karat, the item is
    flagged and an Admin must clear or confirm it before a loan can be made.
-3. **Loans** → Create the loan against the appraised item (amount capped at
-   the suggested maximum), print the pawn ticket.
-4. **Payments** → Record customer payments as they come in — interest is
-   settled first, any remainder reduces principal.
-5. **Extensions** → If the customer isn't ready to redeem but wants to keep
-   the item pawned, extend the loan (recalculates the due date, charges one
-   more interest period).
+3. **Loans** → From the appraisal, click **Create loan** (amount capped at
+   the suggested maximum). The ticket opens — click **Print pawn ticket**.
+4. **Payments** → Find the ticket (Loans search by ticket number or name),
+   use **Interest only** or **Pay in full**, or type an amount. Interest is
+   settled first; any remainder reduces principal. Each payment has a
+   **Receipt** button in the payment history.
+5. **Renewals** → If the customer isn't ready to redeem, **Renew loan** on the
+   ticket: collect the interest shown (a receipt is recorded), and the due
+   date moves out 30 days.
 6. **Redemption** → Once the balance reaches ₱0, redeem the item — it's
    marked released in the vault.
 7. If a loan passes its due date **and** its grace period with no payment or
@@ -66,9 +70,9 @@ Operators can log non-loan expenses/revenue there too.
   loan activity by one customer; Admin reviews and dismisses, marks for
   investigation, or blacklists.
 - **Due-Date Reminders** — loans maturing within 3 days appear here; there's
-  no email/SMS sending configured, so "Send reminder" just logs that a
-  reminder was issued (see a staff member should still call/text the
-  customer directly for now).
+  no email/SMS sending configured — call or text the customer (the phone
+  number is on the list), then click **Mark reminded**. Cashiers can open
+  this screen from their sidebar.
 - **Audit Trail** — a read-only log of every create/update/delete across the
   system, for dispute resolution or compliance review.
 

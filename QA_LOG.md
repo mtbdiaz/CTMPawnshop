@@ -124,3 +124,114 @@ Re-verified as part of this sweep rather than re-audited item by item (no new PB
 ## Secrets scan
 
 Full-repo grep for `service_role` values, `sb_secret_`, JWT-prefix `eyJ`, and inline password literals found **no live secrets in tracked source** — all matches were docs/comments describing the pattern, SQL role-name grants, or test fixtures. `.env.local` confirmed gitignored.
+
+---
+
+# Pass 3 — System Re-Scan, Navigation & Frontend Polish (2026-09-24)
+
+Prior functional audit (40/40 PASS) trusted as the baseline. This pass re-ran
+the suite, re-scanned every screen × role for broken behaviour, then did a
+full navigation/UX and visual redesign.
+
+## Verification method & known blocker
+
+- **Known blocker — live click-through from this environment:** the sandbox's
+  network policy denies both `*.supabase.co` and `*.vercel.app`, so no browser
+  in this session can sign in to the live app. Verification instead used:
+  full Vitest suite, `tsc`, `eslint`, `next build`, a route-by-route read of
+  every page's role guard against what it renders, a local Chromium render of
+  the new design system with sample data (desktop 1440px, tablet 820px, print
+  media, login) with zero console errors, Supabase SQL checks, and Vercel
+  runtime-error logs after deploy. **Recommended follow-up:** a 10-minute
+  manual click-through on the live URL with each of the 4 test accounts.
+
+## Phase 1 — Functional issues found & fixed
+
+| # | Area | Problem | Fix |
+|---|---|---|---|
+| 1 | Nav / PB-3 | Top nav showed every module to every role. Appraisers saw Finance, and Cashiers/Operators/Appraisers saw Compliance (Admin-only) — clicking just bounced them to the dashboard. Cashiers had **no** link to Due-date reminders, the one compliance screen they're allowed to use. | Single nav config (`lib/nav.ts`) filtered per role. `lib/nav.test.ts` reads every page's `requireRole()` and fails if a nav item and its page guard ever disagree. |
+| 2 | Customers | Cashiers & Appraisers were shown "Register customer" and the editable profile form, but the server only allows Operator/Admin — every submit failed. | Register panel and edit form only render for Operator/Admin; others get a read-only profile. |
+| 3 | Appraisals | Cashiers & Operators were shown "New appraisal" (server: Appraiser/Admin only). | Gated to Appraiser/Admin. |
+| 4 | Loans | Operators & Appraisers were shown "New loan" and payment/renew/redeem forms (server: Cashier/Admin only). | Gated; read-only notice for others. |
+| 5 | Inventory | Cashiers & Appraisers saw Physical audit / Auction prep buttons (Operator/Admin only). | Gated. |
+| 6 | **PB-19 renewal (regression from the Sept 15 interest fix)** | Extending a loan logged the interest as cash **received** *and* added it to `interest_owed`, so the customer was billed for it twice. | Renewal is now pay-and-renew (`calculateRenewal`): collect the expiring term's unpaid interest (logged as a payment with a receipt and cash entry), move maturity +30 days, owe one fresh term's interest. No live extensions had happened since the regression (checked via SQL), so no data repair was needed. 4 new tests. |
+| 7 | Finance / PB-30 | Ledger loaded the **oldest** 200 entries, so once there were more than 200 entries, all recent activity (and the true running balance) was hidden. | Full ledger loaded oldest→newest in 1000-row chunks for a correct running balance, then displayed newest-first with pagination. |
+| 8 | Timezone | "Today" used the server's UTC midnight (08:00 in Manila). Finance/dashboard "today" totals reset at 8 AM, Financial Summary ranges were 8 hours off, and loans created before 8 AM were dated the previous day. | `manilaToday()` / `manilaDayStart()` / `manilaDayEnd()` in `lib/format.ts` (+ tests) used for loan dates, today's cash, summary ranges, overdue checks. |
+| 9 | PB-33 reminders | Compared maturity at UTC midnight with *now*, so a loan due **today** fell off the reminders list after 8 AM, when it matters most. | Calendar-day comparison (`daysUntilDue`) + tests. |
+| 10 | PB-17 item reuse | New-loan picker offered items already redeemed/defaulted/forfeited (a forfeited item belongs to the shop; a returned item needs re-appraisal at today's price). | Picker and `createLoan` server check both require a fresh appraisal per loan. |
+| 11 | Inventory aging report | Included redeemed items that are no longer in the vault. | Only items physically held (pawned/renewed/forfeited/queued). |
+| 12 | Dark-mode OS users | `globals.css` switched body text to near-white under `prefers-color-scheme: dark` while cards stayed white, making some text invisible. | Light-only theme with explicit colors. |
+| 13 | Forms (all) | React 19 wipes `<form action>` inputs on every submit, so a validation error erased everything typed. Errors were a single generic line. | Shared `ActionForm`: keeps values on error, per-field messages next to each input (`validationFailure()` in every action), focuses the first invalid field, disables submit while pending. |
+| 14 | User accounts | An Admin could deactivate or demote **their own** account and lock themselves out. | Server guard + role select disabled on your own row. |
+| 15 | Printing | The nav header printed on every ticket/report; payments had no printable receipt (PB-18 "issue receipt"). | App shell hidden in print; formal pawn-ticket print layout with terms and signature lines; new receipt page per payment; report letterhead with generated timestamp. |
+| 16 | Dashboard | Home was a placeholder paragraph referencing SPRINT_PROGRESS.md. | Real role-aware dashboard (see below). |
+| 17 | Missing states | No loading, error, or not-found screens; DB errors silently rendered empty tables. | `loading.tsx` skeleton, `error.tsx` with **Try again**, `not-found.tsx`; list queries now throw to the error boundary instead of looking empty. |
+
+## Phase 2 — Navigation & information architecture
+
+- **Persistent sidebar** on every authenticated screen, grouped Overview /
+  Pawn operations / Vault / Finance / Oversight / Administration, with a gold
+  active-page indicator (`aria-current`). Collapses to a menu button below 1024px.
+- **Role-filtered menus** — each role only sees what it can open.
+- **Breadcrumbs + page titles** on every screen; Dashboard is one click away
+  (sidebar logo, "Dashboard" item, first breadcrumb).
+- **Task chains shortened**:
+  - Cashier, "take a payment": dashboard → *Needs attention* row or Loans search
+    (ticket # **or** customer name) → ticket → **Interest only / Pay in full**
+    buttons → receipt. 2–3 clicks; previously required finding the customer and
+    then hunting for the loan (customer history didn't link to loans).
+  - New customer → profile opens automatically → **New appraisal** button
+    (customer pre-selected) → appraisal result → **Create loan** button (item
+    pre-selected) → ticket opens with a "print it now" banner.
+  - Customer profile now links every loan and appraisal; loans link to the
+    customer; inventory rows link to their loan; ledger rows link to their loan;
+    report rows link to the record.
+- **No dead ends:** every empty state explains what's next; every detail page has
+  breadcrumbs back; error pages offer Try again / Back to dashboard.
+- **Lists**: search (customers by name/phone/ID; loans by ticket/customer),
+  status filter tabs (loans, inventory, appraisals, compliance), sortable
+  columns (customers, loans), pagination (25–50/page) on customers, loans,
+  appraisals, inventory, ledger, audit trail.
+
+## Phase 3 — Visual polish (design decisions made autonomously)
+
+- **Brand**: extended the original HTML prototype's identity: navy
+  (`#0f2040` family) + gold (`#d4a429` family), Playfair Display for page
+  titles, DM Sans for UI, DM Mono for ticket/receipt numbers, tabular figures
+  for money. Defined once as Tailwind theme tokens in `app/globals.css`.
+- **One component system** (`components/ui.tsx`, `components/form.tsx`):
+  buttons (primary navy / secondary / danger red / success green), cards,
+  stat tiles, tables, badges, alerts, empty states, pagination, filter tabs.
+  Every screen was rebuilt on these, so the sprint-by-sprint styling drift is gone.
+- **Status visibility**: danger states (blacklisted, defaulted/forfeited,
+  counterfeit pending, overdue) use **solid red badges with a warning icon**
+  plus row highlighting and never rely on color alone. Warnings (AML flag,
+  queued for auction, in grace) use amber with text labels.
+- **Money** is always `₱1,234.50` (2 decimals, en-PH); dates `Sep 24, 2026` in Manila time.
+- **Destructive/irreversible actions confirm in a modal**: blacklist / remove
+  from blacklist, confirm/clear counterfeit, deactivate account, reset password,
+  renew loan, redeem item, create auction batch, save business rules.
+- **Toasts** confirm every successful action (bottom-right, auto-dismiss, `aria-live`).
+- **Live previews**: new appraisal shows the valuation and a counterfeit
+  warning while typing; new loan shows a ticket summary (principal + interest
+  = amount to redeem); renewal shows exactly what's collected and the new due date.
+- **Accessibility**: labelled controls, `aria-invalid`/`aria-describedby` on
+  errors, visible focus rings, keyboard-operable dialogs (native `<dialog>`,
+  Esc to close), `sr-only` labels on icon/inline inputs, active nav marked `aria-current`.
+- **Copy**: "Extend" is now "Renew" in the UI (PH pawnshop terminology), and
+  "Send reminder" is "Mark reminded" with a note to call/text, because no SMS
+  provider exists and the old label implied a message was sent.
+
+## Final validation (local)
+
+- `npm test`: **112/112** passing (was 77; +35 new: nav/permission sync,
+  formatting & Manila dates, validation errors, renewal math, reminder days).
+- `npx tsc --noEmit`: clean (only the known `LayoutProps` generated-type artifact).
+- `npm run lint`: clean. `npm run build`: clean, 27 routes (new receipt route).
+
+## Remaining known limitations (unchanged, still flagged)
+
+PB-14 valuation formula & PB-15 purity bands are placeholders; PB-21 default
+detection runs on Loans page load (no scheduler); PB-33 has no SMS/email
+provider; PB-8 AML is a keyword placeholder; PB-18/25/26 multi-table writes
+aren't wrapped in a transaction (lower-risk than the fixed PB-17 case).
