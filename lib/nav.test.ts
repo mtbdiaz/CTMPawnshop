@@ -44,19 +44,31 @@ describe("navForRole", () => {
   it("gives a Cashier the reminders screen they are allowed to use", () => {
     const hrefs = navForRole("cashier").flatMap((s) => s.items.map((i) => i.href));
     expect(hrefs).toContain("/dashboard/compliance/reminders");
-    expect(hrefs).not.toContain("/dashboard/compliance/audit");
+    expect(hrefs).not.toContain("/dashboard/reports");
   });
 });
 
 describe("activeHref", () => {
   it("highlights the closest section for a detail page", () => {
     expect(activeHref("/dashboard/loans/abc-123")).toBe("/dashboard/loans");
-    expect(activeHref("/dashboard/inventory/audit")).toBe("/dashboard/inventory/audit");
+    expect(activeHref("/dashboard/inventory/audit")).toBe("/dashboard/inventory");
     expect(activeHref("/dashboard/reports/overdue")).toBe("/dashboard/reports");
   });
 
   it("only highlights Dashboard on the dashboard itself", () => {
     expect(activeHref("/dashboard")).toBe("/dashboard");
     expect(activeHref("/dashboard/customers")).toBe("/dashboard/customers");
+  });
+});
+
+describe("merged pages (item 13)", () => {
+  it("has fewer sidebar items than before the merge (14)", () => {
+    expect(navForRole("admin").flatMap((s) => s.items).length).toBeLessThan(14);
+  });
+
+  it("no longer links the merged-away screens directly", () => {
+    const hrefs = NAV_SECTIONS.flatMap((s) => s.items.map((i) => i.href));
+    expect(hrefs).not.toContain("/dashboard/users");
+    expect(hrefs).not.toContain("/dashboard/compliance/audit");
   });
 });

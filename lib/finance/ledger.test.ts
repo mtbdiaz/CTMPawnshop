@@ -38,3 +38,15 @@ describe("computeRunningBalances (PB-30)", () => {
     expect(balances[balances.length - 1]).toBe(position.net);
   });
 });
+
+describe("non-cash memo entries", () => {
+  it("never move the cash position or running balance", () => {
+    const entries = [
+      { amount: 1000, direction: "out" as const },
+      { amount: 400, direction: "in" as const, is_memo: true },
+      { amount: 200, direction: "in" as const },
+    ];
+    expect(computeCashPosition(entries).net).toBe(-800);
+    expect(computeRunningBalances(entries)).toEqual([-1000, -1000, -800]);
+  });
+});

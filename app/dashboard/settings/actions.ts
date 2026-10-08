@@ -17,7 +17,9 @@ export async function updateBusinessRules(
 
   const parsed = businessRulesSchema.safeParse({
     interest_rate_percent: formData.get("interest_rate_percent"),
-    gold_price_per_gram: formData.get("gold_price_per_gram"),
+    price_24k: formData.get("price_24k"),
+    price_21k: formData.get("price_21k"),
+    price_18k: formData.get("price_18k"),
     ltv_percent: formData.get("ltv_percent"),
     grace_period_days: formData.get("grace_period_days"),
   });
@@ -29,11 +31,12 @@ export async function updateBusinessRules(
   const supabase = await createClient();
   const { error } = await supabase
     .from("system_settings")
-    .update({ ...parsed.data, updated_by: user.id })
+    .update({ ...parsed.data, gold_price_per_gram: parsed.data.price_24k, updated_by: user.id })
     .eq("id", 1);
 
   if (error) return { error: error.message };
 
   revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/appraisals");
   return { success: true };
 }

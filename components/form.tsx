@@ -27,6 +27,8 @@ type Ctx = { pending: boolean; fieldErrors: Record<string, string> };
 const FormCtx = createContext<Ctx>({ pending: false, fieldErrors: {} });
 
 type ConfirmRequest = {
+  details: [string, string][];
+  locked: boolean;
   title: string;
   message: string;
   confirmLabel: string;
@@ -102,7 +104,15 @@ export function ActionForm<S extends FormState>({
     const data = new FormData(e.currentTarget, submitter);
     const message = submitter?.dataset.confirm;
     if (message) {
+      let details: [string, string][] = [];
+      try {
+        details = submitter.dataset.confirmDetails ? JSON.parse(submitter.dataset.confirmDetails) : [];
+      } catch {
+        details = [];
+      }
       setConfirmReq({
+        details,
+        locked: submitter.dataset.confirmLocked === "true",
         title: submitter.dataset.confirmTitle ?? "Are you sure?",
         message,
         confirmLabel: submitter.dataset.confirmLabel ?? "Confirm",
@@ -138,6 +148,21 @@ export function ActionForm<S extends FormState>({
           <div className="p-6">
             <h2 className="text-lg font-semibold text-slate-900">{confirmReq.title}</h2>
             <p className="mt-2 text-sm text-slate-600">{confirmReq.message}</p>
+            {confirmReq.details.length > 0 && (
+              <dl className="mt-4 divide-y divide-slate-100 rounded-md border border-slate-200 text-sm">
+                {confirmReq.details.map(([label, value]) => (
+                  <div key={label} className="flex justify-between gap-4 px-3 py-1.5">
+                    <dt className="text-slate-500">{label}</dt>
+                    <dd className="text-right font-medium tabular-nums text-slate-900">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {confirmReq.locked && (
+              <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+                After you confirm, this record is locked. Only an Admin can change it, with a written reason.
+              </p>
+            )}
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" autoFocus onClick={closeDialog} className={buttonClasses("secondary")}>
                 Cancel
@@ -183,7 +208,16 @@ export function SubmitButton({
   name?: string;
   value?: string;
   disabled?: boolean;
-  confirm?: { title?: string; message: string; confirmLabel?: string; tone?: "danger" | "primary" };
+  confirm?: {
+    title?: string;
+    message: string;
+    confirmLabel?: string;
+    tone?: "danger" | "primary";
+    /** Review-and-confirm summary rows shown in the dialog. */
+    details?: [string, string][];
+    /** Adds the "locked after saving" warning. */
+    locked?: boolean;
+  };
   className?: string;
 }) {
   const { pending } = useContext(FormCtx);
@@ -198,6 +232,8 @@ export function SubmitButton({
       data-confirm-title={confirm?.title}
       data-confirm-label={confirm?.confirmLabel}
       data-confirm-tone={confirm?.tone}
+      data-confirm-details={confirm?.details ? JSON.stringify(confirm.details) : undefined}
+      data-confirm-locked={confirm?.locked ? "true" : undefined}
       className={cx(buttonClasses(variant, size), className)}
     >
       {pending && (
