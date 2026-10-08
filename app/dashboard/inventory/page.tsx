@@ -18,10 +18,11 @@ import {
   TH,
   THead,
   TR,
-  TableLink,
+  ActionsCell,
+  ViewButton,
   pageParam,
 } from "@/components/ui";
-import { Icon } from "@/components/icons";
+import { ITEM_CATEGORIES, categoryLabel } from "@/lib/appraisal/valuation";
 
 export const metadata = { title: "Vault inventory" };
 
@@ -40,30 +41,39 @@ type Row = {
   status: string;
   created_at: string;
   updated_at: string;
-  appraisal_items: { weight_grams: number; karat: number; customers: { full_name: string } | null } | null;
-  loans: { id: string; ticket_number: string }[];
+  appraisal_items: { category: string; category_other: string | null; weight_grams: number; karat: number } | null;
+  loans: { id: string; ticket_number: string; customers: { full_name: string } | null }[];
 };
 
 export default async function InventoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; page?: string }>;
+  searchParams: Promise<{ status?: string; page?: string; category?: string }>;
 }) {
   const user = await requireRole(["operator", "cashier", "appraiser", "admin"]);
   const params = await searchParams;
   const status = FILTERS[params.status ?? ""] ? params.status! : "vault";
   const page = pageParam(params.page);
   const isOperator = hasRole(user.profile.role, ["operator"]);
+  const category = ITEM_CATEGORIES.some((c) => c.value === params.category) ? (params.category as Enums<"item_category">) : null;
 
   const supabase = await createClient();
   let query = supabase
     .from("inventory_items")
-    .select("id, vault_location, status, created_at, updated_at, appraisal_items(weight_grams, karat, customers(full_name)), loans(id, ticket_number)", {
+    .select(`id, vault_location, status, created_at, updated_at, appraisal_items${category ? "!inner" : ""}(category, category_other, weight_grams, karat), loans(id, ticket_number, customers(full_name))`, {
       count: "exact",
     })
+    .is("archived_at", null)
     .order("vault_location")
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
   if (FILTERS[status].statuses.length) query = query.in("status", FILTERS[status].statuses);
+  if (category) query = query.eq("appraisal_items.category", category);
+  const href = (o: Record<string, string | undefined>) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries({ status: params.status, category: params.category, ...o })) if (v) qs.set(k, v);
+    const q = qs.toString();
+    return q ? `/dashboard/inventory?${q}` : "/dashboard/inventory";
+  };
   const { data, count, error } = await query;
   if (error) throw error;
   const items = (data ?? []) as unknown as Row[];
@@ -72,36 +82,34 @@ export default async function InventoryPage({
     <div>
       <PageHeader
         title="Vault inventory"
-        description="Every pledged item, where it's stored, and its current status. Statuses update automatically as loans are renewed, redeemed or forfeited."
+        description="Every pledged item, where it is stored, and its status."
         breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Inventory" }]}
         actions={
           isOperator && (
             <>
-              <ButtonLink href="/dashboard/inventory/audit">
-                <Icon name="clipboard" className="h-4 w-4" /> Physical audit
-              </ButtonLink>
-              <ButtonLink href="/dashboard/inventory/auction">
-                <Icon name="gavel" className="h-4 w-4" /> Auction prep
-              </ButtonLink>
+              <ButtonLink href="/dashboard/inventory/audit">Physical audit</ButtonLink>
+              <ButtonLink href="/dashboard/inventory/auction">Auction prep</ButtonLink>
             </>
           )
         }
       />
 
       <Card padded={false}>
-        <div className="border-b border-slate-200 p-4">
+        <div className="flex flex-wrap gap-3 border-b border-slate-200 p-3">
           <FilterTabs
             current={status}
-            tabs={Object.entries(FILTERS).map(([value, f]) => ({
-              value,
-              label: f.label,
-              href: value === "vault" ? "/dashboard/inventory" : `/dashboard/inventory?status=${value}`,
-            }))}
+            tabs={Object.entries(FILTERS).map(([value, f]) => ({ value, label: f.label, href: href({ status: value === "vault" ? undefined : value }) }))}
+          />
+          <FilterTabs
+            current={category ?? "any"}
+            tabs={[{ label: "Any category", value: "any", href: href({ category: undefined }) }].concat(
+              ITEM_CATEGORIES.map((c) => ({ label: c.label, value: c.value, href: href({ category: c.value }) })),
+            )}
           />
         </div>
         {items.length > 0 ? (
           <>
-            <Table>
+            <Table minWidth="820px">
               <THead>
                 <TH>Vault location</TH>
                 <TH>Item</TH>
@@ -109,6 +117,9 @@ export default async function InventoryPage({
                 <TH>Loan</TH>
                 <TH>Status</TH>
                 <TH align="right">Days held</TH>
+                <TH>
+                  <span className="sr-only">Actions</span>
+                </TH>
               </THead>
               <TBody>
                 {items.map((item) => {
@@ -117,24 +128,27 @@ export default async function InventoryPage({
                     <TR key={item.id}>
                       <TD className="font-medium">{item.vault_location}</TD>
                       <TD>
-                        {item.appraisal_items?.weight_grams}g · {item.appraisal_items?.karat}k
+                        {item.appraisal_items
+                          ? `${categoryLabel(item.appraisal_items.category, item.appraisal_items.category_other)}, ${item.appraisal_items.karat}K, ${item.appraisal_items.weight_grams} g`
+                          : ""}
                       </TD>
-                      <TD>{item.appraisal_items?.customers?.full_name ?? "—"}</TD>
-                      <TD mono>{loan ? <TableLink href={`/dashboard/loans/${loan.id}`}>{loan.ticket_number}</TableLink> : "—"}</TD>
+                      <TD>{loan?.customers?.full_name ?? ""}</TD>
+                      <TD mono>{loan?.ticket_number ?? ""}</TD>
                       <TD>
                         <StatusBadge status={item.status} label={item.status === "extended" ? "Renewed" : undefined} />
                         <span className="mt-0.5 block text-xs text-slate-500">since {formatDate(item.updated_at)}</span>
                       </TD>
                       <TD align="right">{daysInVault(new Date(item.created_at))}</TD>
+                      <ActionsCell>{loan && <ViewButton href={`/dashboard/loans/${loan.id}`}>View loan</ViewButton>}</ActionsCell>
                     </TR>
                   );
                 })}
               </TBody>
             </Table>
-            <Pagination page={page} pageSize={PAGE_SIZE} total={count ?? 0} basePath="/dashboard/inventory" params={{ status: params.status }} />
+            <Pagination page={page} pageSize={PAGE_SIZE} total={count ?? 0} basePath="/dashboard/inventory" params={{ status: params.status, category: params.category }} />
           </>
         ) : (
-          <EmptyState icon="vault" title={`No items ${FILTERS[status].label.toLowerCase()}`} />
+          <EmptyState title={`No items ${FILTERS[status].label.toLowerCase()}.`} />
         )}
       </Card>
     </div>

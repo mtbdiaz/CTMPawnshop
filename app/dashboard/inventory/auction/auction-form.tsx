@@ -49,7 +49,7 @@ export function AuctionForm({ items }: { items: { id: string; label: string; loc
       </ul>
       <Field label="Batch notes" name="notes" placeholder="e.g. October auction lot" className="max-w-md" />
       <SubmitButton
-        pendingLabel="Creating batch…"
+        pendingLabel="Creating batch"
         disabled={selected.size === 0}
         confirm={{
           title: "Queue these items for auction?",

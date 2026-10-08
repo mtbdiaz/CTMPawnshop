@@ -43,7 +43,7 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
             </THead>
             <TBody>
               {flags.map((flag) => {
-                const name = (flag as unknown as { customers: { full_name: string } | null }).customers?.full_name ?? "—";
+                const name = (flag as unknown as { customers: { full_name: string } | null }).customers?.full_name ?? "";
                 return view === "open" ? (
                   <FlagRow
                     key={flag.id}

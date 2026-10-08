@@ -1,7 +1,7 @@
 "use client";
 
-import { ActionForm, Field, SelectField, SubmitButton } from "@/components/form";
-import { recordCashEntry } from "./actions";
+import { ActionForm, Field, SelectField, SubmitButton, TextareaField } from "@/components/form";
+import { adminEditCashEntry, recordCashEntry } from "./actions";
 
 export function CashEntryForm() {
   return (
@@ -16,10 +16,24 @@ export function CashEntryForm() {
         <option value="revenue">Revenue (cash in)</option>
       </SelectField>
       <Field label="Amount (₱)" name="amount" type="number" step="0.01" min="0.01" required inputMode="decimal" />
-      <Field label="Description" name="description" required placeholder="e.g. Electricity bill — September" className="sm:col-span-2 lg:col-span-1" />
+      <Field label="Description" name="description" required placeholder="e.g. Electricity bill, September" className="sm:col-span-2 lg:col-span-1" />
       <div className="lg:pt-6">
-        <SubmitButton pendingLabel="Saving…">Record entry</SubmitButton>
+        <SubmitButton pendingLabel="Saving">Record entry</SubmitButton>
       </div>
+    </ActionForm>
+  );
+}
+
+export function AdminEditCashEntryForm({ id, amount, description }: { id: string; amount: number; description: string }) {
+  return (
+    <ActionForm action={adminEditCashEntry} className="space-y-2" successMessage="Entry corrected.">
+      <input type="hidden" name="entry_id" value={id} />
+      <Field label="Amount (₱)" name="amount" type="number" step="0.01" min="0.01" defaultValue={amount} required />
+      <Field label="Description" name="description" defaultValue={description} required />
+      <TextareaField label="Reason" name="reason" rows={2} required />
+      <SubmitButton size="sm" variant="secondary" pendingLabel="Saving" confirm={{ title: "Correct this entry?", message: "The change and your reason go to the audit trail.", confirmLabel: "Save correction", tone: "primary" }}>
+        Save correction
+      </SubmitButton>
     </ActionForm>
   );
 }

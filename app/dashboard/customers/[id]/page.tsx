@@ -2,7 +2,11 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { hasRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate, formatPeso } from "@/lib/format";
+import { formatDate, formatPeso, manilaToday } from "@/lib/format";
+import { categoryLabel } from "@/lib/appraisal/valuation";
+import { computeCustomerScore, weightsFromRows } from "@/lib/customers/score";
+import { ScoreBadge } from "@/components/score-badge";
+import { ArchiveForm } from "@/components/archive-controls";
 import {
   Alert,
   Badge,
@@ -13,11 +17,10 @@ import {
   PageHeader,
   SectionTitle,
   StatusBadge,
-  TableLink,
+  ViewButton,
 } from "@/components/ui";
-import { Icon } from "@/components/icons";
 import { updateCustomer } from "../actions";
-import { CustomerForm } from "../customer-form";
+import { AdminIdentityForm, CustomerForm } from "../customer-form";
 import { BlacklistForm } from "./blacklist-form";
 
 type LoanHistoryRow = {
@@ -30,6 +33,11 @@ type LoanHistoryRow = {
   loan_date: string;
   maturity_date: string;
   extension_count: number;
+  late_payment_count: number;
+  defaulted_at: string | null;
+  reinstated_at: string | null;
+  redeemed_at: string | null;
+  archived_at: string | null;
   loan_payments: { id: string; amount: number; receipt_number: string; created_at: string }[];
   loan_extensions: { id: string; new_maturity_date: string; additional_interest_amount: number; created_at: string }[];
 };
@@ -44,22 +52,26 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
   if (!customer) notFound();
 
   // PB-10: every loan for this customer plus its payments and extensions.
-  const [{ data: loans }, { data: appraisals }] = await Promise.all([
+  const [{ data: loans }, { data: appraisals }, { data: weightRows }] = await Promise.all([
     supabase
       .from("loans")
       .select(
-        "id, ticket_number, principal_amount, principal_balance, interest_owed, status, loan_date, maturity_date, extension_count, loan_payments(id, amount, receipt_number, created_at), loan_extensions(id, new_maturity_date, additional_interest_amount, created_at)",
+        "id, ticket_number, principal_amount, principal_balance, interest_owed, status, loan_date, maturity_date, extension_count, late_payment_count, defaulted_at, reinstated_at, redeemed_at, archived_at, loan_payments(id, amount, receipt_number, created_at), loan_extensions(id, new_maturity_date, additional_interest_amount, created_at)",
       )
       .eq("customer_id", id)
       .order("loan_date", { ascending: false }),
     supabase
       .from("appraisal_items")
-      .select("id, weight_grams, karat, computed_value, is_counterfeit_risk, counterfeit_resolution, created_at")
+      .select("id, category, category_other, weight_grams, karat, computed_value, is_counterfeit_risk, counterfeit_resolution, created_at")
       .eq("customer_id", id)
+      .is("archived_at", null)
       .order("created_at", { ascending: false }),
+    supabase.from("score_weights").select("key, value"),
   ]);
   const loanHistory = (loans ?? []) as unknown as LoanHistoryRow[];
-  const openLoans = loanHistory.filter((l) => l.status === "active" || l.status === "extended");
+  // Item 6: archived loans still count toward history and score.
+  const history = computeCustomerScore(loanHistory, manilaToday(), weightsFromRows(weightRows));
+  const openLoans = loanHistory.filter((l) => l.status === "active" || l.status === "extended" || l.status === "reinstated");
   const canEdit = hasRole(role, ["operator"]);
   const blocked = customer.is_blacklisted;
 
@@ -69,11 +81,13 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
         title={
           <span className="flex flex-wrap items-center gap-3">
             {customer.full_name}
-            {blocked && <Badge tone="danger" icon>Blacklisted</Badge>}
+            <ScoreBadge score={history.score} tier={history.tier} />
+            {blocked && <Badge tone="danger">Blacklisted</Badge>}
+            {customer.archived_at && <Badge tone="neutral">Archived</Badge>}
             {customer.aml_status === "flagged" && <Badge tone="warning">AML flagged</Badge>}
           </span>
         }
-        description={`Customer since ${formatDate(customer.created_at)} · ${openLoans.length} open loan${openLoans.length === 1 ? "" : "s"}`}
+        description={`Customer since ${formatDate(customer.created_at)}. ${openLoans.length} open loan${openLoans.length === 1 ? "" : "s"}.`}
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Customers", href: "/dashboard/customers" },
@@ -82,14 +96,9 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
         actions={
           !blocked && (
             <>
-              {hasRole(role, ["appraiser"]) && (
-                <ButtonLink href={`/dashboard/appraisals?new=1&customer=${customer.id}`} variant={role === "appraiser" ? "primary" : "secondary"}>
-                  <Icon name="scale" className="h-4 w-4" /> New appraisal
-                </ButtonLink>
-              )}
               {hasRole(role, ["cashier"]) && (
-                <ButtonLink href={`/dashboard/loans?new=1&customer=${customer.id}`} variant="primary">
-                  <Icon name="ticket" className="h-4 w-4" /> New loan
+                <ButtonLink href={`/dashboard/loans/new?customer=${customer.id}`} variant="primary">
+                  New loan
                 </ButtonLink>
               )}
             </>
@@ -98,7 +107,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
       />
 
       {blocked && (
-        <Alert tone="danger" title="This customer is blacklisted — do not proceed with new appraisals or loans.">
+        <Alert tone="danger" title="Blacklisted. Do not issue new loans.">
           {customer.blacklist_reason ? `Reason: ${customer.blacklist_reason}` : "No reason recorded."}
         </Alert>
       )}
@@ -108,16 +117,41 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
         </Alert>
       )}
 
+      {history.hasWarnings && (
+        <Alert tone="warning" title="History warning">
+          {[
+            history.counts.delinquent && `${history.counts.delinquent} loan(s) paid late`,
+            history.counts.reinstated && `${history.counts.reinstated} reinstated`,
+            history.counts.defaulted && `${history.counts.defaulted} defaulted`,
+          ]
+            .filter(Boolean)
+            .join(", ")}
+          .
+        </Alert>
+      )}
+      <Card>
+        <DetailGrid
+          items={[
+            { label: "Score", value: history.score === null ? "No history" : `${history.score} / 100 (${history.tier})`, emphasize: true },
+            { label: "Total loans", value: String(history.counts.total) },
+            { label: "Open", value: String(history.counts.active) },
+            { label: "Redeemed", value: String(history.counts.redeemed) },
+            { label: "Renewed", value: String(history.counts.renewed) },
+            { label: "Paid late", value: String(history.counts.delinquent) },
+            { label: "Reinstated", value: String(history.counts.reinstated) },
+            { label: "Defaulted", value: String(history.counts.defaulted) },
+            { label: "Overdue now", value: String(history.counts.overdue) },
+          ]}
+        />
+      </Card>
+
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">
           <section>
-            <SectionTitle description="Newest first. Open a ticket to record payments or extend.">
-              Loans &amp; transaction history
-            </SectionTitle>
+            <SectionTitle description="Newest first, archived loans included.">Loans and transactions</SectionTitle>
             {loanHistory.length === 0 ? (
               <Card padded={false}>
                 <EmptyState
-                  icon="ticket"
                   title="No loans yet"
                   description="Loans, payments, renewals and redemptions appear here once a loan is created for this customer."
                 />
@@ -126,21 +160,23 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
               <div className="space-y-3">
                 {loanHistory.map((loan) => {
                   const owed = Number(loan.principal_balance) + Number(loan.interest_owed);
-                  const isOpen = loan.status === "active" || loan.status === "extended";
+                  const isOpen = loan.status === "active" || loan.status === "extended" || loan.status === "reinstated";
                   return (
                     <Card key={loan.id}>
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
-                          <TableLink href={`/dashboard/loans/${loan.id}`}>
-                            <span className="font-mono">{loan.ticket_number}</span>
-                          </TableLink>
+                          <span className="font-mono font-medium">{loan.ticket_number}</span>
+                          {loan.archived_at && <Badge tone="neutral">Archived</Badge>}
                           <p className="mt-0.5 text-xs text-slate-500">
-                            Issued {formatDate(loan.loan_date)} · Due {formatDate(loan.maturity_date)}
-                            {loan.extension_count > 0 ? ` · Renewed ${loan.extension_count}×` : ""}
+                            Issued {formatDate(loan.loan_date)}. Due {formatDate(loan.maturity_date)}.
+                            {loan.extension_count > 0 ? ` Renewed ${loan.extension_count} time(s).` : ""}
                           </p>
                         </div>
                         <div className="text-right">
                           <StatusBadge status={loan.status} />
+                          <div className="mt-1">
+                            <ViewButton href={`/dashboard/loans/${loan.id}`}>View loan</ViewButton>
+                          </div>
                           <p className="mt-1 text-sm tabular-nums text-slate-700">
                             {formatPeso(loan.principal_amount)} principal
                             {isOpen && <span className="block font-semibold text-navy-900">{formatPeso(owed)} owed</span>}
@@ -152,7 +188,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                           {loan.loan_payments.map((p) => (
                             <li key={p.id} className="flex justify-between gap-2">
                               <span>
-                                Payment · receipt <span className="font-mono">{p.receipt_number}</span> · {formatDate(p.created_at)}
+                                Payment, receipt <span className="font-mono">{p.receipt_number}</span>, {formatDate(p.created_at)}
                               </span>
                               <span className="tabular-nums font-medium text-emerald-700">{formatPeso(p.amount)}</span>
                             </li>
@@ -160,7 +196,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                           {loan.loan_extensions.map((ext) => (
                             <li key={ext.id} className="flex justify-between gap-2">
                               <span>
-                                Renewed to {formatDate(ext.new_maturity_date)} · {formatDate(ext.created_at)}
+                                Extended to {formatDate(ext.new_maturity_date)}, {formatDate(ext.created_at)}
                               </span>
                               <span className="tabular-nums">{formatPeso(ext.additional_interest_amount)} new-period interest</span>
                             </li>
@@ -175,26 +211,27 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
           </section>
 
           <section>
-            <SectionTitle>Appraised items</SectionTitle>
+            <SectionTitle>Items</SectionTitle>
             <Card padded={false}>
               {appraisals && appraisals.length > 0 ? (
                 <ul className="divide-y divide-slate-100">
                   {appraisals.map((a) => (
                     <li key={a.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
-                      <TableLink href={`/dashboard/appraisals/${a.id}`}>
-                        {a.weight_grams}g · {a.karat}k gold
-                      </TableLink>
+                      <span>
+                        {categoryLabel(a.category, a.category_other)}, {a.karat}K, {a.weight_grams} g
+                      </span>
                       <span className="flex items-center gap-3">
                         {a.is_counterfeit_risk && (
                           <StatusBadge status={a.counterfeit_resolution ?? "pending"} label={`Counterfeit: ${a.counterfeit_resolution ?? "pending"}`} />
                         )}
                         <span className="tabular-nums text-slate-700">{formatPeso(a.computed_value)}</span>
+                        <ViewButton href={`/dashboard/appraisals/${a.id}`}>View appraisal</ViewButton>
                       </span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <EmptyState icon="scale" title="No appraisals yet" />
+                <EmptyState title="No items pawned yet." />
               )}
             </Card>
           </section>
@@ -210,7 +247,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                 <DetailGrid
                   items={[
                     { label: "Contact", value: customer.contact_number },
-                    { label: "Email", value: customer.email || "—" },
+                    { label: "Email", value: customer.email || "" },
                     { label: "Address", value: customer.address },
                     { label: "Date of birth", value: formatDate(customer.date_of_birth) },
                     { label: "ID type", value: customer.id_type },
@@ -221,6 +258,22 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
             </Card>
           </section>
 
+          {role === "admin" && (
+            <section>
+              <SectionTitle description="Name and ID are locked. Corrections need a reason.">Correct identity (Admin)</SectionTitle>
+              <Card>
+                <AdminIdentityForm customer={customer} />
+              </Card>
+            </section>
+          )}
+          {role === "admin" && !customer.archived_at && openLoans.length === 0 && (
+            <section>
+              <SectionTitle>Archive</SectionTitle>
+              <Card>
+                <ArchiveForm table="customers" id={customer.id} label="Customer" />
+              </Card>
+            </section>
+          )}
           {role === "admin" && (
             <section>
               <SectionTitle>Blacklist status</SectionTitle>

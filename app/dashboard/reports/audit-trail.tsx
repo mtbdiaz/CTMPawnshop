@@ -126,7 +126,7 @@ export async function AuditTrail({ params }: { params: { table?: string; action?
                           </pre>
                         </details>
                       ) : (
-                        "—"
+                        ""
                       )}
                     </TD>
                   </TR>
