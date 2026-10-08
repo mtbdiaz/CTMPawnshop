@@ -1,7 +1,9 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { hasRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate } from "@/lib/format";
+import { formatDate, manilaToday } from "@/lib/format";
+import { loadCustomerScores } from "@/lib/customers/history";
+import { ScoreBadge } from "@/components/score-badge";
 import {
   Badge,
   Card,
@@ -18,7 +20,8 @@ import {
   TH,
   THead,
   TR,
-  TableLink,
+  ActionsCell,
+  ViewButton,
   pageParam,
 } from "@/components/ui";
 import { createCustomer } from "./actions";
@@ -46,6 +49,7 @@ export default async function CustomersPage({
   let query = supabase
     .from("customers")
     .select("id, full_name, contact_number, id_type, id_number, aml_status, is_blacklisted, created_at", { count: "exact" })
+    .is("archived_at", null)
     .order(SORTS[sort], { ascending: dir === "asc" })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
   if (q) {
@@ -54,6 +58,7 @@ export default async function CustomersPage({
   }
   const { data: customers, count, error } = await query;
   if (error) throw error;
+  const scores = await loadCustomerScores(supabase, (customers ?? []).map((c) => c.id), manilaToday());
 
   const listParams = { q, sort: params.sort, dir: params.dir };
 
@@ -77,7 +82,7 @@ export default async function CustomersPage({
 
       <Card padded={false}>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4">
-          <SearchBar action="/dashboard/customers" defaultValue={q} placeholder="Search name, phone or ID number…" />
+          <SearchBar action="/dashboard/customers" defaultValue={q} placeholder="Search name, phone or ID number" />
           {q && (
             <p className="text-sm text-slate-500">
               {count ?? 0} result{count === 1 ? "" : "s"} for &ldquo;{q}&rdquo;
@@ -86,21 +91,23 @@ export default async function CustomersPage({
         </div>
         {customers && customers.length > 0 ? (
           <>
-            <Table>
+            <Table minWidth="880px">
               <THead>
                 <SortTH label="Name" column="name" current={sort} dir={dir} basePath="/dashboard/customers" params={listParams} />
                 <TH>Contact</TH>
                 <TH>ID on file</TH>
                 <TH>AML check</TH>
+                <TH>Score</TH>
                 <TH>Flags</TH>
                 <SortTH label="Registered" column="registered" current={sort} dir={dir} basePath="/dashboard/customers" params={listParams} />
+                <TH>
+                  <span className="sr-only">Actions</span>
+                </TH>
               </THead>
               <TBody>
                 {customers.map((c) => (
                   <TR key={c.id} highlight={c.is_blacklisted ? "danger" : undefined}>
-                    <TD>
-                      <TableLink href={`/dashboard/customers/${c.id}`}>{c.full_name}</TableLink>
-                    </TD>
+                    <TD className="font-medium">{c.full_name}</TD>
                     <TD className="text-slate-600">{c.contact_number}</TD>
                     <TD className="text-slate-600">
                       <span className="block text-xs text-slate-500">{c.id_type}</span>
@@ -109,8 +116,16 @@ export default async function CustomersPage({
                     <TD>
                       <StatusBadge status={c.aml_status} label={c.aml_status === "flagged" ? "Flagged" : "Clear"} />
                     </TD>
-                    <TD>{c.is_blacklisted ? <Badge tone="danger" icon>Blacklisted</Badge> : <span className="text-slate-400">—</span>}</TD>
+                    <TD>
+                      <ScoreBadge score={scores.get(c.id)?.score ?? null} tier={scores.get(c.id)?.tier ?? null} />
+                    </TD>
+                    <TD>
+                      {c.is_blacklisted && <Badge tone="danger">Blacklisted</Badge>} {scores.get(c.id)?.hasWarnings && <Badge tone="warning">History warning</Badge>}
+                    </TD>
                     <TD className="text-slate-600">{formatDate(c.created_at)}</TD>
+                    <ActionsCell>
+                      <ViewButton href={`/dashboard/customers/${c.id}`}>View customer</ViewButton>
+                    </ActionsCell>
                   </TR>
                 ))}
               </TBody>

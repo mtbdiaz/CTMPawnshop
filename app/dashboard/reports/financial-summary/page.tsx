@@ -27,7 +27,8 @@ export default async function FinancialSummaryReport({
     ? { data: [], error: null }
     : await supabase
         .from("cash_flow_entries")
-        .select("amount, direction, entry_type")
+        .select("amount, direction, entry_type, is_memo")
+        .is("archived_at", null)
         .gte("created_at", manilaDayStart(rangeStart))
         .lte("created_at", manilaDayEnd(rangeEnd));
   if (error) throw error;
@@ -36,6 +37,7 @@ export default async function FinancialSummaryReport({
   const position = computeCashPosition(rows);
   const byType = new Map<string, { direction: string; amount: number; count: number }>();
   for (const e of rows) {
+    if (e.is_memo) continue; // capitalization memos move no cash
     const t = byType.get(e.entry_type) ?? { direction: e.direction, amount: 0, count: 0 };
     t.amount += Number(e.amount);
     t.count += 1;

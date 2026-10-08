@@ -1,141 +1,84 @@
 "use server";
 
-import { validationFailure, type FieldErrors } from "@/lib/validation/errors";
-
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
-import { createLoanSchema, paymentSchema, extensionSchema, redeemSchema } from "@/lib/validation/loan";
-import { getBlacklistStatus } from "@/lib/customers/blacklist";
-import {
-  calculateMaturityDate,
-  applyPayment,
-  validatePaymentAmount,
-  calculateRenewal,
-  generateTicketNumber,
-  generateReceiptNumber,
-} from "@/lib/loans/calculations";
-import { manilaToday } from "@/lib/format";
-import { verifyLostTicketId } from "@/lib/loans/lost-ticket";
-import { isPastGracePeriod } from "@/lib/loans/default-detection";
+import type { FieldErrors } from "@/lib/validation/errors";
+import { validationFailure } from "@/lib/validation/errors";
 import { isSuspiciousLoanVelocity } from "@/lib/compliance/suspicious";
 
-export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; id?: string };
+export type ActionState = {
+  error?: string;
+  fieldErrors?: FieldErrors;
+  success?: boolean;
+  id?: string;
+  receiptNumber?: string;
+};
 
-// PB-17: create a pawn loan against an appraised, unflagged item. Also
-// creates the matching inventory record and initial cash flow entry (AC2).
-export async function createLoan(
-  _prevState: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const user = await requireRole(["cashier", "admin"]);
-  const parsed = createLoanSchema.safeParse({
+// All loan lifecycle writes go through SECURITY DEFINER database functions
+// (migration 0017). They check the caller's role, keep loan, inventory, cash
+// flow and appraisal pool in step in one transaction, and are the only path
+// that can change a loan once it is saved (records are locked for staff).
+
+const createSchema = z.object({
+  customer_id: z.string().uuid("Select a customer"),
+  appraisal_item_id: z.string().uuid("Select an item"),
+  principal_amount: z.coerce.number().gt(0, "Loan amount must be greater than 0"),
+  vault_location: z.string().trim().max(80).optional().or(z.literal("")),
+});
+
+function revalidateLoan(id?: string) {
+  revalidatePath("/dashboard/loans");
+  revalidatePath("/dashboard");
+  if (id) revalidatePath(`/dashboard/loans/${id}`);
+}
+
+// PB-17: create a pawn loan against an available appraisal.
+export async function createLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["cashier", "admin"]);
+  const parsed = createSchema.safeParse({
     customer_id: formData.get("customer_id"),
     appraisal_item_id: formData.get("appraisal_item_id"),
     principal_amount: formData.get("principal_amount"),
-    vault_location: formData.get("vault_location"),
+    vault_location: formData.get("vault_location") ?? undefined,
   });
   if (!parsed.success) return validationFailure(parsed.error);
 
-  const blacklist = await getBlacklistStatus(parsed.data.customer_id);
-  if (blacklist.isBlacklisted) {
-    return { error: `Customer is blacklisted: ${blacklist.reason ?? "no reason on file"}. Loan blocked.` };
-  }
-
   const supabase = await createClient();
-
-  const { data: appraisal } = await supabase
-    .from("appraisal_items")
-    .select("*")
-    .eq("id", parsed.data.appraisal_item_id)
-    .single();
-  if (!appraisal) return { error: "Appraised item not found" };
-  if (appraisal.customer_id !== parsed.data.customer_id) {
-    return { error: "That appraisal item does not belong to the selected customer" };
-  }
-  if (appraisal.is_counterfeit_risk && appraisal.counterfeit_resolution !== "cleared") {
-    return { error: "This item is flagged as a counterfeit risk and has not been cleared by an Admin. Loan blocked." };
-  }
-  if (parsed.data.principal_amount > appraisal.suggested_loan_max) {
-    return { error: `Loan amount exceeds the suggested maximum of ${appraisal.suggested_loan_max}` };
-  }
-
-  const { data: existingLoan } = await supabase
-    .from("loans")
-    .select("id, status")
-    .eq("appraisal_item_id", parsed.data.appraisal_item_id)
-    .limit(1)
-    .maybeSingle();
-  if (existingLoan) {
-    return {
-      error:
-        existingLoan.status === "active" || existingLoan.status === "extended"
-          ? "This item already has an active loan"
-          : "This item was already used for a previous loan. Record a fresh appraisal at today's gold price first.",
-    };
-  }
-
-  const { data: settings } = await supabase
-    .from("system_settings")
-    .select("interest_rate_percent, grace_period_days")
-    .eq("id", 1)
-    .single();
-  if (!settings) return { error: "System settings unavailable" };
-
-  // Dates are the shop's (Manila) calendar day, not the server's UTC day.
-  const loanDay = manilaToday();
-  const loanDate = new Date(`${loanDay}T00:00:00Z`);
-  const maturityDate = calculateMaturityDate(loanDate);
-
-  // PB-17 AC2: loan + matching inventory record + initial cash flow entry
-  // must all be created together. Done via a single Postgres function
-  // (`create_pawn_loan`, migration 0012) so the three writes commit or roll
-  // back as one transaction — three separate client-side inserts here would
-  // risk an orphaned inventory_items row (or a loan with no cash flow
-  // entry) if a later insert failed after an earlier one had already
-  // committed.
-  const { data: loanId, error: rpcError } = await supabase.rpc("create_pawn_loan", {
+  const { data: loanId, error } = await supabase.rpc("create_pawn_loan", {
     p_customer_id: parsed.data.customer_id,
     p_appraisal_item_id: parsed.data.appraisal_item_id,
-    p_vault_location: parsed.data.vault_location,
     p_principal_amount: parsed.data.principal_amount,
-    p_interest_rate_percent: settings.interest_rate_percent,
-    p_grace_period_days: settings.grace_period_days,
-    p_loan_date: loanDay,
-    p_maturity_date: maturityDate.toISOString().slice(0, 10),
-    p_ticket_number: generateTicketNumber(),
-    p_created_by: user.id,
+    p_vault_location: parsed.data.vault_location || "Vault A",
   });
-  if (rpcError || !loanId) return { error: rpcError?.message ?? "Could not create loan" };
+  if (error || !loanId) return { error: error?.message ?? "Could not create the loan" };
 
-  const loan = { id: loanId };
-
-  // PB-32: flag unusually rapid loan-taking by the same customer (placeholder
-  // AML rule — see DECISIONS_LOG.md).
-  const { data: recentLoans } = await supabase
-    .from("loans")
-    .select("created_at")
-    .eq("customer_id", parsed.data.customer_id);
-  const recentTimestamps = (recentLoans ?? []).map((l) => new Date(l.created_at));
-  if (isSuspiciousLoanVelocity(recentTimestamps)) {
+  // PB-32: placeholder AML velocity rule.
+  const { data: recent } = await supabase.from("loans").select("created_at").eq("customer_id", parsed.data.customer_id);
+  if (isSuspiciousLoanVelocity((recent ?? []).map((l) => new Date(l.created_at)))) {
     await supabase.from("suspicious_activity_flags").insert({
       customer_id: parsed.data.customer_id,
-      loan_id: loan.id,
+      loan_id: loanId,
       reason: "Unusually high number of loans opened by this customer in a short window",
     });
   }
 
-  revalidatePath("/dashboard/loans");
-  return { success: true, id: loan.id };
+  revalidatePath("/dashboard/appraisals");
+  revalidateLoan(loanId);
+  return { success: true, id: loanId };
 }
 
-// PB-18: record a payment against an active loan; interest is settled
-// first, remainder reduces principal.
-export async function recordPayment(
-  _prevState: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const user = await requireRole(["cashier", "admin"]);
+const paymentSchema = z.object({
+  loan_id: z.string().uuid(),
+  amount: z.coerce.number().gt(0, "Payment amount must be greater than 0"),
+  lost_ticket: z.boolean(),
+  id_number_confirm: z.string().trim().optional(),
+});
+
+// PB-18: interest owed (including any accrued past maturity) is settled first.
+export async function recordPayment(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["cashier", "admin"]);
   const parsed = paymentSchema.safeParse({
     loan_id: formData.get("loan_id"),
     amount: formData.get("amount"),
@@ -145,222 +88,137 @@ export async function recordPayment(
   if (!parsed.success) return validationFailure(parsed.error);
 
   const supabase = await createClient();
-  const { data: loan } = await supabase.from("loans").select("*, customers(id_number)").eq("id", parsed.data.loan_id).single();
-  if (!loan) return { error: "Loan not found" };
-  if (loan.status !== "active" && loan.status !== "extended") {
-    return { error: `Loan is ${loan.status} — no further payments accepted` };
-  }
-
-  // PB-22: lost-ticket alternate verification against the customer's ID on file.
-  if (parsed.data.lost_ticket) {
-    const customerIdNumber = (loan as unknown as { customers: { id_number: string } | null }).customers?.id_number;
-    if (!customerIdNumber || !verifyLostTicketId(parsed.data.id_number_confirm ?? "", customerIdNumber)) {
-      return { error: "ID number does not match our records for this customer. Cannot proceed without the ticket or a matching ID." };
-    }
-  }
-
-  // Interest due is the period's charge already persisted on the loan
-  // (loan.interest_owed) — NOT recalculated from the current balance here.
-  // Recomputing `principal_balance * rate` on every payment call would
-  // re-charge a fresh period's interest on each partial payment instead of
-  // settling the one period's interest that's actually owed (see
-  // migration 0015 for the incident this fixes).
-  const interestDue = loan.interest_owed;
-  const validation = validatePaymentAmount(parsed.data.amount, loan.principal_balance, interestDue);
-  if (!validation.ok) return { error: validation.error };
-
-  const breakdown = applyPayment(parsed.data.amount, loan.principal_balance, interestDue);
-  const newInterestOwed = Math.round((loan.interest_owed - breakdown.interestPortion) * 100) / 100;
-
-  const { error: paymentError } = await supabase.from("loan_payments").insert({
-    loan_id: loan.id,
-    amount: parsed.data.amount,
-    principal_portion: breakdown.principalPortion,
-    interest_portion: breakdown.interestPortion,
-    receipt_number: generateReceiptNumber(),
-    verified_via_lost_ticket: parsed.data.lost_ticket,
-    created_by: user.id,
+  const { data, error } = await supabase.rpc("record_payment", {
+    p_loan_id: parsed.data.loan_id,
+    p_amount: parsed.data.amount,
+    p_lost_ticket: parsed.data.lost_ticket,
+    p_id_confirm: parsed.data.id_number_confirm ?? undefined,
   });
-  if (paymentError) return { error: paymentError.message };
-
-  await supabase
-    .from("loans")
-    .update({
-      principal_balance: breakdown.newPrincipalBalance,
-      interest_owed: newInterestOwed,
-      ...(parsed.data.lost_ticket ? { lost_ticket_used: true } : {}),
-    })
-    .eq("id", loan.id);
-
-  await supabase.from("cash_flow_entries").insert({
-    entry_type: "payment_received",
-    direction: "in",
-    amount: parsed.data.amount,
-    description: `Payment received for loan ${loan.ticket_number}`,
-    related_loan_id: loan.id,
-    created_by: user.id,
-  });
-
-  revalidatePath(`/dashboard/loans/${loan.id}`);
-  return { success: true, id: loan.id };
-}
-
-// PB-19: extend (renew) a loan before its grace period expires. Pay-and-renew:
-// the expiring period's unpaid interest is collected at the counter (logged as
-// a payment with a receipt), maturity moves out one term, and one fresh
-// period's interest becomes owed. See DECISIONS_LOG.md.
-export async function processExtension(
-  _prevState: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const user = await requireRole(["cashier", "admin"]);
-  const parsed = extensionSchema.safeParse({ loan_id: formData.get("loan_id") });
-  if (!parsed.success) return { error: "Invalid input" };
-
-  const supabase = await createClient();
-  const { data: loan } = await supabase.from("loans").select("*").eq("id", parsed.data.loan_id).single();
-  if (!loan) return { error: "Loan not found" };
-  if (loan.status !== "active" && loan.status !== "extended") {
-    return { error: `Loan is ${loan.status} — cannot be extended` };
-  }
-  if (loan.principal_balance <= 0) {
-    return { error: "This loan is fully paid — redeem the item instead of extending." };
-  }
-
-  const graceDeadline = new Date(loan.maturity_date);
-  graceDeadline.setDate(graceDeadline.getDate() + loan.grace_period_days);
-  if (new Date() > graceDeadline) {
-    return { error: "Grace period has expired — this loan can no longer be extended" };
-  }
-
-  const renewal = calculateRenewal(
-    new Date(loan.maturity_date),
-    loan.principal_balance,
-    loan.interest_owed,
-    loan.interest_rate_percent,
-  );
-  const newMaturity = renewal.newMaturityDate.toISOString().slice(0, 10);
-
-  const { error: extError } = await supabase.from("loan_extensions").insert({
-    loan_id: loan.id,
-    previous_maturity_date: loan.maturity_date,
-    new_maturity_date: newMaturity,
-    additional_interest_amount: renewal.newInterestOwed,
-    created_by: user.id,
-  });
-  if (extError) return { error: extError.message };
-
-  if (renewal.interestCollectedNow > 0) {
-    const { error: paymentError } = await supabase.from("loan_payments").insert({
-      loan_id: loan.id,
-      amount: renewal.interestCollectedNow,
-      principal_portion: 0,
-      interest_portion: renewal.interestCollectedNow,
-      receipt_number: generateReceiptNumber(),
-      verified_via_lost_ticket: false,
-      created_by: user.id,
-    });
-    if (paymentError) return { error: paymentError.message };
-
-    await supabase.from("cash_flow_entries").insert({
-      entry_type: "payment_received",
-      direction: "in",
-      amount: renewal.interestCollectedNow,
-      description: `Renewal interest for loan ${loan.ticket_number}`,
-      related_loan_id: loan.id,
-      created_by: user.id,
-    });
-  }
-
-  await supabase
-    .from("loans")
-    .update({
-      maturity_date: newMaturity,
-      extension_count: loan.extension_count + 1,
-      status: "extended",
-      interest_owed: renewal.newInterestOwed,
-    })
-    .eq("id", loan.id);
-
-  if (loan.inventory_item_id) {
-    await supabase.from("inventory_items").update({ status: "extended" }).eq("id", loan.inventory_item_id);
-  }
-
-  revalidatePath(`/dashboard/loans/${loan.id}`);
-  revalidatePath("/dashboard/loans");
-  return { success: true, id: loan.id };
-}
-
-// PB-20: redeem a fully-paid loan — closes the loan and releases the item.
-export async function redeemLoan(
-  _prevState: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  await requireRole(["cashier", "admin"]);
-  const parsed = redeemSchema.safeParse({
-    loan_id: formData.get("loan_id"),
-    lost_ticket: formData.get("lost_ticket") === "on",
-    id_number_confirm: formData.get("id_number_confirm") ?? undefined,
-  });
-  if (!parsed.success) return { error: "Invalid input" };
-
-  const supabase = await createClient();
-  const { data: loan } = await supabase
-    .from("loans")
-    .select("*, customers(id_number)")
-    .eq("id", parsed.data.loan_id)
-    .single();
-  if (!loan) return { error: "Loan not found" };
-  if (loan.status !== "active" && loan.status !== "extended") {
-    return { error: `Loan is ${loan.status} — cannot be redeemed` };
-  }
-  if (loan.principal_balance > 0 || loan.interest_owed > 0) {
-    const totalOwed = Math.round((loan.principal_balance + loan.interest_owed) * 100) / 100;
-    return { error: `Loan still has an outstanding balance of ${totalOwed}` };
-  }
-
-  if (parsed.data.lost_ticket) {
-    const customerIdNumber = (loan as unknown as { customers: { id_number: string } | null }).customers?.id_number;
-    if (!customerIdNumber || !verifyLostTicketId(parsed.data.id_number_confirm ?? "", customerIdNumber)) {
-      return { error: "ID number does not match our records for this customer. Cannot proceed without the ticket or a matching ID." };
-    }
-  }
-
-  const { error } = await supabase
-    .from("loans")
-    .update({ status: "redeemed", ...(parsed.data.lost_ticket ? { lost_ticket_used: true } : {}) })
-    .eq("id", loan.id);
   if (error) return { error: error.message };
-
-  if (loan.inventory_item_id) {
-    await supabase.from("inventory_items").update({ status: "redeemed" }).eq("id", loan.inventory_item_id);
-  }
-
-  revalidatePath(`/dashboard/loans/${loan.id}`);
-  return { success: true, id: loan.id };
+  revalidateLoan(parsed.data.loan_id);
+  return { success: true, id: parsed.data.loan_id, receiptNumber: (data as { receipt_number?: string } | null)?.receipt_number };
 }
 
-// PB-21: detect loans past maturity + grace period with no redemption/
-// extension, mark them defaulted, and move the item toward forfeiture.
-// No cron/scheduler infra is available in this environment (see
-// DECISIONS_LOG.md) — this runs opportunistically whenever a Cashier/Admin
-// loads the Loans list, an accepted stand-in for a real scheduled job for
-// this project's scope.
+function loanIdFrom(formData: FormData): string | null {
+  const id = String(formData.get("loan_id") ?? "");
+  return z.string().uuid().safeParse(id).success ? id : null;
+}
+
+// PB-19: pay-and-renew.
+export async function processExtension(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["cashier", "admin"]);
+  const id = loanIdFrom(formData);
+  if (!id) return { error: "Invalid loan" };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("renew_loan", { p_loan_id: id });
+  if (error) return { error: error.message };
+  revalidateLoan(id);
+  return { success: true, id };
+}
+
+// Item 8: capitalize unpaid interest and extend one term.
+export async function capitalizeLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["cashier", "admin"]);
+  const id = loanIdFrom(formData);
+  if (!id) return { error: "Invalid loan" };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("capitalize_loan", { p_loan_id: id });
+  if (error) return { error: error.message };
+  revalidateLoan(id);
+  return { success: true, id };
+}
+
+// Item 7: reinstate a defaulted loan.
+export async function reinstateLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["cashier", "admin"]);
+  const id = loanIdFrom(formData);
+  if (!id) return { error: "Invalid loan" };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reinstate_loan", { p_loan_id: id });
+  if (error) return { error: error.message };
+  revalidateLoan(id);
+  revalidatePath("/dashboard/inventory");
+  return { success: true, id };
+}
+
+// Admin confirms a default as final (the item now belongs to the shop).
+export async function forfeitLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["admin"]);
+  const id = loanIdFrom(formData);
+  if (!id) return { error: "Invalid loan" };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("forfeit_loan", { p_loan_id: id });
+  if (error) return { error: error.message };
+  revalidateLoan(id);
+  return { success: true, id };
+}
+
+// PB-20: redeem a fully paid loan.
+export async function redeemLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["cashier", "admin"]);
+  const id = loanIdFrom(formData);
+  if (!id) return { error: "Invalid loan" };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("redeem_loan", {
+    p_loan_id: id,
+    p_lost_ticket: formData.get("lost_ticket") === "on",
+    p_id_confirm: String(formData.get("id_number_confirm") ?? "") || undefined,
+  });
+  if (error) return { error: error.message };
+  revalidateLoan(id);
+  return { success: true, id };
+}
+
+const adminLoanSchema = z.object({
+  loan_id: z.string().uuid(),
+  principal_amount: z.coerce.number().gt(0, "Principal must be greater than 0"),
+  interest_rate_percent: z.coerce.number().min(0, "Interest rate cannot be negative"),
+  maturity_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date"),
+  reason: z.string().trim().min(5, "Write a reason of at least 5 characters"),
+});
+
+// Item 5: Admin correction with a written reason; before/after goes to the audit trail.
+export async function adminEditLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["admin"]);
+  const parsed = adminLoanSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return validationFailure(parsed.error);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_edit_loan", {
+    p_id: parsed.data.loan_id,
+    p_principal_amount: parsed.data.principal_amount,
+    p_interest_rate_percent: parsed.data.interest_rate_percent,
+    p_maturity_date: parsed.data.maturity_date,
+    p_reason: parsed.data.reason,
+  });
+  if (error) return { error: error.message };
+  revalidateLoan(parsed.data.loan_id);
+  return { success: true, id: parsed.data.loan_id };
+}
+
+const adminPaymentSchema = z.object({
+  payment_id: z.string().uuid(),
+  loan_id: z.string().uuid(),
+  amount: z.coerce.number().gt(0, "Amount must be greater than 0"),
+  reason: z.string().trim().min(5, "Write a reason of at least 5 characters"),
+});
+
+export async function adminEditPayment(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["admin"]);
+  const parsed = adminPaymentSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return validationFailure(parsed.error);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_edit_payment", {
+    p_id: parsed.data.payment_id,
+    p_amount: parsed.data.amount,
+    p_reason: parsed.data.reason,
+  });
+  if (error) return { error: error.message };
+  revalidateLoan(parsed.data.loan_id);
+  return { success: true, id: parsed.data.loan_id };
+}
+
+// PB-21: opportunistic default detection (no scheduler, see DECISIONS_LOG.md).
 export async function runDefaultDetection(): Promise<void> {
   const supabase = await createClient();
-  const { data: loans } = await supabase
-    .from("loans")
-    .select("id, maturity_date, grace_period_days, inventory_item_id")
-    .in("status", ["active", "extended"]);
-  if (!loans) return;
-
-  const now = new Date();
-  for (const loan of loans) {
-    if (isPastGracePeriod(new Date(loan.maturity_date), loan.grace_period_days, now)) {
-      await supabase.from("loans").update({ status: "defaulted" }).eq("id", loan.id);
-      if (loan.inventory_item_id) {
-        await supabase.from("inventory_items").update({ status: "forfeited" }).eq("id", loan.inventory_item_id);
-      }
-    }
-  }
+  await supabase.rpc("run_default_detection");
 }

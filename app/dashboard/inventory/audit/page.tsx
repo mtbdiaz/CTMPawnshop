@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTime } from "@/lib/format";
+import { categoryLabel } from "@/lib/appraisal/valuation";
 import { Badge, Card, EmptyState, PageHeader, SectionTitle } from "@/components/ui";
 import { AuditForm } from "./audit-form";
 
@@ -13,8 +14,9 @@ export default async function InventoryAuditPage() {
   const [{ data: items, error }, { data: history }] = await Promise.all([
     supabase
       .from("inventory_items")
-      .select("id, status, vault_location, appraisal_items(weight_grams, karat, customers(full_name))")
+      .select("id, status, vault_location, appraisal_items(category, category_other, weight_grams, karat, customers(full_name))")
       .in("status", ["pawned", "extended"])
+      .is("archived_at", null)
       .order("vault_location"),
     supabase
       .from("physical_inventory_audits")
@@ -27,14 +29,14 @@ export default async function InventoryAuditPage() {
   const rows = (items ?? []).map((item) => {
     const appraisal = (
       item as unknown as {
-        appraisal_items: { weight_grams: number; karat: number; customers: { full_name: string } | null } | null;
+        appraisal_items: { category: string; category_other: string | null; weight_grams: number; karat: number; customers: { full_name: string } | null } | null;
       }
     ).appraisal_items;
     return {
       id: item.id,
       status: item.status,
       vault_location: item.vault_location,
-      label: `${appraisal?.customers?.full_name ?? "—"} — ${appraisal?.weight_grams}g ${appraisal?.karat}k`,
+      label: `${appraisal?.customers?.full_name ?? ""}, ${appraisal ? categoryLabel(appraisal.category, appraisal.category_other) : ""}, ${appraisal?.karat}K, ${appraisal?.weight_grams} g`,
     };
   });
 
@@ -42,7 +44,7 @@ export default async function InventoryAuditPage() {
     <div className="space-y-6">
       <PageHeader
         title="Physical inventory audit"
-        description="Walk the vault and check each item against the system. Untick anything you can't physically find, and add a note."
+        description="Walk the vault and check each item against the system. Untick anything you cannot physically find, and add a note."
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Inventory", href: "/dashboard/inventory" },

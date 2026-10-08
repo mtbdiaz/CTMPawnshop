@@ -5,7 +5,7 @@
 
 export type LoanRecord = {
   principal_amount: number;
-  status: "active" | "extended" | "redeemed" | "defaulted" | "forfeited";
+  status: "active" | "extended" | "redeemed" | "defaulted" | "forfeited" | "reinstated";
   loan_date: string; // YYYY-MM-DD
 };
 

@@ -1,7 +1,7 @@
 export default function DashboardLoading() {
   return (
     <div role="status" aria-live="polite" className="animate-pulse">
-      <span className="sr-only">Loading…</span>
+      <span className="sr-only">Loading</span>
       <div className="h-3 w-40 rounded bg-slate-200" />
       <div className="mt-3 h-7 w-72 rounded bg-slate-200" />
       <div className="mt-2 h-4 w-96 max-w-full rounded bg-slate-200" />

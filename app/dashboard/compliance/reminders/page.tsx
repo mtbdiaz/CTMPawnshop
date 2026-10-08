@@ -24,7 +24,8 @@ export default async function RemindersPage() {
   const { data, error } = await supabase
     .from("loans")
     .select("id, ticket_number, maturity_date, principal_balance, interest_owed, customers(full_name, contact_number)")
-    .in("status", ["active", "extended"])
+    .in("status", ["active", "extended", "reinstated"])
+    .is("archived_at", null)
     .order("maturity_date");
   if (error) throw error;
 
@@ -44,7 +45,7 @@ export default async function RemindersPage() {
       />
 
       <Alert tone="info">
-        No SMS/email service is connected yet — call or text the customer, then click <strong>Mark reminded</strong> so the
+        No SMS/email service is connected yet. Call or text the customer, then click <strong>Mark reminded</strong> so the
         team knows it&apos;s been done.
       </Alert>
 
@@ -64,7 +65,7 @@ export default async function RemindersPage() {
                   key={loan.id}
                   loanId={loan.id}
                   ticketNumber={loan.ticket_number}
-                  customerName={loan.customers?.full_name ?? "—"}
+                  customerName={loan.customers?.full_name ?? ""}
                   contactNumber={loan.customers?.contact_number ?? ""}
                   maturityDate={loan.maturity_date}
                   daysLeft={daysUntilDue(loan.maturity_date, today)}

@@ -86,7 +86,7 @@ export default function ForcePasswordChangePage() {
         </div>
         {error && <Alert tone="danger">{error}</Alert>}
         <button type="submit" disabled={loading} className={cx(buttonClasses("primary"), "w-full py-2.5")}>
-          {loading ? "Saving…" : "Set password & continue"}
+          {loading ? "Saving" : "Set password and continue"}
         </button>
       </form>
     </AuthCard>

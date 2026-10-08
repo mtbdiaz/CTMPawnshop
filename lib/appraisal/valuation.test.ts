@@ -1,51 +1,42 @@
 import { describe, it, expect } from "vitest";
-import { calculateValuation, isCounterfeitRisk } from "./valuation";
+import { calculateKaratValuation, categoryLabel, isAcceptedKarat, pricePerGram } from "./valuation";
 
-describe("calculateValuation (PB-14, placeholder formula)", () => {
-  it("computes value = weight * purity% * gold price", () => {
-    const result = calculateValuation({
-      weightGrams: 10,
-      purityPercent: 91.6,
-      goldPricePerGram: 3500,
-      ltvPercent: 70,
-    });
-    expect(result.value).toBeCloseTo(10 * 0.916 * 3500, 2);
+const prices = { price_24k: 3550, price_21k: 3106.25, price_18k: 2662.5 };
+
+describe("karat valuation (owner formula: weight x price per gram of the karat)", () => {
+  it("uses the price for the chosen karat, with no purity multiplier", () => {
+    const r = calculateKaratValuation(10, 18, prices, 70);
+    expect(r.pricePerGram).toBe(2662.5);
+    expect(r.value).toBe(26625);
   });
 
-  it("computes suggested loan max as value * ltv%", () => {
-    const result = calculateValuation({
-      weightGrams: 10,
-      purityPercent: 100,
-      goldPricePerGram: 1000,
-      ltvPercent: 70,
-    });
-    expect(result.suggestedLoanMax).toBeCloseTo(7000, 2);
-    expect(result.suggestedLoanMin).toBeLessThan(result.suggestedLoanMax);
+  it("applies LTV to get the maximum loan, min is 90% of max", () => {
+    const r = calculateKaratValuation(10, 24, prices, 70);
+    expect(r.value).toBe(35500);
+    expect(r.suggestedLoanMax).toBe(24850);
+    expect(r.suggestedLoanMin).toBe(22365);
   });
 
-  it("returns zero value for zero weight", () => {
-    const result = calculateValuation({
-      weightGrams: 0,
-      purityPercent: 100,
-      goldPricePerGram: 1000,
-      ltvPercent: 70,
-    });
-    expect(result.value).toBe(0);
+  it("rounds to centavos", () => {
+    expect(calculateKaratValuation(3.333, 21, prices, 70).value).toBe(10353.13);
+  });
+
+  it("returns zero for unsupported karats and non-positive weight", () => {
+    expect(pricePerGram(14, prices)).toBe(0);
+    expect(calculateKaratValuation(10, 14, prices, 70).value).toBe(0);
+    expect(calculateKaratValuation(-5, 24, prices, 70).value).toBe(0);
+  });
+
+  it("accepts only 24K, 21K and 18K", () => {
+    expect([24, 21, 18].every(isAcceptedKarat)).toBe(true);
+    expect([22, 14, 10].some(isAcceptedKarat)).toBe(false);
   });
 });
 
-describe("isCounterfeitRisk (PB-15)", () => {
-  it("does not flag purity within the expected range for the karat", () => {
-    expect(isCounterfeitRisk(18, 75)).toBe(false);
-    expect(isCounterfeitRisk(24, 99.9)).toBe(false);
-  });
-
-  it("flags purity outside the expected range for the karat", () => {
-    expect(isCounterfeitRisk(18, 50)).toBe(true);
-    expect(isCounterfeitRisk(24, 60)).toBe(true);
-  });
-
-  it("flags an unrecognized karat claim for review", () => {
-    expect(isCounterfeitRisk(17, 70)).toBe(true);
+describe("categoryLabel", () => {
+  it("shows the free text for Others", () => {
+    expect(categoryLabel("others", "Anklet")).toBe("Others (Anklet)");
+    expect(categoryLabel("pendant_with_chain")).toBe("Pendant w/ Chain");
+    expect(categoryLabel(null)).toBe("Others");
   });
 });

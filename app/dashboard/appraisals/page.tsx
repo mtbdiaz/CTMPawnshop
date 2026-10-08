@@ -2,8 +2,10 @@ import { requireRole } from "@/lib/auth/require-role";
 import { hasRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatPeso } from "@/lib/format";
+import { ITEM_CATEGORIES, categoryLabel } from "@/lib/appraisal/valuation";
+import type { Enums } from "@/lib/supabase/database.types";
 import {
-  Alert,
+  ActionsCell,
   Card,
   CreatePanel,
   EmptyState,
@@ -17,138 +19,129 @@ import {
   TH,
   THead,
   TR,
-  TableLink,
+  ViewButton,
   pageParam,
 } from "@/components/ui";
-import { NewAppraisalForm } from "./new-appraisal-form";
+import { AppraisalCalculator } from "./appraisal-calculator";
 
 export const metadata = { title: "Appraisals" };
 
 const PAGE_SIZE = 25;
 
+// Item 4: the Appraisals tab is the pre-pawn pool. Pawned, redeemed and
+// archived items never appear here.
 export default async function AppraisalsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ risk?: string; page?: string; new?: string; customer?: string }>;
+  searchParams: Promise<{ risk?: string; category?: string; page?: string; new?: string }>;
 }) {
   const user = await requireRole(["appraiser", "cashier", "operator", "admin"]);
   const params = await searchParams;
   const page = pageParam(params.page);
   const risk = params.risk === "pending" ? "pending" : "all";
+  const category = ITEM_CATEGORIES.some((c) => c.value === params.category) ? (params.category as Enums<"item_category">) : null;
   const canAppraise = hasRole(user.profile.role, ["appraiser"]);
 
   const supabase = await createClient();
   let query = supabase
     .from("appraisal_items")
-    .select("*, customers(full_name)", { count: "exact" })
+    .select("id, category, category_other, karat, weight_grams, computed_value, suggested_loan_max, is_counterfeit_risk, counterfeit_resolution, created_at", { count: "exact" })
+    .eq("status", "available")
+    .is("archived_at", null)
     .order("created_at", { ascending: false })
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
   if (risk === "pending") query = query.eq("is_counterfeit_risk", true).eq("counterfeit_resolution", "pending");
+  if (category) query = query.eq("category", category);
 
-  const [{ data: appraisals, count, error }, { data: customers }, { data: settings }, { count: pendingCount }] = await Promise.all([
+  const [{ data: rows, count, error }, { data: settings }] = await Promise.all([
     query,
-    canAppraise
-      ? supabase.from("customers").select("id, full_name, is_blacklisted").order("full_name")
-      : Promise.resolve({ data: [] }),
-    supabase.from("system_settings").select("gold_price_per_gram, ltv_percent").eq("id", 1).maybeSingle(),
-    supabase
-      .from("appraisal_items")
-      .select("id", { count: "exact", head: true })
-      .eq("is_counterfeit_risk", true)
-      .eq("counterfeit_resolution", "pending"),
+    supabase.from("system_settings").select("price_24k, price_21k, price_18k, ltv_percent").eq("id", 1).maybeSingle(),
   ]);
   if (error) throw error;
 
-  const goldPrice = Number(settings?.gold_price_per_gram ?? 0);
+  const tabParams = (overrides: Record<string, string | undefined>) => {
+    const qs = new URLSearchParams();
+    const merged = { risk: params.risk, category: params.category, ...overrides };
+    for (const [k, v] of Object.entries(merged)) if (v) qs.set(k, v);
+    const s = qs.toString();
+    return s ? `/dashboard/appraisals?${s}` : "/dashboard/appraisals";
+  };
 
   return (
-    <div>
+    <div className="space-y-5">
       <PageHeader
         title="Appraisals"
-        description="Record gold items, attach photos, and get a valuation and suggested loan range from today's gold price."
+        description="Items appraised and waiting to be pawned. Once a loan is issued against an item it leaves this list."
         breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Appraisals" }]}
       />
 
-      {canAppraise &&
-        (goldPrice > 0 ? (
-          <CreatePanel
-            title="New appraisal"
-            description="Valuation and counterfeit check run automatically when you save."
-            defaultOpen={params.new === "1"}
-          >
-            <NewAppraisalForm
-              customers={customers ?? []}
-              defaultCustomerId={params.customer}
-              goldPricePerGram={goldPrice}
-              ltvPercent={Number(settings?.ltv_percent ?? 0)}
-            />
-          </CreatePanel>
-        ) : (
-          <Alert tone="warning" className="mb-6" title="Gold price not configured">
-            An Admin must set the gold price in System Settings before items can be appraised.
-          </Alert>
-        ))}
+      {canAppraise && settings && (
+        <CreatePanel title="New appraisal" description="Category, karat and weight. Value and maximum loan update as you type." defaultOpen={params.new === "1"}>
+          <AppraisalCalculator prices={settings} ltvPercent={Number(settings.ltv_percent)} />
+        </CreatePanel>
+      )}
 
       <Card padded={false}>
-        <div className="border-b border-slate-200 p-4">
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 p-3">
           <FilterTabs
             current={risk}
             tabs={[
-              { label: "All appraisals", value: "all", href: "/dashboard/appraisals" },
-              { label: "Awaiting counterfeit review", value: "pending", href: "/dashboard/appraisals?risk=pending", count: pendingCount ?? 0 },
+              { label: "Available", value: "all", href: tabParams({ risk: undefined }) },
+              { label: "Awaiting counterfeit review", value: "pending", href: tabParams({ risk: "pending" }) },
             ]}
           />
+          <FilterTabs
+            current={category ?? "any"}
+            tabs={[{ label: "Any category", value: "any", href: tabParams({ category: undefined }) }].concat(
+              ITEM_CATEGORIES.map((c) => ({ label: c.label, value: c.value, href: tabParams({ category: c.value }) })),
+            )}
+          />
         </div>
-        {appraisals && appraisals.length > 0 ? (
+        {rows && rows.length > 0 ? (
           <>
-            <Table>
+            <Table minWidth="760px">
               <THead>
                 <TH>Item</TH>
-                <TH>Customer</TH>
+                <TH align="right">Weight</TH>
                 <TH align="right">Value</TH>
-                <TH align="right">Suggested loan</TH>
-                <TH>Counterfeit check</TH>
-                <TH>Date</TH>
+                <TH align="right">Max loan</TH>
+                <TH>Check</TH>
+                <TH>Appraised</TH>
+                <TH>
+                  <span className="sr-only">Actions</span>
+                </TH>
               </THead>
               <TBody>
-                {appraisals.map((a) => {
+                {rows.map((a) => {
                   const pending = a.is_counterfeit_risk && a.counterfeit_resolution === "pending";
                   return (
                     <TR key={a.id} highlight={pending ? "danger" : undefined}>
                       <TD>
-                        <TableLink href={`/dashboard/appraisals/${a.id}`}>
-                          {a.weight_grams}g · {a.karat}k
-                        </TableLink>
+                        {categoryLabel(a.category, a.category_other)}, {a.karat}K
                       </TD>
-                      <TD>{(a as unknown as { customers: { full_name: string } | null }).customers?.full_name ?? "—"}</TD>
+                      <TD align="right">{a.weight_grams} g</TD>
                       <TD align="right">{formatPeso(a.computed_value)}</TD>
-                      <TD align="right" className="text-slate-600">
-                        {formatPeso(a.suggested_loan_min)} – {formatPeso(a.suggested_loan_max)}
-                      </TD>
+                      <TD align="right">{formatPeso(a.suggested_loan_max)}</TD>
                       <TD>
                         {a.is_counterfeit_risk ? (
-                          <StatusBadge
-                            status={a.counterfeit_resolution ?? "pending"}
-                            label={pending ? "Flagged — pending" : a.counterfeit_resolution === "cleared" ? "Cleared" : "Confirmed risk"}
-                          />
+                          <StatusBadge status={a.counterfeit_resolution ?? "pending"} label={pending ? "Counterfeit review" : a.counterfeit_resolution === "cleared" ? "Cleared" : "Confirmed risk"} />
                         ) : (
-                          <StatusBadge status="cleared" label="Passed" />
+                          <span className="text-slate-500">OK</span>
                         )}
                       </TD>
                       <TD className="text-slate-600">{formatDate(a.created_at)}</TD>
+                      <ActionsCell>
+                        <ViewButton href={`/dashboard/appraisals/${a.id}`}>View appraisal</ViewButton>
+                      </ActionsCell>
                     </TR>
                   );
                 })}
               </TBody>
             </Table>
-            <Pagination page={page} pageSize={PAGE_SIZE} total={count ?? 0} basePath="/dashboard/appraisals" params={{ risk: params.risk }} />
+            <Pagination page={page} pageSize={PAGE_SIZE} total={count ?? 0} basePath="/dashboard/appraisals" params={{ risk: params.risk, category: params.category }} />
           </>
         ) : (
-          <EmptyState
-            icon="scale"
-            title={risk === "pending" ? "No items awaiting review" : "No appraisals yet"}
-            description={risk === "pending" ? "Every flagged item has been cleared or confirmed." : canAppraise ? "Record the first item using the form above." : undefined}
-          />
+          <EmptyState title={risk === "pending" ? "No items awaiting counterfeit review." : "No available items."} description={canAppraise ? "Use New appraisal above to add one." : undefined} />
         )}
       </Card>
     </div>

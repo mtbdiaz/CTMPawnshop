@@ -21,11 +21,11 @@ export function CreateAccountForm() {
               ))}
             </SelectField>
             <div className="lg:pt-6">
-              <SubmitButton pendingLabel="Creating…">Add staff account</SubmitButton>
+              <SubmitButton pendingLabel="Creating">Add staff account</SubmitButton>
             </div>
           </div>
           {state.success && state.tempPassword && (
-            <Alert tone="success" title="Account created — temporary password (shown once)">
+            <Alert tone="success" title="Account created. Temporary password (shown once)">
               <code className="select-all rounded bg-white px-1.5 py-0.5 font-mono">{state.tempPassword}</code>
               <span className="mt-1 block text-xs">Share it privately. They&apos;ll set their own password on first sign-in.</span>
             </Alert>

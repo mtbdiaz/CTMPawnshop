@@ -49,9 +49,44 @@ body {
 
 @media print {
   @page {
-    margin: 14mm;
+    size: A4;
+    margin: 12mm 11mm 14mm;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 9px;
+      color: #333;
+    }
   }
   body {
     background: #fff;
   }
+}
+
+/* Item 15: thermal slips. Width comes from --thermal-width (lib/print.ts). */
+.thermal {
+  width: var(--thermal-width, 80mm);
+  margin: 0 auto;
+  padding: 3mm;
+  font-family: var(--font-dm-mono), ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #000;
+  background: #fff;
+}
+@media print {
+  .thermal { margin: 0; }
+  .thermal * { break-inside: avoid; }
+}
+
+/* Item 16: A4 reports. Applies to every printed table. */
+@media print {
+  table { min-width: 0 !important; width: 100%; border-collapse: collapse; font-size: 10px; }
+  .overflow-x-auto { overflow: visible !important; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  tr, td, th { break-inside: avoid; page-break-inside: avoid; }
+  th, td { border-bottom: 1px solid #888; color: #000 !important; background: transparent !important; padding: 3px 4px !important; font-size: 10px !important; }
+  thead th { border-bottom: 1.5px solid #000; }
+  [class*="bg-red-50"], [class*="bg-amber-50"] { background: transparent !important; }
+  .print-card-reset { border: 0 !important; padding: 0 !important; }
 }

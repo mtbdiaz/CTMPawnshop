@@ -2,7 +2,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { ReportHeader } from "@/components/report-header";
-import { Card, EmptyState, SectionTitle, StatusBadge, Table, TBody, TD, TH, THead, TR, TableLink } from "@/components/ui";
+import { Card, EmptyState, SectionTitle, StatusBadge, Table, TBody, TD, TH, THead, TR } from "@/components/ui";
 
 export const metadata = { title: "Compliance / AML report" };
 
@@ -41,9 +41,7 @@ export default async function ComplianceReport() {
               <TBody>
                 {flagged.map((c) => (
                   <TR key={c.id}>
-                    <TD>
-                      <TableLink href={`/dashboard/customers/${c.id}`}>{c.full_name}</TableLink>
-                    </TD>
+                    <TD className="font-medium">{c.full_name}</TD>
                     <TD>{c.aml_notes}</TD>
                     <TD>{formatDate(c.aml_checked_at)}</TD>
                   </TR>
@@ -51,7 +49,7 @@ export default async function ComplianceReport() {
               </TBody>
             </Table>
           ) : (
-            <EmptyState icon="check" title="No AML flags" />
+            <EmptyState title="No AML flags" />
           )}
         </Card>
       </section>
@@ -69,9 +67,7 @@ export default async function ComplianceReport() {
               <TBody>
                 {blacklisted.map((c) => (
                   <TR key={c.id}>
-                    <TD>
-                      <TableLink href={`/dashboard/customers/${c.id}`}>{c.full_name}</TableLink>
-                    </TD>
+                    <TD className="font-medium">{c.full_name}</TD>
                     <TD>{c.blacklist_reason}</TD>
                     <TD>{formatDate(c.updated_at)}</TD>
                   </TR>
@@ -79,7 +75,7 @@ export default async function ComplianceReport() {
               </TBody>
             </Table>
           ) : (
-            <EmptyState icon="check" title="No blacklisted customers" />
+            <EmptyState title="No blacklisted customers" />
           )}
         </Card>
       </section>
@@ -101,7 +97,7 @@ export default async function ComplianceReport() {
                   return (
                     <TR key={f.id}>
                       <TD className="whitespace-nowrap">{formatDateTime(f.created_at)}</TD>
-                      <TD>{c ? <TableLink href={`/dashboard/customers/${c.id}`}>{c.full_name}</TableLink> : "—"}</TD>
+                      <TD>{c?.full_name ?? ""}</TD>
                       <TD>{f.reason}</TD>
                       <TD>
                         <StatusBadge status={f.status} />
@@ -112,7 +108,7 @@ export default async function ComplianceReport() {
               </TBody>
             </Table>
           ) : (
-            <EmptyState icon="check" title="No suspicious-activity flags" />
+            <EmptyState title="No suspicious-activity flags" />
           )}
         </Card>
       </section>
