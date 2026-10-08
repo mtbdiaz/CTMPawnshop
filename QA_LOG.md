@@ -235,3 +235,19 @@ PB-14 valuation formula & PB-15 purity bands are placeholders; PB-21 default
 detection runs on Loans page load (no scheduler); PB-33 has no SMS/email
 provider; PB-8 AML is a keyword placeholder; PB-18/25/26 multi-table writes
 aren't wrapped in a transaction (lower-risk than the fixed PB-17 case).
+
+## Pass 4 — Improvement pass verification
+
+- **Unit tests:** `npm test` passes 145 tests in 26 files. They cover karat valuation, accrual/renew/capitalize math, score edge cases, search ranking, appraisal pool filtering, the ledger memo exclusion, the merged-page redirects, nav roles and thermal CSS. `npm run lint` and `npm run build` are clean.
+- **DB self-tests (live project):** `ctm_selftest()` passes 10 of 10 checks. Cashiers cannot UPDATE loans or payments, the identity lock holds, operators cannot restore, cashiers cannot read the audit trail, hard removal is denied, appraisers cannot archive loans, and an admin edit needs a reason and writes before/after values. `ctm_selftest_lifecycle()` passes create, pay, capitalize and reinstate with the expected amounts.
+- **RLS:** every public table has RLS enabled. Zero DELETE/TRUNCATE grants remain for anon or authenticated, and the app code has no `.delete()` call against a table.
+- **Existing data:** 14 loans and 13 customers load. No appraisal is missing a category, no pool item is mis-stated, and accrual dates are fully backfilled.
+- **Printing:** the slip and report layouts were rendered with fixture data, printed through Playwright `page.pdf`, and converted to PNG for inspection (`qa/print/`).
+  - The 80mm and 58mm tickets have very long name, address and notes text. The page height matches the content and nothing is clipped.
+  - A 140-row A4 report fills 6 pages. The table header repeats on every page, no row splits across pages, and "Page X of Y" appears in the footer.
+  - The first thermal render came out at A4 because `size: 80mm auto` is invalid CSS. This is fixed by measuring the slip.
+
+### Known Blockers
+- The sandbox network blocks `*.supabase.co` and `*.vercel.app`, so the logged-in app could not be clicked through from here. Workaround: the DB self-tests plus the fixture-rendered print PDFs. A manual walkthrough on the deployed URL is listed in the final report.
+- The Supabase MCP hangs on long scripts or statements containing DROP/DELETE. Workaround: migrations were applied one statement at a time, and the files in `supabase/migrations/0016-0018` mirror what is live.
+- The Vercel MCP was disconnected. Workaround: deployment status is checked through the GitHub deployments API.

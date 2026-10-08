@@ -2,6 +2,14 @@
 // it sets both the @page size and the --thermal-width CSS variable.
 export const THERMAL_WIDTH_MM = 80;
 
-export function thermalCss(widthMm: number = THERMAL_WIDTH_MM): string {
-  return `:root{--thermal-width:${widthMm}mm}@page{size:${widthMm}mm auto;margin:0}@page{@bottom-right{content:none}}`;
+/**
+ * CSS @page cannot take "80mm auto", so the page height is the measured slip
+ * height (set by the print toolbar once the slip has rendered). Until then a
+ * long fallback keeps nothing from being cut off.
+ */
+export function thermalCss(widthMm: number = THERMAL_WIDTH_MM, heightMm?: number): string {
+  const h = heightMm ? Math.ceil(heightMm) + 2 : 600;
+  return `:root{--thermal-width:${widthMm}mm}@page{size:${widthMm}mm ${h}mm;margin:0;@bottom-right{content:none}}`;
 }
+
+export const MM_PER_CSS_PX = 25.4 / 96;
