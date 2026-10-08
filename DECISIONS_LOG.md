@@ -273,3 +273,19 @@ bottom of each section's run.
 - **Brand/design system** extends the original prototype (navy + gold,
   Playfair Display / DM Sans / DM Mono). See QA_LOG.md Pass 3.
 - **Admins can't deactivate/demote themselves** (lock-out prevention).
+
+## Improvement pass (Pass 4) — decisions made autonomously
+
+Owner decisions applied as given: archive not delete (Admin restores), review-and-confirm dialog with "locked" warning, thermal tickets/receipts plus A4 reports, defaulted loans given another chance are "Reinstated".
+
+- **Thermal width** is 80mm. Set `THERMAL_WIDTH_MM` in `lib/print.ts` to 58 to switch. CSS `@page` cannot use a variable or `80mm auto`, so that one constant drives both `--thermal-width` and the `@page` size. The print page measures the slip and sets the paper height to fit it.
+- **Valuation** = weight × price per gram for the karat (24K/21K/18K prices in Settings). There is no purity multiplier. Max loan = value × LTV, and min = 90% of max (display only). Legacy rows with other karats keep their stored values; the DB trigger only blocks new or changed karats outside 18/21/24. ⚠ Confirm the 21K/18K backfill prices (3106.25 / 2662.50 = 24K × 21/24 and 18/24).
+- **Counterfeit check is now manual.** Purity testing was dropped with the formula, so the appraiser ticks "Flag for counterfeit review" and an Admin clears it.
+- **Cashiers can create appraisals** because of the inline calculator in the New Loan flow. Edits are allowed only while an item is still `available`.
+- **Interest accrual (⚠ confirm):** each 30-day period, or part of one, past `interest_accrued_through` adds one full term of interest on the principal balance. It keeps accruing while a loan is defaulted, so reinstating does not waive it. Reinstating keeps the original due date; the customer renews or capitalizes to extend it.
+- **Capitalize date rule (⚠ confirm):** if the loan is not yet past due, the new due date is the old due date + 30 days. If it is past due, the new due date is today + 30 days. Capitalized interest is recorded as a non-cash memo entry, excluded from cash totals, and counts as a renewal.
+- **Score weights (⚠ confirm):** base 60; +8 per loan redeemed on time; +3 per renewal (renewal bonus capped at +15); −6 per loan with late payments; −15 per reinstatement; −25 per default; −10 per loan overdue now. Outcomes older than 24 months count half. The score is clamped to 0–100. Tiers: Excellent 85+, Good 70+, Fair 50+, Risky below 50. A customer with no loans shows "No history". Weights are stored in the `score_weights` table.
+- **Archive rules:** appraisers can archive pool items; everything else is Admin-only. A loan can be archived only when it is closed (redeemed or forfeited), and a customer only when they have no open loans. Archived loans still count toward history and score.
+- **Locked records:** loans, payments and extensions change only through `SECURITY DEFINER` functions. Customer name and ID are locked after registration; contact details stay editable. Admin corrections require a reason and write before/after values to `audit_log`. A principal correction posts an `adjustment` cash entry instead of rewriting the original disbursement. Extensions are never edited; corrections go through the loan edit.
+- **Reinstate and Capitalize** are available to Cashier and Admin. Forfeit is Admin-only.
+- **Merged pages:** Users moved to Settings › Users, and Audit Trail moved to Reports › Audit trail (Admin-only). `/dashboard/users`, `/dashboard/compliance/audit` and the old receipt URL redirect to the new locations.

@@ -1,16 +1,20 @@
 import { z } from "zod";
 
-// PB-12 AC2: reject out-of-range values (e.g. negative weight).
-export const appraisalSchema = z.object({
-  customer_id: z.string().uuid("Select a customer"),
-  weight_grams: z.coerce.number().gt(0, "Weight must be greater than 0"),
-  karat: z.coerce.number().int().min(1, "Karat must be between 1 and 24").max(24, "Karat must be between 1 and 24"),
-  purity_percent: z.coerce.number().gt(0, "Purity must be between 0 and 100").max(100, "Purity must be between 0 and 100"),
-  condition_notes: z.string().trim().optional().or(z.literal("")),
-  // PB-13 AC1: at least one photo required.
-  photo_paths: z
-    .array(z.string())
-    .min(1, "At least one photo is required"),
-});
+const categories = ["earrings", "ring", "pendant", "chain", "bracelet", "pendant_with_chain", "others"] as const;
+
+// Items 2, 3, 9: appraisal calculator inputs. No customer (attached at pawn
+// time) and no purity test (the per-karat price already encodes fineness).
+export const appraisalSchema = z
+  .object({
+    category: z.enum(categories, { message: "Pick a category" }),
+    category_other: z.string().trim().max(60).optional().or(z.literal("")),
+    karat: z.coerce
+      .number()
+      .refine((k) => k === 24 || k === 21 || k === 18, "Only 24K, 21K and 18K are accepted"),
+    weight_grams: z.coerce.number().gt(0, "Weight must be greater than 0").max(5000, "Check the weight"),
+    condition_notes: z.string().trim().max(500).optional().or(z.literal("")),
+    photo_paths: z.array(z.string()).default([]),
+    flag_counterfeit: z.boolean().default(false),
+  });
 
 export type AppraisalInput = z.infer<typeof appraisalSchema>;

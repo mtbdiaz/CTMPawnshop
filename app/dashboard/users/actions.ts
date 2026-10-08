@@ -47,7 +47,7 @@ export async function createAccount(
     return { error: profileError.message };
   }
 
-  revalidatePath("/dashboard/users");
+  revalidatePath("/dashboard/settings");
   return { success: true, tempPassword: parsed.data.temp_password };
 }
 
@@ -88,7 +88,7 @@ export async function editAccount(
   });
   if (banError) return { error: banError.message };
 
-  revalidatePath("/dashboard/users");
+  revalidatePath("/dashboard/settings");
   return { success: true };
 }
 
@@ -111,7 +111,7 @@ export async function resetPassword(
   });
   if (error) return { error: error.message };
 
-  revalidatePath("/dashboard/users");
+  revalidatePath("/dashboard/settings");
   return { success: true, tempPassword };
 }
 

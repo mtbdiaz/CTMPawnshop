@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Icon } from "./icons";
+import { buttonClasses } from "./ui";
 
 export function LogoutButton() {
   const router = useRouter();
@@ -18,14 +18,8 @@ export function LogoutButton() {
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleLogout}
-      disabled={pending}
-      className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-white/15 px-3 py-1.5 text-sm text-navy-100 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
-    >
-      <Icon name="logout" className="h-4 w-4" />
-      {pending ? "Signing out…" : "Sign out"}
+    <button type="button" onClick={handleLogout} disabled={pending} className={buttonClasses("secondary", "sm")}>
+      {pending ? "Signing out" : "Sign out"}
     </button>
   );
 }

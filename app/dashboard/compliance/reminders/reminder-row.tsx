@@ -1,7 +1,7 @@
 "use client";
 
 import { ActionForm, SubmitButton } from "@/components/form";
-import { Badge, TD, TR, TableLink } from "@/components/ui";
+import { Badge, TD, TR, ViewButton } from "@/components/ui";
 import { formatDate, formatPeso } from "@/lib/format";
 import { sendReminder, type ActionState } from "../actions";
 
@@ -33,7 +33,10 @@ export function ReminderRow({
         </a>
       </TD>
       <TD mono>
-        <TableLink href={`/dashboard/loans/${loanId}`}>{ticketNumber}</TableLink>
+        {ticketNumber}
+        <span className="mt-1 block">
+          <ViewButton href={`/dashboard/loans/${loanId}`}>View loan</ViewButton>
+        </span>
       </TD>
       <TD>
         {formatDate(maturityDate)}
@@ -50,7 +53,7 @@ export function ReminderRow({
             ) : (
               <>
                 <input type="hidden" name="loan_id" value={loanId} />
-                <SubmitButton variant="secondary" size="sm" pendingLabel="Logging…">
+                <SubmitButton variant="secondary" size="sm" pendingLabel="Logging">
                   Mark reminded
                 </SubmitButton>
               </>

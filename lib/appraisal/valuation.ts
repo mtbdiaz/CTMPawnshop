@@ -1,22 +1,46 @@
-// PB-14: Calculate Valuation & Loan Range.
-//
-// TODO: confirm formula with CTM Pawnshop. This is a placeholder, not a
-// client-confirmed formula — the exact karat/purity-to-value formula was
-// never numerically confirmed (flagged not Estimable in the INVEST review).
-// Using the standard, industry-reasonable approach until real figures are
-// provided:
-//   value = weight_grams * (purity_percent / 100) * gold_price_per_gram
-//   loan_max = value * (ltv_percent / 100)
-//   loan_min = loan_max * 0.9   (placeholder 10% appraiser-negotiation buffer)
+// PB-14 valuation, owner-confirmed structure (Oct 2026):
+//   value      = weight_g x price_per_gram(karat)
+//   max loan   = value x LTV%
+//   min loan   = max loan x 0.9   (unchanged placeholder negotiation buffer)
+// The per-karat price already encodes fineness, so purity is no longer a
+// multiplier. The owner sets the 24K/21K/18K prices in Settings; nothing below
+// 18K is accepted for new appraisals. See DECISIONS_LOG.md.
 
-export type ValuationInput = {
-  weightGrams: number;
-  purityPercent: number;
-  goldPricePerGram: number;
-  ltvPercent: number;
-};
+export const KARATS = [24, 21, 18] as const;
+export type Karat = (typeof KARATS)[number];
+
+export type KaratPrices = { price_24k: number; price_21k: number; price_18k: number };
+
+export const ITEM_CATEGORIES = [
+  { value: "earrings", label: "Earrings" },
+  { value: "ring", label: "Ring" },
+  { value: "pendant", label: "Pendant" },
+  { value: "chain", label: "Chain" },
+  { value: "bracelet", label: "Bracelet" },
+  { value: "pendant_with_chain", label: "Pendant w/ Chain" },
+  { value: "others", label: "Others" },
+] as const;
+export type ItemCategory = (typeof ITEM_CATEGORIES)[number]["value"];
+
+export function categoryLabel(category: string | null | undefined, other?: string | null): string {
+  if (!category) return "Others";
+  if (category === "others" && other?.trim()) return `Others (${other.trim()})`;
+  return ITEM_CATEGORIES.find((c) => c.value === category)?.label ?? "Others";
+}
+
+export function isAcceptedKarat(karat: number): karat is Karat {
+  return (KARATS as readonly number[]).includes(karat);
+}
+
+export function pricePerGram(karat: number, prices: KaratPrices): number {
+  if (karat === 24) return Number(prices.price_24k);
+  if (karat === 21) return Number(prices.price_21k);
+  if (karat === 18) return Number(prices.price_18k);
+  return 0;
+}
 
 export type ValuationResult = {
+  pricePerGram: number;
   value: number;
   suggestedLoanMin: number;
   suggestedLoanMax: number;
@@ -24,37 +48,14 @@ export type ValuationResult = {
 
 const LOAN_RANGE_BUFFER = 0.9;
 
-export function calculateValuation(input: ValuationInput): ValuationResult {
-  const value = input.weightGrams * (input.purityPercent / 100) * input.goldPricePerGram;
-  const suggestedLoanMax = value * (input.ltvPercent / 100);
-  const suggestedLoanMin = suggestedLoanMax * LOAN_RANGE_BUFFER;
-
-  return {
-    value: round2(value),
-    suggestedLoanMin: round2(suggestedLoanMin),
-    suggestedLoanMax: round2(suggestedLoanMax),
-  };
+export function calculateKaratValuation(weightGrams: number, karat: number, prices: KaratPrices, ltvPercent: number): ValuationResult {
+  const price = pricePerGram(karat, prices);
+  const weight = Number.isFinite(weightGrams) && weightGrams > 0 ? weightGrams : 0;
+  const value = round2(weight * price);
+  const max = round2(value * (ltvPercent / 100));
+  return { pricePerGram: price, value, suggestedLoanMax: max, suggestedLoanMin: round2(max * LOAN_RANGE_BUFFER) };
 }
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
-}
-
-// PB-15: Flag Counterfeit Risk — expected purity range per claimed karat.
-// TODO: confirm these tolerance ranges with CTM Pawnshop; placeholder based
-// on standard gold fineness tables (24k=99.9, 22k=91.6, 21k=87.5, 18k=75,
-// 14k=58.3, 10k=41.7) with a tolerance band around each.
-const EXPECTED_PURITY_RANGES: Record<number, [number, number]> = {
-  24: [95, 100],
-  22: [88, 95],
-  21: [84, 91],
-  18: [72, 79],
-  14: [55, 62],
-  10: [38, 45],
-};
-
-export function isCounterfeitRisk(karat: number, purityPercent: number): boolean {
-  const range = EXPECTED_PURITY_RANGES[karat];
-  if (!range) return true; // unrecognized karat claim -> flag for Admin review
-  return purityPercent < range[0] || purityPercent > range[1];
 }

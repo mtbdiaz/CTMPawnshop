@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTime } from "@/lib/format";
+import { categoryLabel } from "@/lib/appraisal/valuation";
 import { Card, EmptyState, PageHeader, SectionTitle } from "@/components/ui";
 import { AuctionForm } from "./auction-form";
 
@@ -13,8 +14,9 @@ export default async function AuctionPrepPage() {
   const [{ data: items, error }, { data: batches }] = await Promise.all([
     supabase
       .from("inventory_items")
-      .select("id, vault_location, appraisal_items(weight_grams, karat, customers(full_name))")
+      .select("id, vault_location, appraisal_items(category, category_other, weight_grams, karat, customers(full_name))")
       .eq("status", "forfeited")
+      .is("archived_at", null)
       .order("vault_location"),
     supabase
       .from("auction_batches")
@@ -27,20 +29,20 @@ export default async function AuctionPrepPage() {
   const rows = (items ?? []).map((item) => {
     const appraisal = (
       item as unknown as {
-        appraisal_items: { weight_grams: number; karat: number; customers: { full_name: string } | null } | null;
+        appraisal_items: { category: string; category_other: string | null; weight_grams: number; karat: number; customers: { full_name: string } | null } | null;
       }
     ).appraisal_items;
     return {
       id: item.id,
       location: item.vault_location,
-      label: `${appraisal?.weight_grams}g ${appraisal?.karat}k — forfeited by ${appraisal?.customers?.full_name ?? "—"}`,
+      label: `${appraisal ? categoryLabel(appraisal.category, appraisal.category_other) : ""}, ${appraisal?.karat}K, ${appraisal?.weight_grams} g, forfeited by ${appraisal?.customers?.full_name ?? ""}`,
     };
   });
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Auction & forfeiture prep"
+        title="Auction and forfeiture prep"
         description="Group forfeited items into a batch for the next liquidation or auction cycle."
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },

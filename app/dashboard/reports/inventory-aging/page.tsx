@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { daysInVault } from "@/lib/reports/loans";
 import { formatDate } from "@/lib/format";
+import { categoryLabel } from "@/lib/appraisal/valuation";
 import { ReportHeader } from "@/components/report-header";
 import { Card, EmptyState, StatusBadge, Table, TBody, TD, TH, THead, TR } from "@/components/ui";
 
@@ -14,18 +15,19 @@ type Row = {
   vault_location: string;
   status: string;
   created_at: string;
-  appraisal_items: { weight_grams: number; karat: number; customers: { full_name: string } | null } | null;
+  appraisal_items: { category: string; category_other: string | null; weight_grams: number; karat: number; customers: { full_name: string } | null } | null;
 };
 
 export default async function InventoryAgingReport() {
   await requireRole(["admin"]);
 
   const supabase = await createClient();
-  // Only items physically in the vault — redeemed items have been returned to the customer.
+  // Only items physically in the vault; redeemed items have been returned to the customer.
   const { data, error } = await supabase
     .from("inventory_items")
-    .select("id, vault_location, status, created_at, appraisal_items(weight_grams, karat, customers(full_name))")
+    .select("id, vault_location, status, created_at, appraisal_items(category, category_other, weight_grams, karat, customers(full_name))")
     .in("status", ["pawned", "extended", "forfeited", "queued_for_auction"])
+    .is("archived_at", null)
     .order("created_at");
   if (error) throw error;
   const items = (data ?? []) as unknown as Row[];
@@ -56,9 +58,9 @@ export default async function InventoryAgingReport() {
                 return (
                   <TR key={item.id} highlight={old ? "warning" : undefined}>
                     <TD className="font-medium">{item.vault_location}</TD>
-                    <TD>{item.appraisal_items?.customers?.full_name ?? "—"}</TD>
+                    <TD>{item.appraisal_items?.customers?.full_name ?? ""}</TD>
                     <TD>
-                      {item.appraisal_items?.weight_grams}g · {item.appraisal_items?.karat}k
+                      {item.appraisal_items ? `${categoryLabel(item.appraisal_items.category, item.appraisal_items.category_other)}, ${item.appraisal_items.karat}K, ${item.appraisal_items.weight_grams} g` : ""}
                     </TD>
                     <TD>
                       <StatusBadge status={item.status} label={item.status === "extended" ? "Renewed" : undefined} />

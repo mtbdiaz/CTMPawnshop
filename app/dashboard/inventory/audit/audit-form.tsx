@@ -24,7 +24,7 @@ export function AuditForm({ items }: { items: Item[] }) {
     <ActionForm
       action={submitAudit}
       className="space-y-4"
-      successMessage={() => (missing.size ? `Audit saved — ${missing.size} discrepancy(ies) recorded.` : "Audit saved — all items accounted for.")}
+      successMessage={() => (missing.size ? `Audit saved. ${missing.size} discrepancy(ies) recorded.` : "Audit saved. all items accounted for.")}
     >
       <Table>
         <THead>
@@ -76,7 +76,7 @@ export function AuditForm({ items }: { items: Item[] }) {
       <div className="px-4 pb-4">
         <TextareaField label="Overall audit notes" name="notes" rows={2} className="max-w-xl" />
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <SubmitButton pendingLabel="Saving audit…">Submit audit</SubmitButton>
+          <SubmitButton pendingLabel="Saving audit">Submit audit</SubmitButton>
           <span className="text-sm text-slate-600">
             {items.length - missing.size} of {items.length} found
             {missing.size > 0 && <span className="ml-1 font-semibold text-red-700">· {missing.size} missing</span>}

@@ -14,12 +14,12 @@ export type ButtonSize = "sm" | "md";
 
 export function buttonClasses(variant: ButtonVariant = "primary", size: ButtonSize = "md") {
   return cx(
-    "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 print:hidden",
+    "inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 print:hidden",
     size === "sm" ? "px-2.5 py-1.5 text-xs" : "px-4 py-2 text-sm",
-    variant === "primary" && "bg-navy-800 text-white shadow-sm hover:bg-navy-700",
-    variant === "secondary" && "border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50",
-    variant === "danger" && "bg-red-700 text-white shadow-sm hover:bg-red-800",
-    variant === "success" && "bg-emerald-700 text-white shadow-sm hover:bg-emerald-800",
+    variant === "primary" && "bg-navy-800 text-white hover:bg-navy-700",
+    variant === "secondary" && "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+    variant === "danger" && "bg-red-700 text-white hover:bg-red-800",
+    variant === "success" && "bg-emerald-700 text-white hover:bg-emerald-800",
     variant === "ghost" && "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
   );
 }
@@ -100,7 +100,7 @@ export function Card({
   padded?: boolean;
 }) {
   return (
-    <div className={cx("rounded-xl border border-slate-200 bg-white shadow-sm print:shadow-none", padded && "p-5", className)}>
+    <div className={cx("rounded-md border border-slate-200 bg-white", padded && "p-5", className)}>
       {children}
     </div>
   );
@@ -142,17 +142,17 @@ export function StatCard({
   const body = (
     <div
       className={cx(
-        "h-full rounded-xl border bg-white p-4 shadow-sm transition-colors",
+        "h-full rounded-md border bg-white px-4 py-3 transition-colors",
         tone === "default" && "border-slate-200",
-        tone === "gold" && "border-gold-300 bg-gold-50",
+        tone === "gold" && "border-slate-200",
         tone === "danger" && "border-red-200 bg-red-50",
         tone === "warning" && "border-amber-200 bg-amber-50",
-        tone === "success" && "border-emerald-200 bg-emerald-50",
+        tone === "success" && "border-slate-200",
         href && "hover:border-navy-300",
       )}
     >
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold tabular-nums text-navy-900">{value}</div>
+      <div className="mt-0.5 text-xl font-semibold tabular-nums text-navy-900">{value}</div>
       {hint && <div className="mt-1 text-xs text-slate-500">{hint}</div>}
     </div>
   );
@@ -206,6 +206,8 @@ export function Badge({ tone = "neutral", children, icon }: { tone?: BadgeTone; 
 const STATUS_TONES: Record<string, BadgeTone> = {
   active: "info",
   extended: "gold",
+  reinstated: "warning",
+  available: "info",
   redeemed: "success",
   defaulted: "danger",
   forfeited: "danger",
@@ -249,7 +251,7 @@ export function Alert({
     <div
       role={tone === "danger" || tone === "warning" ? "alert" : "status"}
       className={cx(
-        "flex gap-3 rounded-lg border p-3 text-sm",
+        "flex gap-3 rounded-md border p-3 text-sm",
         tone === "info" && "border-navy-200 bg-navy-50 text-navy-800",
         tone === "success" && "border-emerald-300 bg-emerald-50 text-emerald-900",
         tone === "warning" && "border-amber-300 bg-amber-50 text-amber-900",
@@ -267,7 +269,6 @@ export function Alert({
 }
 
 export function EmptyState({
-  icon = "info",
   title,
   description,
   action,
@@ -278,13 +279,10 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
-      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-navy-50 text-navy-600">
-        <Icon name={icon} className="h-5 w-5" />
-      </div>
-      <p className="mt-3 text-sm font-semibold text-slate-900">{title}</p>
-      {description && <p className="mt-1 max-w-sm text-sm text-slate-500">{description}</p>}
-      {action && <div className="mt-4 print:hidden">{action}</div>}
+    <div className="px-4 py-8 text-sm">
+      <p className="font-medium text-slate-800">{title}</p>
+      {description && <p className="mt-1 max-w-prose text-slate-500">{description}</p>}
+      {action && <div className="mt-3 print:hidden">{action}</div>}
     </div>
   );
 }
@@ -311,7 +309,7 @@ export function THead({ children }: { children: ReactNode }) {
 
 export function TH({ children, align = "left", className }: { children?: ReactNode; align?: "left" | "right"; className?: string }) {
   return (
-    <th scope="col" className={cx("px-4 py-2.5", align === "right" && "text-right", className)}>
+    <th scope="col" className={cx("px-3 py-2", align === "right" && "text-right", className)}>
       {children}
     </th>
   );
@@ -345,7 +343,7 @@ export function SortTH({
     <th
       scope="col"
       aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
-      className={cx("px-4 py-2.5", align === "right" && "text-right")}
+      className={cx("px-3 py-2", align === "right" && "text-right")}
     >
       <Link
         href={`${basePath}?${query.toString()}`}
@@ -392,7 +390,7 @@ export function TD({
   mono?: boolean;
 }) {
   return (
-    <td className={cx("px-4 py-3", align === "right" && "text-right tabular-nums", mono && "whitespace-nowrap font-mono text-xs", className)}>
+    <td className={cx("px-3 py-2", align === "right" && "text-right tabular-nums", mono && "whitespace-nowrap font-mono text-xs", className)}>
       {children}
     </td>
   );
@@ -498,7 +496,7 @@ export function SearchBar({
         name={name}
         defaultValue={defaultValue ?? ""}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm shadow-sm placeholder:text-slate-400 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20"
+        className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm placeholder:text-slate-400 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20"
       />
     </form>
   );
@@ -513,7 +511,7 @@ export function FilterTabs({
   current: string;
 }) {
   return (
-    <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1 print:hidden" role="tablist">
+    <div className="flex flex-wrap gap-1 rounded-md bg-slate-100 p-1 print:hidden" role="tablist">
       {tabs.map((tab) => {
         const active = tab.value === current;
         return (
@@ -524,7 +522,7 @@ export function FilterTabs({
             aria-selected={active}
             className={cx(
               "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              active ? "bg-white text-navy-800 shadow-sm" : "text-slate-600 hover:text-slate-900",
+              active ? "bg-white text-navy-800" : "text-slate-600 hover:text-slate-900",
             )}
           >
             {tab.label}
@@ -549,9 +547,9 @@ export function CreatePanel({
   children: ReactNode;
 }) {
   return (
-    <details open={defaultOpen} className="group mb-6 rounded-xl border border-slate-200 bg-white shadow-sm print:hidden">
-      <summary className="flex cursor-pointer list-none items-center gap-3 rounded-xl px-5 py-4 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-navy-800 text-white">
+    <details open={defaultOpen} className="group mb-6 rounded-md border border-slate-200 bg-white print:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-3 rounded-md px-5 py-4 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-navy-800 text-white">
           <Icon name="plus" className="h-4 w-4" />
         </span>
         <span className="flex-1">
@@ -563,4 +561,17 @@ export function CreatePanel({
       <div className="border-t border-slate-100 px-5 py-5">{children}</div>
     </details>
   );
+}
+
+/** Item 11: every link to a record is a visible button in an actions column. */
+export function ViewButton({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link href={href} className={cx(buttonClasses("secondary", "sm"), "whitespace-nowrap")}>
+      {children}
+    </Link>
+  );
+}
+
+export function ActionsCell({ children }: { children: ReactNode }) {
+  return <td className="px-3 py-1.5 text-right print:hidden"><div className="flex justify-end gap-1.5">{children}</div></td>;
 }

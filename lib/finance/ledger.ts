@@ -1,6 +1,8 @@
 export type LedgerEntry = {
   amount: number;
   direction: "in" | "out";
+  /** Non-cash memo (e.g. capitalized interest): shown in the ledger, never moves cash. */
+  is_memo?: boolean;
 };
 
 // PB-28: running cash position — net of all "in" vs "out" entries.
@@ -12,6 +14,7 @@ export function computeCashPosition(entries: LedgerEntry[]): {
   let totalIn = 0;
   let totalOut = 0;
   for (const entry of entries) {
+    if (entry.is_memo) continue;
     if (entry.direction === "in") totalIn += entry.amount;
     else totalOut += entry.amount;
   }
@@ -23,7 +26,7 @@ export function computeCashPosition(entries: LedgerEntry[]): {
 export function computeRunningBalances(entries: LedgerEntry[]): number[] {
   let balance = 0;
   return entries.map((entry) => {
-    balance += entry.direction === "in" ? entry.amount : -entry.amount;
+    if (!entry.is_memo) balance += entry.direction === "in" ? entry.amount : -entry.amount;
     return round2(balance);
   });
 }

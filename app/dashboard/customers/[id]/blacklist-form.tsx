@@ -14,7 +14,7 @@ export function BlacklistForm({ customer }: { customer: Tables<"customers"> }) {
         </p>
         <SubmitButton
           variant="secondary"
-          pendingLabel="Updating…"
+          pendingLabel="Updating"
           confirm={{
             title: "Remove from blacklist?",
             message: `${customer.full_name} will be able to transact again. This change is recorded in the audit trail.`,
@@ -42,7 +42,7 @@ export function BlacklistForm({ customer }: { customer: Tables<"customers"> }) {
         variant="danger"
         name="is_blacklisted"
         value="on"
-        pendingLabel="Updating…"
+        pendingLabel="Updating"
         confirm={{
           title: "Blacklist this customer?",
           message: `${customer.full_name} will be blocked from all new appraisals and loans until an Admin removes the flag.`,

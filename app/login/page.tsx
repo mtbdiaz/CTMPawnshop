@@ -92,7 +92,7 @@ export default function LoginPage() {
 
         <button type="submit" disabled={loading} className={cx(buttonClasses("primary"), "w-full py-2.5")}>
           {loading && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true" />}
-          {loading ? "Signing in…" : "Sign in"}
+          {loading ? "Signing in" : "Sign in"}
         </button>
 
         <p className="text-center text-xs text-slate-500">Forgot your password? Ask an Admin to reset it for you.</p>

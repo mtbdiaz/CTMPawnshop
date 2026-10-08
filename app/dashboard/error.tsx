@@ -23,7 +23,7 @@ export default function DashboardError({
       </div>
       <h1 className="mt-4 font-display text-2xl font-semibold text-navy-900">Something went wrong</h1>
       <p className="mt-2 text-sm text-slate-600">
-        This page couldn&apos;t be loaded — usually a brief connection problem with the database. Your
+        This page couldn&apos;t be loaded, usually a brief connection problem with the database. Your
         data is safe. Try again, and if it keeps happening, let an Admin know.
       </p>
       {error.digest && <p className="mt-2 font-mono text-xs text-slate-400">Reference: {error.digest}</p>}

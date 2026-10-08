@@ -33,43 +33,29 @@ const EVERYONE: StaffRole[] = ["operator", "cashier", "appraiser"];
 // this so a role never sees a menu item that just bounces them back.
 export const NAV_SECTIONS: NavSection[] = [
   {
-    title: "Overview",
-    items: [{ href: "/dashboard", label: "Dashboard", icon: "home", roles: EVERYONE }],
-  },
-  {
-    title: "Pawn operations",
+    title: "Counter",
     items: [
+      { href: "/dashboard", label: "Dashboard", icon: "home", roles: EVERYONE },
+      { href: "/dashboard/loans", label: "Loans", icon: "ticket", roles: EVERYONE },
       { href: "/dashboard/customers", label: "Customers", icon: "users", roles: EVERYONE },
       { href: "/dashboard/appraisals", label: "Appraisals", icon: "scale", roles: EVERYONE },
-      { href: "/dashboard/loans", label: "Loans", icon: "ticket", roles: EVERYONE },
-      { href: "/dashboard/compliance/reminders", label: "Due-date reminders", icon: "bell", roles: ["cashier"] },
+      { href: "/dashboard/compliance/reminders", label: "Reminders", icon: "bell", roles: ["cashier"] },
     ],
   },
   {
-    title: "Vault",
+    title: "Vault & cash",
     items: [
       { href: "/dashboard/inventory", label: "Inventory", icon: "vault", roles: EVERYONE },
-      { href: "/dashboard/inventory/audit", label: "Physical audit", icon: "clipboard", roles: ["operator"] },
-      { href: "/dashboard/inventory/auction", label: "Auction prep", icon: "gavel", roles: ["operator"] },
+      { href: "/dashboard/finance", label: "Cash & ledger", icon: "cash", roles: ["operator", "cashier"] },
     ],
   },
   {
-    title: "Finance",
-    items: [{ href: "/dashboard/finance", label: "Cash & ledger", icon: "cash", roles: ["operator", "cashier"] }],
-  },
-  {
-    title: "Oversight",
+    title: "Admin",
     items: [
       { href: "/dashboard/compliance", label: "Suspicious activity", icon: "shield", roles: [] },
-      { href: "/dashboard/compliance/audit", label: "Audit trail", icon: "log", roles: [] },
       { href: "/dashboard/reports", label: "Reports", icon: "chart", roles: [] },
-    ],
-  },
-  {
-    title: "Administration",
-    items: [
-      { href: "/dashboard/settings", label: "System settings", icon: "settings", roles: [] },
-      { href: "/dashboard/users", label: "User accounts", icon: "id", roles: [] },
+      { href: "/dashboard/settings", label: "Settings", icon: "settings", roles: [] },
+      { href: "/dashboard/archive", label: "Archive", icon: "log", roles: [] },
     ],
   },
 ];

@@ -35,3 +35,22 @@ export async function recordCashEntry(
   revalidatePath("/dashboard/finance");
   return { success: true };
 }
+
+// Item 5: Admin correction of a manual entry. Reason required; audited.
+export async function adminEditCashEntry(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["admin"]);
+  const id = String(formData.get("entry_id") ?? "");
+  const amount = Number(formData.get("amount"));
+  const description = String(formData.get("description") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  const fieldErrors: FieldErrors = {};
+  if (!(amount > 0)) fieldErrors.amount = "Amount must be greater than 0";
+  if (!description) fieldErrors.description = "Description is required";
+  if (reason.length < 5) fieldErrors.reason = "Write a reason of at least 5 characters";
+  if (!id || Object.keys(fieldErrors).length) return { error: "Please fix the highlighted fields.", fieldErrors };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_edit_cash_entry", { p_id: id, p_amount: amount, p_description: description, p_reason: reason });
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/finance");
+  return { success: true };
+}

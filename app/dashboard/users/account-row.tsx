@@ -24,7 +24,7 @@ export function AccountRow({ account, isSelf }: { account: Account; isSelf: bool
             </label>
             <input id={`name-${account.id}`} name="full_name" defaultValue={account.full_name} required className={inputClass} />
             <span className="mt-0.5 block text-xs text-slate-500">
-              {account.email ?? "—"}
+              {account.email ?? ""}
               {isSelf && " · you"}
             </span>
           </div>
@@ -41,7 +41,7 @@ export function AccountRow({ account, isSelf }: { account: Account; isSelf: bool
             </select>
             {isSelf && <input type="hidden" name="role" value={account.role} />}
           </div>
-          <SubmitButton variant="secondary" size="sm" pendingLabel="Saving…">
+          <SubmitButton variant="secondary" size="sm" pendingLabel="Saving">
             Save
           </SubmitButton>
         </ActionForm>
@@ -56,7 +56,7 @@ export function AccountRow({ account, isSelf }: { account: Account; isSelf: bool
                 <SubmitButton
                   variant="secondary"
                   size="sm"
-                  pendingLabel="Resetting…"
+                  pendingLabel="Resetting"
                   confirm={{
                     title: `Reset ${account.full_name}'s password?`,
                     message: "Their current password stops working immediately. You'll get a temporary password to share with them.",
@@ -85,7 +85,7 @@ export function AccountRow({ account, isSelf }: { account: Account; isSelf: bool
                 <SubmitButton
                   variant="danger"
                   size="sm"
-                  pendingLabel="Deactivating…"
+                  pendingLabel="Deactivating"
                   confirm={{
                     title: `Deactivate ${account.full_name}?`,
                     message: "They'll be signed out and blocked from logging in until an Admin reactivates the account.",
@@ -95,7 +95,7 @@ export function AccountRow({ account, isSelf }: { account: Account; isSelf: bool
                   Deactivate
                 </SubmitButton>
               ) : (
-                <SubmitButton variant="secondary" size="sm" pendingLabel="Reactivating…">
+                <SubmitButton variant="secondary" size="sm" pendingLabel="Reactivating">
                   Reactivate
                 </SubmitButton>
               )}
