@@ -71,15 +71,37 @@ export default async function DashboardPage() {
   const loans = (openLoans ?? []) as unknown as LoanRow[];
   const now = new Date();
   const today = manilaToday(now);
-  const overdue = loans.filter((l) => daysUntilDue(l.maturity_date, today) < 0);
+  // What the customer owes today: principal left + interest
+  // (including interest that piled up after the due date).
+  // Moved to the top so the lines below can use it.
+  const owedNow = (l: LoanRow) => Number(l.principal_balance) + accruedInterest(l, today).interestOwed;
+
+  // D1: a loan with nothing left to pay is "paid, ready to release".
+  // We check "less than 1 centavo" instead of "equals 0" because
+  // computers can leave tiny leftovers like 0.0000001 when adding decimals.
+  const isPaid = (l: LoanRow) => owedNow(l) < 0.01;
+
+  // All paid loans whose item is still in the vault
+  const readyToRelease = loans.filter(isPaid);
+
+  // Overdue = past the due date AND still owes money.
+  // "!isPaid(l)" means "not paid" (the ! flips true/false).
+  const overdue = loans.filter((l) => !isPaid(l) && daysUntilDue(l.maturity_date, today) < 0);
+
+  // Due soon = due today or within 7 days, and still owes money
   const dueSoon = loans.filter((l) => {
+    if (isPaid(l)) return false; // paid loans are never "due soon"
     const days = daysUntilDue(l.maturity_date, today);
     return days >= 0 && days <= 7;
   });
-  const owedNow = (l: LoanRow) => Number(l.principal_balance) + accruedInterest(l, today).interestOwed;
+
+  // Total still owed across all open loans (paid ones add ₱0)
   const outstanding = loans.reduce((sum, l) => sum + owedNow(l), 0);
   const cash = computeCashPosition(todayCash ?? []);
-  const attention = [...overdue, ...dueSoon].slice(0, 8);
+
+  // Needs attention list order: paid first (quick to finish at the counter),
+  // then overdue, then due soon. ".slice(0, 8)" keeps only the first 8.
+  const attention = [...readyToRelease, ...overdue, ...dueSoon].slice(0, 8);
 
   const primary = hasRole(role, ["cashier"])
     ? { href: "/dashboard/loans/new", label: "New loan" }
@@ -125,7 +147,7 @@ export default async function DashboardPage() {
       )}
 
       <section>
-        <SectionTitle description="Overdue loans first, then loans due within 7 days.">Needs attention</SectionTitle>
+        <SectionTitle description="Paid loans waiting to be released, then overdue loans, then loans due within 7 days.">Needs attention</SectionTitle>
         <Card padded={false}>
           {attention.length === 0 ? (
             <EmptyState title="Nothing overdue or due in the next 7 days." />
@@ -143,7 +165,10 @@ export default async function DashboardPage() {
               </THead>
               <TBody>
                 {attention.map((loan) => {
-                  const late = -daysUntilDue(loan.maturity_date, today);
+                  // paid = nothing left to pay. A paid loan is never "late",
+                  // so it won't get the red row or the "(1d late)" text.
+                  const paid = isPaid(loan);
+                  const late = paid ? 0 : -daysUntilDue(loan.maturity_date, today);
                   return (
                     <TR key={loan.id} highlight={late > 0 ? "danger" : undefined}>
                       <TD mono>{loan.ticket_number}</TD>
@@ -154,7 +179,13 @@ export default async function DashboardPage() {
                       </TD>
                       <TD align="right">{formatPeso(owedNow(loan))}</TD>
                       <TD>
-                        <StatusBadge status={late > 0 ? "defaulted" : loan.status} label={late > 0 ? "Overdue" : loan.status === "extended" ? "Renewed" : undefined} />
+                        {/* Paid loans get a green badge telling the cashier to release the item.
+                            status="redeemed" borrows the green color already used for redeemed loans. */}
+                        {paid ? (
+                          <StatusBadge status="redeemed" label="Paid, ready to release" />
+                        ) : (
+                          <StatusBadge status={late > 0 ? "defaulted" : loan.status} label={late > 0 ? "Overdue" : loan.status === "extended" ? "Renewed" : undefined} />
+                        )}
                       </TD>
                       <ActionsCell>
                         <ViewButton href={`/dashboard/loans/${loan.id}`}>View loan</ViewButton>
