@@ -6,7 +6,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
-import { customerSchema } from "@/lib/validation/customer";
+// also import the shared phone rule we just exported
+import { customerSchema, phPhoneSchema } from "@/lib/validation/customer";
 import { runAmlCheck } from "@/lib/customers/aml";
 
 export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; customerId?: string };
@@ -63,7 +64,7 @@ export async function createCustomer(
 // (database trigger); only an Admin can correct them, with a reason.
 const contactSchema = z.object({
   address: z.string().trim().min(1, "Address is required"),
-  contact_number: z.string().trim().min(1, "Contact number is required"),
+    contact_number: phPhoneSchema, // same rule as registration
   email: z.string().trim().email("Enter a valid email").optional().or(z.literal("")),
   date_of_birth: z.string().trim().optional().or(z.literal("")),
 });

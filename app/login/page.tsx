@@ -45,7 +45,7 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthCard title="Welcome back" subtitle="Sign in with the staff account your Admin created for you.">
+    <AuthCard title="Sign in" subtitle="Sign in with the staff account your Admin created for you.">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-slate-700">
