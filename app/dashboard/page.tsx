@@ -1,11 +1,13 @@
 import { getCurrentUser } from "@/lib/auth/session";
-import { hasRole } from "@/lib/auth/roles";
+// ROLE_LABELS turns "appraiser" into "Appraiser" for display
+import { hasRole, ROLE_LABELS } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { computeCashPosition } from "@/lib/finance/ledger";
 import { daysUntilDue } from "@/lib/compliance/reminders";
 import { formatDate, formatPeso, manilaDayStart, manilaToday } from "@/lib/format";
 import { accruedInterest } from "@/lib/loans/accrual";
 import {
+  Alert,
   ButtonLink,
   Card,
   EmptyState,
@@ -37,7 +39,11 @@ type LoanRow = {
   customers: { full_name: string } | null;
 };
 
-export default async function DashboardPage() {
+// searchParams = the "?something=value" part of the address.
+// We only care about "denied".
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
+  // "await" waits for Next.js to finish reading the address
+  const { denied } = await searchParams;
   const user = await getCurrentUser();
   if (!user) return null;
   const role = user.profile.role;
@@ -143,6 +149,13 @@ export default async function DashboardPage() {
           ) : undefined
         }
       />
+
+            {/* D2: only shows when the address has ?denied=1 */}
+      {denied === "1" && (
+        <Alert tone="warning" title="You don't have access to that page.">
+          It is not available to your role ({ROLE_LABELS[role]}). Ask an Admin if you need it.
+        </Alert>
+      )}
 
       {(pendingFlags ?? 0) > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
