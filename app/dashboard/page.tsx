@@ -101,7 +101,27 @@ export default async function DashboardPage() {
 
   // Needs attention list order: paid first (quick to finish at the counter),
   // then overdue, then due soon. ".slice(0, 8)" keeps only the first 8.
-  const attention = [...readyToRelease, ...overdue, ...dueSoon].slice(0, 8);
+  // D3: keep the FULL list too, so we know if some got cut off
+  const attentionAll = [...readyToRelease, ...overdue, ...dueSoon];
+  // Only the first 8 are shown in the table
+  const attention = attentionAll.slice(0, 8);
+
+  // D5: defaulted loans (grace period ended, not fully paid).
+  // Only an Admin can forfeit, so only Admin asks the database for them.
+  // "condition ? A : B" = if Admin, run the query (A); otherwise use an empty list (B).
+  const { data: defaultedRows } =
+    role === "admin"
+      ? await supabase
+          .from("loans") // the loans table
+          .select("id, ticket_number, maturity_date, defaulted_at, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, status, customers(full_name)") // columns we need, plus the customer's name
+          .eq("status", "defaulted") // only defaulted loans
+          .is("archived_at", null) // skip archived ones
+          .order("defaulted_at") // oldest default first
+      : { data: [] };
+
+  // Tell TypeScript each row looks like a LoanRow plus a defaulted_at date.
+  // "?? []" means: if the database gave back nothing, use an empty list.
+  const waitingForfeit = (defaultedRows ?? []) as unknown as (LoanRow & { defaulted_at: string | null })[];
 
   const primary = hasRole(role, ["cashier"])
     ? { href: "/dashboard/loans/new", label: "New loan" }
@@ -196,8 +216,58 @@ export default async function DashboardPage() {
               </TBody>
             </Table>
           )}
+
+          {/* D3: only shows when some loans were cut off.
+              "condition && (...)" means: show the part in brackets only if the condition is true. */}
+          {attentionAll.length > attention.length && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3 text-sm text-slate-600">
+              <span>
+                Showing {attention.length} of {attentionAll.length}.
+              </span>
+              <ButtonLink href="/dashboard/loans?status=open" size="sm">
+                View all open loans
+              </ButtonLink>
+            </div>
+          )}
         </Card>
       </section>
+
+      {/* D5: Admin-only list of defaulted loans. Hidden when there are none. */}
+      {waitingForfeit.length > 0 && (
+        <section>
+          <SectionTitle description="Grace period ended without full payment. Open each loan to forfeit it.">Waiting for forfeit</SectionTitle>
+          <Card padded={false}>
+            <Table minWidth="640px">
+              <THead>
+                <TH>Ticket</TH>
+                <TH>Customer</TH>
+                <TH>Due</TH>
+                <TH>Defaulted</TH>
+                <TH align="right">Owed now</TH>
+                <TH>
+                  {/* sr-only = hidden on screen, read out by screen readers */}
+                  <span className="sr-only">Actions</span>
+                </TH>
+              </THead>
+              <TBody>
+                {/* .map() makes one table row for each defaulted loan */}
+                {waitingForfeit.map((loan) => (
+                  <TR key={loan.id} highlight="danger">
+                    <TD mono>{loan.ticket_number}</TD>
+                    <TD>{loan.customers?.full_name ?? ""}</TD>
+                    <TD>{formatDate(loan.maturity_date)}</TD>
+                    <TD>{formatDate(loan.defaulted_at)}</TD>
+                    <TD align="right">{formatPeso(owedNow(loan))}</TD>
+                    <ActionsCell>
+                      <ViewButton href={`/dashboard/loans/${loan.id}`}>View loan</ViewButton>
+                    </ActionsCell>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          </Card>
+        </section>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Open loans" value={loans.length} hint={`${formatPeso(outstanding)} outstanding`} href="/dashboard/loans?status=open" />
