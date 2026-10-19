@@ -10,7 +10,7 @@ const REPORTS = [
   { href: "/dashboard/reports/inventory-aging", label: "Inventory aging", description: "How long each item has been held in the vault." },
   { href: "/dashboard/reports/financial-summary", label: "Financial summary", description: "Cash in, cash out and net position for a date range." },
   { href: "/dashboard/reports/compliance", label: "Compliance / AML", description: "AML flags, blacklist actions and suspicious-activity reviews." },
-  { href: "/dashboard/reports/analytics", label: "Trends", description: "Redemption and forfeiture rates, average loan, monthly volume." },
+  { href: "/dashboard/reports/analytics", label: "Trends & analytics", description: "Redemption and forfeiture rates, average loan, monthly volume." },
 ];
 
 // Item 13: Reports and the Audit Trail share one page. Both are Admin-only
