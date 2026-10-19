@@ -166,8 +166,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <strong>{pendingFlags}</strong> appraisal{pendingFlags === 1 ? "" : "s"} flagged as possible counterfeit
             {role === "admin" ? ". Awaiting your review." : ". Waiting on an Admin."}
           </span>
+                    {/* the button that opens the list of flagged appraisals */}
           <ButtonLink href="/dashboard/appraisals?risk=pending" size="sm">
-            Review flags
+            {/* D6: only an Admin can clear or confirm a flag, so other roles just "view" */}
+            {/* if the role is admin show "Review flags", otherwise show "View flags" */}
+            {role === "admin" ? "Review flags" : "View flags"}
+          {/* end of the button */}
           </ButtonLink>
         </div>
       )}
