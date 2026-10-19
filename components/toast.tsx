@@ -63,14 +63,20 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number)
       >
         <Icon name={toast.tone === "success" ? "check" : "alert"} className="h-3 w-3" />
       </span>
-      <p className="flex-1">{toast.message}</p>
+           {/* the X button that closes the popup message */}
       <button
+        // a normal button, not a form submit button
         type="button"
+        // when clicked, close this popup
         onClick={() => onDismiss(toast.id)}
-        className="text-slate-400 hover:text-slate-700"
+        // F3: slate-500 so the X button is easy to see
+        className="text-slate-500 hover:text-slate-700"
+        // screen readers read this out, since the button has no text
         aria-label="Dismiss notification"
       >
+        {/* the X icon */}
         <Icon name="x" className="h-4 w-4" />
+      {/* end of the button */}
       </button>
     </div>
   );

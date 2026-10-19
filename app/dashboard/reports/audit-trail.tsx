@@ -104,7 +104,8 @@ export async function AuditTrail({ params }: { params: { table?: string; action?
                     <TD className="whitespace-nowrap text-slate-600">{formatDateTime(e.created_at)}</TD>
                     <TD>
                       {humanize(e.table_name)}
-                      <span className="block font-mono text-[11px] text-slate-400">{e.record_id}</span>
+                                           {/* F3: slate-500 so the record ID is readable */}
+                      <span className="block font-mono text-[11px] text-slate-500">{e.record_id}</span>
                     </TD>
                     <TD>
                       <Badge tone={e.action === "DELETE" ? "danger" : e.action === "INSERT" ? "success" : "info"}>

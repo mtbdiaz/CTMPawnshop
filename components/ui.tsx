@@ -496,7 +496,8 @@ export function SearchBar({
         name={name}
         defaultValue={defaultValue ?? ""}
         placeholder={placeholder}
-        className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm placeholder:text-slate-400 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20"
+                // F3: placeholder slate-500 instead of slate-400 (easier to read)
+        className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm placeholder:text-slate-500 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20"
       />
     </form>
   );
@@ -526,7 +527,8 @@ export function FilterTabs({
             )}
           >
             {tab.label}
-            {tab.count !== undefined && <span className="ml-1 text-slate-400">{tab.count}</span>}
+                        {/* F3: darker grey so the count is readable on the grey tab bar */}
+            {tab.count !== undefined && <span className="ml-1 text-slate-600">{tab.count}</span>}
           </Link>
         );
       })}

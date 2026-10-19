@@ -26,7 +26,8 @@ export default function DashboardError({
         This page couldn&apos;t be loaded, usually a brief connection problem with the database. Your
         data is safe. Try again, and if it keeps happening, let an Admin know.
       </p>
-      {error.digest && <p className="mt-2 font-mono text-xs text-slate-400">Reference: {error.digest}</p>}
+            {/* F3: slate-500 so the reference code is readable */}
+      {error.digest && <p className="mt-2 font-mono text-xs text-slate-500">Reference: {error.digest}</p>}
       <div className="mt-6 flex justify-center gap-2">
         <button type="button" onClick={reset} className={buttonClasses("primary")}>
           Try again

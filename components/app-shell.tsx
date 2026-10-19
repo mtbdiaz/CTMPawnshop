@@ -55,7 +55,8 @@ export function AppShell({
         <div key={section.title}>
           <p
             className={cx(
-              "px-3 text-[10px] font-semibold uppercase tracking-wider text-navy-300/70 transition-opacity duration-200 motion-reduce:transition-none",
+                            // F3: full navy-300, the /70 made it see-through and too faint
+              "px-3 text-[10px] font-semibold uppercase tracking-wider text-navy-300 transition-opacity duration-200 motion-reduce:transition-none",
               rail && "opacity-0",
             )}
             aria-hidden={rail}
