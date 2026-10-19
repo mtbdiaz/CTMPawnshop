@@ -1,3 +1,5 @@
+// Link = Next.js's clickable link (used for the tappable phone rows)
+import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 // ROLE_LABELS turns "appraiser" into "Appraiser" for display
 import { hasRole, ROLE_LABELS } from "@/lib/auth/roles";
@@ -23,6 +25,7 @@ import {
   TR,
   ActionsCell,
   ViewButton,
+  cx, //  joins class names together, and can add some only when a condition is true
 } from "@/components/ui";
 
 export const metadata = { title: "Dashboard" };
@@ -185,6 +188,43 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           {attention.length === 0 ? (
             <EmptyState title="Nothing overdue or due in the next 7 days." />
           ) : (
+             <>
+              {/* D4: PHONE ONLY (sm:hidden). One compact block per loan instead of a wide table. */}
+              <ul className="divide-y divide-slate-100 sm:hidden">
+                {attention.map((loan) => {
+                  const paid = isPaid(loan);
+                  const late = paid ? 0 : -daysUntilDue(loan.maturity_date, today);
+                  return (
+                    <li key={loan.id}>
+                      {/* The whole block is one big link: easy to tap with a thumb.
+                          cx(...) adds the light red background only when the loan is late. */}
+                      <Link href={`/dashboard/loans/${loan.id}`} className={cx("block px-4 py-3 hover:bg-slate-50", late > 0 && "bg-red-50/70")}>
+                        {/* Line 1: customer on the left, amount owed on the right */}
+                        <div className="flex items-start justify-between gap-3">
+                          <span className="font-medium text-slate-900">{loan.customers?.full_name ?? ""}</span>
+                          <span className="whitespace-nowrap font-medium tabular-nums text-slate-900">{formatPeso(owedNow(loan))}</span>
+                        </div>
+                        {/* Line 2: status badge, due date, ticket number */}
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+                          {paid ? (
+                            <StatusBadge status="redeemed" label="Paid, ready to release" />
+                          ) : (
+                            <StatusBadge status={late > 0 ? "defaulted" : loan.status} label={late > 0 ? "Overdue" : loan.status === "extended" ? "Renewed" : undefined} />
+                          )}
+                          <span>
+                            Due {formatDate(loan.maturity_date)}
+                            {late > 0 && <span className="font-semibold text-red-700"> ({late}d late)</span>}
+                          </span>
+                          <span className="font-mono">{loan.ticket_number}</span>
+                        </div>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {/* COMPUTER ONLY (hidden sm:block): the original table */}
+              <div className="hidden sm:block">
             <Table minWidth="640px">
               <THead>
                 <TH>Ticket</TH>
@@ -227,7 +267,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   );
                 })}
               </TBody>
-            </Table>
+                        </Table>
+              {/* closes <div className="hidden sm:block"> from step c (the computer-only table) */}
+              </div>
+            {/* closes the <> fragment from step c (it groups the phone list + the table) */}
+            </>
           )}
 
           {/* D3: only shows when some loans were cut off.
@@ -275,14 +319,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                       <ViewButton href={`/dashboard/loans/${loan.id}`}>View loan</ViewButton>
                     </ActionsCell>
                   </TR>
-                ))}
-              </TBody>
-            </Table>
+                  ))}
+                </TBody>
+             </Table>
           </Card>
         </section>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/* D4: grid-cols-2 = 2 cards per row on phones.
+          xl:grid-cols-4 = 4 per row on extra-wide screens (1280px and up). */}
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard label="Open loans" value={loans.length} hint={`${formatPeso(outstanding)} outstanding`} href="/dashboard/loans?status=open" />
         <StatCard
           label="Overdue"
