@@ -57,14 +57,16 @@ export default async function FinancialSummaryReport({
           <label htmlFor="from" className="block text-xs font-medium text-slate-600">
             From
           </label>
-          <input id="from" name="from" type="date" defaultValue={rangeStart} max={today} className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-        </div>
+          {/* F4: rounded-md (6px corners) */}
+          <input id="from" name="from" type="date" defaultValue={rangeStart} max={today} className="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm" />        
+          </div>
         <div>
           <label htmlFor="to" className="block text-xs font-medium text-slate-600">
             To
           </label>
-          <input id="to" name="to" type="date" defaultValue={rangeEnd} max={today} className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-        </div>
+          {/* F4: rounded-md (6px corners) */}
+          <input id="to" name="to" type="date" defaultValue={rangeEnd} max={today} className="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm" />        
+          </div>
         <button type="submit" className={buttonClasses("primary")}>
           Update report
         </button>

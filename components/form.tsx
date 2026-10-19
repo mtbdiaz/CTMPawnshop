@@ -142,7 +142,8 @@ export function ActionForm<S extends FormState>({
       <dialog
         ref={dialogRef}
         onClose={() => setConfirmReq(null)}
-        className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-slate-200 p-0 shadow-2xl backdrop:bg-navy-950/50"
+        // F4: rounded-md corners; the shadow stays because dialogs float above the page
+        className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-md border border-slate-200 p-0 shadow-2xl backdrop:bg-navy-950/50"
       >
         {confirmReq && (
           <div className="p-6">
@@ -245,8 +246,9 @@ export function SubmitButton({
 }
 
 // F3: placeholder:text-slate-500 (was slate-400, too faint)
+// F4: rounded-md (6px corners) and no shadow, like the rest of the app
 const controlClass =
-  "mt-1 block w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 disabled:bg-slate-100 disabled:text-slate-500";
+  "mt-1 block w-full rounded-md border bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 disabled:bg-slate-100 disabled:text-slate-500";
 function controlState(error?: string) {
   return error
     ? "border-red-500 focus:border-red-600 focus:ring-red-500/20"

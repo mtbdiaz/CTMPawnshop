@@ -6,8 +6,9 @@ import { createClient } from "@/lib/supabase/client";
 import { AuthCard } from "@/components/auth-card";
 import { Alert, buttonClasses, cx } from "@/components/ui";
 
+// F4: rounded-md (6px corners) and no shadow, same as the other inputs
 const inputClass =
-  "mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm shadow-sm focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20";
+  "mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20";
 
 function friendlyAuthError(message: string): string {
   if (/invalid login credentials/i.test(message)) return "That email and password don't match. Check them and try again.";

@@ -51,7 +51,8 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number)
     <div
       role="status"
       className={cx(
-        "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border px-4 py-3 text-sm shadow-lg",
+        // F4: rounded-md corners; the shadow stays because the popup floats above the page
+        "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-md border px-4 py-3 text-sm shadow-lg",        
         toast.tone === "success" ? "border-emerald-300 bg-white text-slate-900" : "border-red-300 bg-white text-slate-900",
       )}
     >
