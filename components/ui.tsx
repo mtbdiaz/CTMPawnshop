@@ -118,7 +118,8 @@ export function SectionTitle({
   return (
     <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
       <div>
-        <h2 className="text-base font-semibold text-slate-900">{children}</h2>
+                {/* Dashboard polish: text-lg (18px) instead of text-base (16px) so section titles stand out from the text under them */}
+        <h2 className="text-lg font-semibold text-slate-900">{children}</h2>
         {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
       </div>
       {actions && <div className="flex items-center gap-2 print:hidden">{actions}</div>}
@@ -152,7 +153,8 @@ export function StatCard({
       )}
     >
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-0.5 text-xl font-semibold tabular-nums text-navy-900">{value}</div>
+            {/* Dashboard polish: text-2xl (24px) instead of text-xl (20px) so the numbers read at a glance */}
+      <div className="mt-0.5 text-2xl font-semibold tabular-nums text-navy-900">{value}</div>
       {hint && <div className="mt-1 text-xs text-slate-500">{hint}</div>}
     </div>
   );
