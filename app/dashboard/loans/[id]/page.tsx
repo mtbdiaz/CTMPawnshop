@@ -107,7 +107,11 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
       )}
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <div className="space-y-5 lg:col-span-2">
+        {/* F1: opens the left column (loan details + payments).
+            min-w-0 = this column may shrink to fit a phone screen.
+            Without it, the 640px-wide Payments table stretches the whole page sideways.
+            space-y-5 = gap between the cards. lg:col-span-2 = takes 2 of 3 columns on big screens. */}
+        <div className="min-w-0 space-y-5 lg:col-span-2">
           <Card>
             <DetailGrid
               items={[

@@ -9,8 +9,9 @@ import { recordPayment, processExtension, redeemLoan, capitalizeLoan, reinstateL
 function LostTicketFields() {
   const [show, setShow] = useState(false);
   return (
-    <div className="space-y-2 rounded-lg bg-slate-50 p-3">
-      <CheckboxField
+    // F4: rounded-md (6px corners)
+    <div className="space-y-2 rounded-md bg-slate-50 p-3">     
+     <CheckboxField
         name="lost_ticket"
         label="Customer lost their physical ticket"
         hint="Verify identity with the ID number on file instead."

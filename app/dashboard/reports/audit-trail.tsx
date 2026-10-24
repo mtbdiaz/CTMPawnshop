@@ -62,8 +62,9 @@ export async function AuditTrail({ params }: { params: { table?: string; action?
             <label htmlFor="table" className="block text-xs font-medium text-slate-600">
               Record type
             </label>
-            <select id="table" name="table" defaultValue={table ?? ""} className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              <option value="">All records</option>
+            {/* F4: rounded-md (6px corners) */}
+            <select id="table" name="table" defaultValue={table ?? ""} className="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm">             
+               <option value="">All records</option>
               {TABLES.map((t) => (
                 <option key={t} value={t}>
                   {humanize(t)}
@@ -75,8 +76,9 @@ export async function AuditTrail({ params }: { params: { table?: string; action?
             <label htmlFor="action" className="block text-xs font-medium text-slate-600">
               Action
             </label>
-            <select id="action" name="action" defaultValue={action ?? ""} className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              <option value="">Any</option>
+            {/* F4: rounded-md (6px corners) */}
+            <select id="action" name="action" defaultValue={action ?? ""} className="mt-1 rounded-md border border-slate-300 px-3 py-2 text-sm">             
+               <option value="">Any</option>
               {ACTIONS.map((a) => (
                 <option key={a} value={a}>
                   {ACTION_LABEL[a]}
@@ -104,7 +106,8 @@ export async function AuditTrail({ params }: { params: { table?: string; action?
                     <TD className="whitespace-nowrap text-slate-600">{formatDateTime(e.created_at)}</TD>
                     <TD>
                       {humanize(e.table_name)}
-                      <span className="block font-mono text-[11px] text-slate-400">{e.record_id}</span>
+                                           {/* F3: slate-500 so the record ID is readable */}
+                      <span className="block font-mono text-[11px] text-slate-500">{e.record_id}</span>
                     </TD>
                     <TD>
                       <Badge tone={e.action === "DELETE" ? "danger" : e.action === "INSERT" ? "success" : "info"}>

@@ -55,7 +55,8 @@ export function AppShell({
         <div key={section.title}>
           <p
             className={cx(
-              "px-3 text-[10px] font-semibold uppercase tracking-wider text-navy-300/70 transition-opacity duration-200 motion-reduce:transition-none",
+                            // F3: full navy-300, the /70 made it see-through and too faint
+              "px-3 text-[10px] font-semibold uppercase tracking-wider text-navy-300 transition-opacity duration-200 motion-reduce:transition-none",
               rail && "opacity-0",
             )}
             aria-hidden={rail}
@@ -152,11 +153,24 @@ export function AppShell({
           >
             <Icon name="menu" className="h-5 w-5" />
           </button>
-          <span className="font-display text-base font-semibold text-navy-900">CTM PawnTrack</span>
+          {/* D4: app name shown on phones next to the menu button.
+              whitespace-nowrap = never break this text onto 2 lines */}
+          <span className="whitespace-nowrap font-display text-base font-semibold text-navy-900">CTM PawnTrack</span>
         </div>
         <div className="ml-auto flex items-center gap-3 text-sm">
-          <span className="text-slate-700">
-            {userName} <span className="text-slate-400">·</span> <span className="text-slate-500">{roleLabel}</span>
+          {/* D4: name and role in the top bar.
+              Phones show only the role; wider screens show "Name · Role". */}
+          {/* opens the name + role group. whitespace-nowrap = keep it on 1 line */}
+          <span className="whitespace-nowrap text-slate-700">
+            {/* opens the name part. hidden sm:inline = hidden on phones, shown on screens 640px and wider */}
+            <span className="hidden sm:inline">
+              {/* the staff member's name, a grey dot, then a space. {" "} is a space JSX won't remove */}
+              {userName} <span className="text-slate-400">·</span>{" "}
+            {/* closes the name part */}
+            </span>
+            {/* the role (for example "Cashier"), always shown */}
+            <span className="text-slate-500">{roleLabel}</span>
+          {/* closes the name + role group */}
           </span>
           <LogoutButton />
         </div>

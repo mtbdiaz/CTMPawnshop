@@ -9,6 +9,7 @@ import { hasRole, type StaffRole } from "@/lib/auth/roles";
 export async function requireRole(allowed: StaffRole[]): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!hasRole(user.profile.role, allowed)) redirect("/dashboard");
+  // D2: "?denied=1" tells the Dashboard to explain why the user landed there
+  if (!hasRole(user.profile.role, allowed)) redirect("/dashboard?denied=1");
   return user;
 }
