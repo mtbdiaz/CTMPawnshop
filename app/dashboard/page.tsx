@@ -164,8 +164,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           .eq("counterfeit_resolution", "pending")
           .is("archived_at", null)
           .order("created_at")
-          .limit(3)
+          .limit(1)
       : { data: [] };
+  // Compact alert: the OLDEST flagged appraisal, and how many days it has waited.
+  // The flag is set when the item is appraised, so created_at is the date it was flagged.
+  const oldestFlag = (flaggedRows ?? [])[0];
+  const flagDays = oldestFlag ? Math.max(0, -daysUntilDue(manilaToday(new Date(oldestFlag.created_at)), today)) : 0;
 
   // Review 2 #4: a paid item waiting longer than this many days gets an amber warning.
   // TODO: confirm the number of days with CTM Pawnshop (30 is a placeholder).
@@ -269,41 +273,45 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </Alert>
       )}
 
-      {/* Counterfeit alert: only shows when at least 1 appraisal is waiting for review */}
+      {/* Counterfeit alert (compact): ONE slim row on computers, wraps to 2 rows on phones.
+          Only shows when at least 1 appraisal is waiting for counterfeit review. */}
       {(pendingFlags ?? 0) > 0 && (
-        // role="alert" makes screen readers announce it
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
-          {/* left side: icon + message */}
-          <span className="flex items-center gap-2">
-            {/* Redesign: warning icon, so the alert is noticed without reading it */}
+        // role="alert" = screen readers announce it; py-2 + small button keep it about 48px tall
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-slate-800">
+          {/* left side: icon + message + item details (min-w-0 lets long text wrap instead of overflowing) */}
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+            {/* small warning icon */}
             <Icon name="alert" className="h-4 w-4 shrink-0 text-red-700" />
-            {/* the message */}
-            <span>
-              <strong>{pendingFlags}</strong> appraisal{pendingFlags === 1 ? "" : "s"} flagged as possible counterfeit
-              {role === "admin" ? ". Awaiting your review." : ". Waiting on an Admin."}
+            {/* short message. "Possible counterfeit" = suspected only, not confirmed */}
+            <span className="font-medium text-red-900">
+              Possible counterfeit: {pendingFlags} appraisal{pendingFlags === 1 ? "" : "s"}{" "}
+              {/* Admin: "needs review" (1) / "need review" (2+). Others: waiting for an Admin. */}
+              {role === "admin" ? (pendingFlags === 1 ? "needs review" : "need review") : "waiting for Admin review"}
             </span>
+            {/* item details in grey, on the same row (they wrap under the message on small screens) */}
+            {oldestFlag && (
+              <span className="text-slate-600">
+                {/* one flagged item: what it is + when it was flagged */}
+                {pendingFlags === 1 ? (
+                  <>
+                    · {categoryLabel(oldestFlag.category, oldestFlag.category_other)}, {oldestFlag.karat}K, {oldestFlag.weight_grams} g · Flagged{" "}
+                    {formatDate(oldestFlag.created_at)} ·{" "}
+                  </>
+                ) : (
+                  // several flagged items: only say how long the oldest has waited
+                  <>· Oldest </>
+                )}
+                {/* days waiting, worked out from the real date; bold after 7 days */}
+                <span className={cx("whitespace-nowrap", flagDays > 7 && "font-semibold text-red-800")}>{flagDays}d pending</span>
+              </span>
+            )}
           {/* end of left side */}
           </span>
-          {/* Review 2 #6: name the flagged items (up to 3), each a link to its appraisal.
-              basis-full = this list takes its own line inside the banner */}
-          {(flaggedRows ?? []).length > 0 && (
-            <ul className="order-last basis-full space-y-1 pl-6">
-              {(flaggedRows ?? []).map((a) => (
-                <li key={a.id}>
-                  {/* e.g. "Ring, 18K, 5 g · flagged Oct 12, 2026" */}
-                  <Link href={`/dashboard/appraisals/${a.id}`} className="underline underline-offset-2 hover:text-red-700">
-                    {categoryLabel(a.category, a.category_other)}, {a.karat}K, {a.weight_grams} g
-                  </Link>
-                  <span className="text-red-800"> · flagged {formatDate(a.created_at)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {/* the button that opens the list of flagged appraisals */}
-          <ButtonLink href="/dashboard/appraisals?risk=pending" size="sm">
-            {/* D6 + Redesign: only an Admin can clear or confirm a flag, so other roles just "view" */}
-            {role === "admin" ? "Review appraisals" : "View appraisals"}
-          {/* end of the button */}
+          {/* small button. 1 flagged item: opens that appraisal. Several: opens the list of flagged items.
+              It only opens the page; clearing or confirming is still done there, by an Admin. */}
+          <ButtonLink href={pendingFlags === 1 && oldestFlag ? `/dashboard/appraisals/${oldestFlag.id}` : "/dashboard/appraisals?risk=pending"} size="sm">
+            {/* D6: only an Admin can clear or confirm a flag, so other roles "view" */}
+            {pendingFlags === 1 ? (role === "admin" ? "Review" : "View") : "View all"}
           </ButtonLink>
         </div>
       )}
