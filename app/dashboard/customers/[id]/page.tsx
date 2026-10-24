@@ -108,10 +108,18 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
         title={
           <span className="flex flex-wrap items-center gap-3">
             {customer.full_name}
-            <ScoreBadge score={history.score} tier={history.tier} />
-            {blocked && <Badge tone="danger">Blacklisted</Badge>}
-            {customer.archived_at && <Badge tone="neutral">Archived</Badge>}
-            {customer.aml_status === "flagged" && <Badge tone="warning">AML flagged</Badge>}
+            {/* C9: wrapper for the badges. font-sans = normal font instead of the serif title font, gap-2 = small space between badges */}
+            <span className="flex flex-wrap items-center gap-2 font-sans">
+              {/* the customer's score badge (e.g. "Good 85") */}
+              <ScoreBadge score={history.score} tier={history.tier} />
+              {/* red badge, only shows if the customer is blacklisted */}
+              {blocked && <Badge tone="danger">Blacklisted</Badge>}
+              {/* gray badge, only shows if the customer is archived */}
+              {customer.archived_at && <Badge tone="neutral">Archived</Badge>}
+              {/* yellow badge, only shows if the customer is AML flagged */}
+              {customer.aml_status === "flagged" && <Badge tone="warning">AML flagged</Badge>}
+            {/* end of the badges wrapper */}
+            </span>
           </span>
         }
         description={`Customer since ${formatDate(customer.created_at)}. ${openLoans.length} open loan${openLoans.length === 1 ? "" : "s"}.`}

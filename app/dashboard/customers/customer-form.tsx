@@ -117,8 +117,10 @@ export function AdminIdentityForm({ customer }: { customer: Tables<"customers"> 
       </SelectField>
       <Field label="ID number" name="id_number" defaultValue={customer.id_number} required />
       <TextareaField label="Reason for the change" name="reason" rows={2} required hint="At least 5 characters. Saved in the audit trail." />
-      <SubmitButton variant="secondary" pendingLabel="Saving" confirm={{ title: "Save this correction?", message: "The before and after values and your reason are written to the audit trail.", confirmLabel: "Save correction", tone: "primary" }}>
-        Edit (Admin)
+      {/* C10: no variant = navy primary button. justify-self-start = button only as wide as its text, not the whole card */}
+      <SubmitButton className="justify-self-start" pendingLabel="Saving" confirm={{ title: "Save this correction?", message: "The before and after values and your reason are written to the audit trail.", confirmLabel: "Save correction", tone: "primary" }}>
+        {/* clear label: says exactly what clicking it does, same words as the confirm popup */}
+        Save correction
       </SubmitButton>
     </ActionForm>
   );
