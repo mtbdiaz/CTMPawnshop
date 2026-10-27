@@ -292,12 +292,14 @@ Owner decisions applied as given: archive not delete (Admin restores), review-an
 
 ## Pawn ticket form (owner-supplied PDF)
 
-The printed ticket now follows the owner's pre-set form: half-letter landscape (215.9 x 165.1 mm), Montserrat, same wording and layout. Thermal slips stay for payment receipts only.
+The printed ticket reproduces the owner's pre-printed form exactly: half-letter landscape (8.5 x 6.5 in), Montserrat and Poppins as in the PDF. Thermal slips stay for payment receipts only.
 
-- **Net Proceeds = Principal − Service Charge.** The system pays out the full principal and collects interest at redemption, so Interest is shown for the first 30-day term but is not deducted. ⚠ Confirm this is how CTM does it. If interest is taken in advance, the cash disbursement logic needs to change too.
-- **Service Charge prints ₱0.00.** The system has no service charge field. Adding one means a settings value and a cash entry; say so if CTM charges one.
-- **Expiry Date of Redemption Period = due date + grace period** (grace period comes from the loan's own setting).
-- **Interest wording:** the form says "% P.M./P.A."; the ticket prints "% P.M." because loans are charged per 30-day term. The stray "%)" in the PDF template was dropped.
-- **Amount in words** is generated (e.g. TEN THOUSAND PESOS ONLY, or "... AND 50/100" for centavos). Very long amounts shrink to fit.
-- **Reverse side (terms and conditions) is not built.** The form refers to it but the PDF has only the front. Send that page and it can print as a second page.
-- **Pre-printed stock:** the "ATP" validity wording, TIN and address are printed as in the PDF. Check the proprietor name and TIN are correct before use.
+- **Built from the PDF itself, not by eye.** `scripts/extract-ticket-layout.py` reads every word, box and line position out of the owner's PDF into `lib/ticket-layout.ts`; the ticket page places them at those exact point positions and fills only the blanks. To change the form, replace the PDF and re-run the script (steps in the script header; `scripts/measure-ticket-spacing.cjs` and `scripts/calibrate-ticket-y.py` re-tune spacing).
+- **Measured match:** horizontal positions within 0.01 pt of the PDF, vertical within about 0.5 pt (Chrome snaps text to 0.75 pt steps), boxes and lines identical. The overlay is saved at `qa/ticket-form/overlay-vs-owner-pdf.png`.
+- **Wording is the PDF's, including "Thumbrark" and "has pledges to this Pawnee"** and the stray "%)" after the interest blank. These look like typos in the template; they were kept because the form had to be exactly the same. Say the word to correct them.
+- **Interest blank:** prints the rate (e.g. 3) in front of the form's own "% P.M./P.A."; the form text is not edited. ⚠ Loans are charged per 30 days, so P.M. is the right choice. Staff can strike out P.A.
+- **Net Proceeds = Principal − Service Charge.** The system pays out the full principal and collects interest at redemption, so Interest shows the first 30-day term but is not deducted. ⚠ Confirm this is how CTM does it.
+- **Service Charge prints 0.00.** The system has no service charge field.
+- **Expiry Date of Redemption Period = due date + the loan's grace period.** ⚠ Confirm.
+- **Amount in words** is generated (TEN THOUSAND PESOS ONLY, or "... AND 50/100"); long amounts, names and addresses shrink to fit their blank.
+- **Reverse side (terms and conditions) is not built.** The PDF has only the front.

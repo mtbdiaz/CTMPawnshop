@@ -1,9 +1,7 @@
-import { formatDate, formatPeso } from "@/lib/format";
+import type { CSSProperties } from "react";
+import { formatDate } from "@/lib/format";
 import { pesoWords } from "@/lib/words";
-
-function Fill({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <span className={`inline-block min-w-8 border-b border-black px-1 font-semibold ${className}`}>{children}</span>;
-}
+import { TICKET_FIELDS, TICKET_RECTS, TICKET_SLOTS, TICKET_WORDS, type TicketSlot } from "@/lib/ticket-layout";
 
 export type PawnTicketProps = {
   ticketNumber: string;
@@ -20,114 +18,108 @@ export type PawnTicketProps = {
   description: string;
 };
 
-const peso = (n: number) => n.toLocaleString("en-PH", { minimumFractionDigits: 2 });
+const peso = (n: number) => n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// CTM's own pawn ticket form (half-letter, landscape). Wording and layout follow
-// the pre-printed form supplied by the owner.
+/** Shrinks text so it fits a blank of the given width (points); keeps the base size when it already fits. */
+function fit(text: string, width: number, base: number, min = 5.5, em = 0.7): number {
+  if (!text) return base;
+  return Math.max(min, Math.min(base, width / (text.length * em)));
+}
+
+function slotStyle(slot: TicketSlot, size: number, align: CSSProperties["textAlign"] = "left"): CSSProperties {
+  return { left: `${slot.x}pt`, top: `${slot.y}pt`, width: `${slot.x2 - slot.x}pt`, height: `${slot.h}pt`, lineHeight: `${slot.h}pt`, fontSize: `${size}pt`, textAlign: align };
+}
+
+// The ticket reproduces the owner's pre-printed form (half-letter, landscape).
+// Everything static (wording, boxes, signature lines) comes from lib/ticket-layout.ts,
+// which is read straight out of the owner's PDF, so positions match it exactly.
+// Only the blanks are filled with loan data.
 export function PawnTicketForm(p: PawnTicketProps) {
-  const longDescription = p.description.length > 220;
+  const [name, address, words, amount, rate, appraised] = TICKET_SLOTS;
+  const wordsText = pesoWords(p.principal);
+  const [loanDate, maturity, expiry] = TICKET_FIELDS;
+  const dateAt = (f: (typeof TICKET_FIELDS)[number], text: string) => (
+    <span className="pf-montserrat" style={{ left: `${f.x}pt`, top: `${f.y}pt`, fontSize: `${f.s}pt`, lineHeight: `${f.h}pt`, fontWeight: 700 }}>
+      {text}
+    </span>
+  );
+  // the four value cells sit right of the peso signs in the table
+  const rows = TICKET_WORDS.filter((w) => w.t === "₱" && w.x > 430 && w.x < 440).sort((a, b) => a.y - b.y);
+  const tableValues = [p.principal, p.interest, p.serviceCharge, p.principal - p.serviceCharge];
+  const d = p.description;
+  const descSize = d.length <= 90 ? 10 : d.length <= 200 ? 8.5 : d.length <= 320 ? 7.5 : 6.5;
+
   return (
     <article className="pawn-form">
-      <header className="flex items-start justify-between">
-        <div>
-          <h1 className="text-[34px] font-extrabold leading-none tracking-wide">CTM PAWNSHOP</h1>
-          <p className="mt-1 text-[9.5px] leading-tight text-slate-700">63 Rizal St., Poblacion Kiblawan Davao del Sur</p>
-          <p className="text-[9.5px] font-medium italic leading-tight">THERESE B. DIAZ - PROP.*</p>
-          <p className="text-[9.5px] leading-tight text-slate-700">NON-VAT REG. TIN: 948-317-198-0000</p>
-        </div>
-        <div className="w-[60mm] border border-black px-3 py-2.5">
-          <span className="text-[13px] font-bold">NO </span>
-          <span className="font-mono text-[13px] font-semibold">{p.ticketNumber}</span>
-        </div>
-      </header>
+      {TICKET_RECTS.map((r, i) =>
+        r.h === 0 ? (
+          <div key={i} style={{ left: `${r.x}pt`, top: `${r.y}pt`, width: `${r.w}pt`, height: `${r.lw}pt`, background: "#000" }} />
+        ) : (
+          <div
+            key={i}
+            style={{ left: `${r.x}pt`, top: `${r.y}pt`, width: `${r.w}pt`, height: `${r.h}pt`, border: `${r.lw}pt solid #000`, boxSizing: "border-box" }}
+          />
+        ),
+      )}
 
-      <div className="mt-4 flex justify-between text-[11px]">
-        <p>
-          Date Loan Granted: <b>{formatDate(p.loanDate)}</b>
-        </p>
-        <div>
-          <p>
-            Maturity Date: <b>{formatDate(p.maturityDate)}</b>
-          </p>
-          <p>
-            Expiry Date of Redemption Period: <b>{formatDate(p.redemptionExpiry)}</b>
-          </p>
-        </div>
+      {TICKET_WORDS.map((w, i) => (
+        <span
+          key={i}
+          className={w.f === "poppins" ? "pf-poppins" : "pf-montserrat"}
+          style={{ left: `${w.x}pt`, top: `${w.y}pt`, fontSize: `${w.s}pt`, lineHeight: `${w.h}pt`, fontWeight: w.w, fontStyle: w.i, letterSpacing: w.ls ? `${w.ls}pt` : undefined }}
+        >
+          {w.t}
+        </span>
+      ))}
+
+      {/* ticket number, inside the NO box */}
+      <span
+        className="pf-montserrat pf-fill"
+        style={{ left: "487pt", top: "37.14pt", width: "88pt", height: "14.8pt", lineHeight: "14.8pt", fontSize: `${fit(p.ticketNumber, 88, 12.13, 7, 0.78)}pt`, fontWeight: 700 }}
+      >
+        {p.ticketNumber}
+      </span>
+
+      {dateAt(loanDate, formatDate(p.loanDate))}
+      {dateAt(maturity, formatDate(p.maturityDate))}
+      {dateAt(expiry, formatDate(p.redemptionExpiry))}
+
+      <span className="pf-montserrat pf-fill" style={slotStyle(name, fit(p.customerName, name.x2 - name.x, 10))}>
+        {p.customerName}
+      </span>
+      <span className="pf-montserrat pf-fill" style={slotStyle(address, fit(p.address, address.x2 - address.x, 10))}>
+        {p.address}
+      </span>
+      <span className="pf-montserrat pf-fill" style={slotStyle(words, fit(wordsText, words.x2 - words.x, 10, 5.5, 0.74))}>
+        {wordsText}
+      </span>
+      <span className="pf-montserrat pf-fill" style={slotStyle(amount, fit(peso(p.principal), amount.x2 - amount.x, 10), "center")}>
+        {peso(p.principal)}
+      </span>
+      <span className="pf-montserrat pf-fill" style={slotStyle(rate, 10, "center")}>
+        {p.interestRatePercent}
+      </span>
+      <span className="pf-montserrat pf-fill" style={slotStyle(appraised, fit(p.appraised === null ? "" : peso(p.appraised), appraised.x2 - appraised.x, 10), "center")}>
+        {p.appraised === null ? "" : peso(p.appraised)}
+      </span>
+
+      {/* description of the pawn: inside the left box */}
+      <div
+        className="pf-montserrat"
+        style={{ left: "53pt", top: "264pt", width: "240pt", height: "66pt", overflow: "hidden", whiteSpace: "normal", fontSize: `${descSize}pt`, lineHeight: 1.3, fontWeight: 600, color: "#000" }}
+      >
+        {d}
       </div>
 
-      <div className="mt-3 space-y-[9px] text-[11px] leading-[1.35]">
-        <p className="flex items-end gap-1.5">
-          <span className="shrink-0">Mr./Mrs./Miss</span>
-          <Fill className="min-w-0 flex-1">{p.customerName}</Fill>
-        </p>
-        <p className="flex items-end gap-1.5">
-          <span className="shrink-0">a resident of</span>
-          <Fill className={`min-w-0 flex-1 ${p.address.length > 90 ? "text-[9px]" : ""}`}>{p.address}</Fill>
-        </p>
-        <p className="flex items-end gap-1">
-          <span className="shrink-0">for a loan of PESOS</span>
-          <Fill className={`min-w-0 flex-1 leading-tight ${pesoWords(p.principal).length > 60 ? "text-[8px]" : "text-[9.5px]"}`}>{pesoWords(p.principal)}</Fill>
-          <span>(₱</span>
-          <Fill className="w-[30mm] text-right">{peso(p.principal)}</Fill>
-          <span>)</span>
-        </p>
-        <p className="text-justify">
-          with an interest of <Fill className="w-[14mm] text-center">{p.interestRatePercent}</Fill>% P.M. has pledges to this Pawnee in security for the loan
-          of article(s) described below appraised at{" "}
-          <span className="whitespace-nowrap">
-            ₱<Fill className="w-[30mm] text-right">{p.appraised === null ? "" : peso(p.appraised)}</Fill>
-          </span>{" "}
-          subject to the terms and
-          conditions stated on the reverse side hereof.
-        </p>
-      </div>
-
-      <p className="ml-[20mm] mt-4 text-[11.5px] font-semibold">(Description of the Pawn)</p>
-      <div className="mt-1 flex gap-[9mm]">
-        <div className="h-[40mm] w-[92mm] shrink-0 overflow-hidden border border-black p-2 text-[10px] leading-snug">
-          <span className={longDescription ? "text-[8.5px]" : ""}>{p.description}</span>
-        </div>
-        <table className="h-[30mm] w-[86mm] border-collapse self-start border-2 border-black text-[11px]">
-          <tbody>
-            {[
-              ["Principal", p.principal],
-              ["Interest", p.interest],
-              ["Service Charge", p.serviceCharge],
-              ["Net Proceeds", p.principal - p.serviceCharge],
-            ].map(([label, value]) => (
-              <tr key={String(label)} className="border border-black">
-                <td className="w-[50%] border-r-2 border-black px-2 py-[3px] text-slate-700">{label}</td>
-                <td className="px-2 py-[3px] font-semibold tabular-nums">{formatPeso(Number(value))}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="absolute inset-x-[12mm] bottom-[6mm]">
-        <div className="flex justify-between gap-12 text-center">
-          <div className="w-[78mm]">
-            <div className="mt-6 border-t border-black" />
-            <p className="text-[9.5px] text-slate-700">(Signature or Thumbmark)</p>
-            <p className="text-[9.5px] font-bold">Pawner</p>
-          </div>
-          <div className="w-[78mm]">
-            <div className="mt-6 border-t border-black" />
-            <p className="text-[9.5px] text-slate-700">(Signature or Thumbmark)</p>
-            <p className="text-[9.5px] font-bold">Pawnshop&apos;s Authorized Representative</p>
-          </div>
-        </div>
-        <div className="mt-3 flex justify-between gap-8">
-          <p className="w-[95mm] text-center text-[10px] font-extrabold leading-tight">
-            PAWNER IS ADVISED TO READ AND UNDERSTAND THE TERMS AND CONDITIONS ON THE REVERSE SIDE HEREOF.
-          </p>
-          <p className="w-[80mm] text-[6.5px] font-semibold italic leading-tight">
-            &quot;THIS DOCUMENT IS NOT VALID FOR CLAIMING OF INPUT TAXES&quot;
-            <br />
-            &quot;THIS PAWN TICKET SHALL BE VALID FOR FIVE (5) YEARS FROM THE DATE OF ATP.&quot;
-          </p>
-        </div>
-      </div>
+      {rows.map((r, i) => (
+        <span
+          key={i}
+          className="pf-montserrat pf-fill"
+          style={{ left: "449pt", top: `${r.y}pt`, width: "113pt", height: `${r.h}pt`, lineHeight: `${r.h}pt`, fontSize: `${fit(peso(tableValues[i]), 113, r.s, 6)}pt` }}
+        >
+          {peso(tableValues[i])}
+        </span>
+      ))}
     </article>
   );
 }
