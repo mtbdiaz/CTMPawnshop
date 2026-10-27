@@ -289,3 +289,15 @@ Owner decisions applied as given: archive not delete (Admin restores), review-an
 - **Locked records:** loans, payments and extensions change only through `SECURITY DEFINER` functions. Customer name and ID are locked after registration; contact details stay editable. Admin corrections require a reason and write before/after values to `audit_log`. A principal correction posts an `adjustment` cash entry instead of rewriting the original disbursement. Extensions are never edited; corrections go through the loan edit.
 - **Reinstate and Capitalize** are available to Cashier and Admin. Forfeit is Admin-only.
 - **Merged pages:** Users moved to Settings › Users, and Audit Trail moved to Reports › Audit trail (Admin-only). `/dashboard/users`, `/dashboard/compliance/audit` and the old receipt URL redirect to the new locations.
+
+## Pawn ticket form (owner-supplied PDF)
+
+The printed ticket now follows the owner's pre-set form: half-letter landscape (215.9 x 165.1 mm), Montserrat, same wording and layout. Thermal slips stay for payment receipts only.
+
+- **Net Proceeds = Principal − Service Charge.** The system pays out the full principal and collects interest at redemption, so Interest is shown for the first 30-day term but is not deducted. ⚠ Confirm this is how CTM does it. If interest is taken in advance, the cash disbursement logic needs to change too.
+- **Service Charge prints ₱0.00.** The system has no service charge field. Adding one means a settings value and a cash entry; say so if CTM charges one.
+- **Expiry Date of Redemption Period = due date + grace period** (grace period comes from the loan's own setting).
+- **Interest wording:** the form says "% P.M./P.A."; the ticket prints "% P.M." because loans are charged per 30-day term. The stray "%)" in the PDF template was dropped.
+- **Amount in words** is generated (e.g. TEN THOUSAND PESOS ONLY, or "... AND 50/100" for centavos). Very long amounts shrink to fit.
+- **Reverse side (terms and conditions) is not built.** The form refers to it but the PDF has only the front. Send that page and it can print as a second page.
+- **Pre-printed stock:** the "ATP" validity wording, TIN and address are printed as in the PDF. Check the proprietor name and TIN are correct before use.
