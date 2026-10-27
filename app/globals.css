@@ -90,3 +90,19 @@ body {
   [class*="bg-red-50"], [class*="bg-amber-50"] { background: transparent !important; }
   .print-card-reset { border: 0 !important; padding: 0 !important; }
 }
+
+/* Pawn ticket form: the owner's half-letter landscape form, placed in PDF points. */
+.pawn-form-wrap { background: #e2e8f0; padding: 12px 0; overflow-x: auto; }
+.pawn-form {
+  position: relative; width: 612pt; height: 468pt; margin: 0 auto; background: #fff; color: #1e1e1e;
+  overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  font-kerning: none; font-feature-settings: "kern" 0; text-rendering: geometricPrecision;
+}
+.pawn-form > * { position: absolute; margin: 0; white-space: pre; }
+.pawn-form .pf-montserrat { font-family: var(--font-montserrat, Montserrat), sans-serif; }
+.pawn-form .pf-poppins { font-family: var(--font-poppins, Poppins), sans-serif; }
+.pawn-form .pf-fill { overflow: hidden; font-weight: 600; color: #000; }
+@media print {
+  .pawn-form-wrap { background: #fff; padding: 0; overflow: visible; }
+  .pawn-form { margin: 0; }
+}

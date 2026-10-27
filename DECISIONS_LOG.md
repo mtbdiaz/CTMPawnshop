@@ -289,3 +289,17 @@ Owner decisions applied as given: archive not delete (Admin restores), review-an
 - **Locked records:** loans, payments and extensions change only through `SECURITY DEFINER` functions. Customer name and ID are locked after registration; contact details stay editable. Admin corrections require a reason and write before/after values to `audit_log`. A principal correction posts an `adjustment` cash entry instead of rewriting the original disbursement. Extensions are never edited; corrections go through the loan edit.
 - **Reinstate and Capitalize** are available to Cashier and Admin. Forfeit is Admin-only.
 - **Merged pages:** Users moved to Settings › Users, and Audit Trail moved to Reports › Audit trail (Admin-only). `/dashboard/users`, `/dashboard/compliance/audit` and the old receipt URL redirect to the new locations.
+
+## Pawn ticket form (owner-supplied PDF)
+
+The printed ticket reproduces the owner's pre-printed form exactly: half-letter landscape (8.5 x 6.5 in), Montserrat and Poppins as in the PDF. Thermal slips stay for payment receipts only.
+
+- **Built from the PDF itself, not by eye.** `scripts/extract-ticket-layout.py` reads every word, box and line position out of the owner's PDF into `lib/ticket-layout.ts`; the ticket page places them at those exact point positions and fills only the blanks. To change the form, replace the PDF and re-run the script (steps in the script header; `scripts/measure-ticket-spacing.cjs` and `scripts/calibrate-ticket-y.py` re-tune spacing).
+- **Measured match:** horizontal positions within 0.01 pt of the PDF, vertical within about 0.5 pt (Chrome snaps text to 0.75 pt steps), boxes and lines identical. The overlay is saved at `qa/ticket-form/overlay-vs-owner-pdf.png`.
+- **Wording is the PDF's, including "Thumbrark" and "has pledges to this Pawnee"** and the stray "%)" after the interest blank. These look like typos in the template; they were kept because the form had to be exactly the same. Say the word to correct them.
+- **Interest blank:** prints the rate (e.g. 3) in front of the form's own "% P.M./P.A."; the form text is not edited. ⚠ Loans are charged per 30 days, so P.M. is the right choice. Staff can strike out P.A.
+- **Net Proceeds = Principal − Service Charge.** The system pays out the full principal and collects interest at redemption, so Interest shows the first 30-day term but is not deducted. ⚠ Confirm this is how CTM does it.
+- **Service Charge prints 0.00.** The system has no service charge field.
+- **Expiry Date of Redemption Period = due date + the loan's grace period.** ⚠ Confirm.
+- **Amount in words** is generated (TEN THOUSAND PESOS ONLY, or "... AND 50/100"); long amounts, names and addresses shrink to fit their blank.
+- **Reverse side (terms and conditions) is not built.** The PDF has only the front.
