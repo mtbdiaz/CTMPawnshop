@@ -8,8 +8,9 @@ import type { Tables } from "@/lib/supabase/database.types";
 
 type Account = Tables<"profiles"> & { email: string | null };
 
+// F4: rounded-md (6px corners) like the other inputs
 const inputClass =
-  "w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20";
+  "w-full rounded-md border border-slate-300 px-2.5 py-1.5 text-sm focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20";
 
 export function AccountRow({ account, isSelf }: { account: Account; isSelf: boolean }) {
   return (

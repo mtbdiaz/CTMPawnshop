@@ -24,7 +24,7 @@ import {
 } from "@/components/ui";
 import { ITEM_CATEGORIES, categoryLabel } from "@/lib/appraisal/valuation";
 
-export const metadata = { title: "Vault inventory" };
+export const metadata = { title: "Inventory" };
 
 const PAGE_SIZE = 30;
 const FILTERS: Record<string, { label: string; statuses: Enums<"inventory_status">[] }> = {

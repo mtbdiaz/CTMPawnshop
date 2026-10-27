@@ -98,7 +98,7 @@ export default async function LoansPage({
   return (
     <div>
       <PageHeader
-        title="Pawn loans"
+        title="Loans"
         description="Open a loan to record payments, renew, capitalize, reinstate or redeem."
         breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Loans" }]}
         actions={

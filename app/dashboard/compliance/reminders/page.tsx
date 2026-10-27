@@ -5,7 +5,7 @@ import { manilaToday } from "@/lib/format";
 import { Alert, Card, EmptyState, PageHeader, Table, TBody, TH, THead } from "@/components/ui";
 import { ReminderRow } from "./reminder-row";
 
-export const metadata = { title: "Due-date reminders" };
+export const metadata = { title: "Reminders" };
 
 type LoanRow = {
   id: string;
@@ -39,7 +39,7 @@ export default async function RemindersPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Due-date reminders"
+        title="Reminders"
         description={`Loans maturing today or within the next ${REMINDER_LEAD_DAYS} days.`}
         breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Due-date reminders" }]}
       />

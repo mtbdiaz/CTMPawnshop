@@ -42,7 +42,7 @@ export default async function AuctionPrepPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Auction and forfeiture prep"
+        title="Auction prep"
         description="Group forfeited items into a batch for the next liquidation or auction cycle."
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },

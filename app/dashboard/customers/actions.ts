@@ -6,7 +6,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
-import { customerSchema } from "@/lib/validation/customer";
+// also import the shared phone rule we just exported
+import { customerSchema, phPhoneSchema } from "@/lib/validation/customer";
 import { runAmlCheck } from "@/lib/customers/aml";
 
 export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; customerId?: string };
@@ -61,12 +62,17 @@ export async function createCustomer(
 
 // PB-9: update contact details. Name and ID lock after registration
 // (database trigger); only an Admin can correct them, with a reason.
+// Phone fix: here the number is only checked loosely (not empty). The full
+// 09XXXXXXXXX rule runs in updateCustomer below, and only when the number changed.
 const contactSchema = z.object({
   address: z.string().trim().min(1, "Address is required"),
   contact_number: z.string().trim().min(1, "Contact number is required"),
   email: z.string().trim().email("Enter a valid email").optional().or(z.literal("")),
   date_of_birth: z.string().trim().optional().or(z.literal("")),
 });
+
+// removes spaces and dashes, the same cleaning the phone rule does
+const cleanPhone = (value: string) => value.replace(/[\s-]/g, "");
 
 export async function updateCustomer(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["operator", "admin"]);
@@ -81,11 +87,28 @@ export async function updateCustomer(_prev: ActionState, formData: FormData): Pr
   if (!parsed.success) return validationFailure(parsed.error);
 
   const supabase = await createClient();
+
+  // Phone fix: some customers were saved before the phone rule existed, so their
+  // number may not fit 09XXXXXXXXX. If staff leave the number as it is, keep it and
+  // let them save the other fields (e.g. a new address). If they type a NEW number,
+  // it must pass the full phone rule.
+  const { data: current } = await supabase.from("customers").select("contact_number").eq("id", customerId).maybeSingle();
+  const saved = current?.contact_number ?? ""; // the number in the database now
+  let contactNumber = saved; // keep the saved number unless it was changed
+  if (cleanPhone(parsed.data.contact_number) !== cleanPhone(saved)) {
+    const phone = phPhoneSchema.safeParse(parsed.data.contact_number); // full 09XXXXXXXXX check
+    if (!phone.success) {
+      const message = phone.error.issues[0]?.message ?? "Enter an 11-digit mobile number starting with 09";
+      return { error: message, fieldErrors: { contact_number: message } }; // shows under the phone field
+    }
+    contactNumber = phone.data; // the cleaned new number
+  }
+
   const { error } = await supabase
     .from("customers")
     .update({
       address: parsed.data.address,
-      contact_number: parsed.data.contact_number,
+      contact_number: contactNumber,
       email: parsed.data.email || null,
       date_of_birth: parsed.data.date_of_birth || null,
     })

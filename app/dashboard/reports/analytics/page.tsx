@@ -57,7 +57,8 @@ export default async function AnalyticsDashboard() {
                   <span className="text-slate-600">{monthLabel(m.month)}</span>
                   <span className="h-6 rounded-md bg-slate-100 print:border print:border-slate-300">
                     <span
-                      className="block h-6 rounded-md bg-gradient-to-r from-navy-700 to-navy-500 print:bg-navy-700"
+                      // F4: one solid navy colour, no gradient
+                      className="block h-6 rounded-md bg-navy-700"                      
                       style={{ width: `${Math.max(2, (m.totalPrincipal / maxPrincipal) * 100)}%` }}
                     />
                   </span>
