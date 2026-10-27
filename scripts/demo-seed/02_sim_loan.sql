@@ -30,6 +30,7 @@ begin
 end $$;
 
 create or replace function demo_seed.sim_loan(p_n int) returns void language plpgsql as $$
+#variable_conflict use_variable
 declare
   L demo_seed.s_loan%rowtype;
   today date := date '2026-10-27';
@@ -43,7 +44,7 @@ declare
   actor uuid; inv text := 'pawned'; salt int := 0;
   newmat date; ddate date; rdate date; fdate date; capv numeric; newp numeric; newi numeric; fixd date;
   defaulted_at timestamptz; reinstated_at timestamptz; redeemed_at timestamptz; forfeited_at timestamptz;
-  rp double precision; a record; nfix int; wrong numeric;
+  rp double precision; nfix int; wrong numeric;
 begin
   select * into L from demo_seed.s_loan where n = p_n;
   rate := L.rate; grace := L.grace; P := L.principal; I := L.owed; thr := L.through; mat := L.maturity;
@@ -64,13 +65,13 @@ begin
     -- ---- decide what the customer does next ----
     if st = 'reinstated' then
       w := array[0.55, 0.25, 0.05, 0, 0, 0.15];
-    elsif L.tier = 'vip' then w := array[0.50, 0.34, 0.06, 0.06, 0.03, 0.01];
-    elsif L.tier = 'regular' then w := array[0.45, 0.32, 0.08, 0.07, 0.05, 0.03];
-    elsif L.tier = 'delinquent' then w := array[0.12, 0.18, 0.10, 0.20, 0.10, 0.30];
-    else w := array[0.42, 0.28, 0.08, 0.08, 0.06, 0.08];
+    elsif L.tier = 'vip' then w := array[0.44, 0.33, 0.12, 0.06, 0.03, 0.02];
+    elsif L.tier = 'regular' then w := array[0.40, 0.30, 0.14, 0.07, 0.05, 0.04];
+    elsif L.tier = 'delinquent' then w := array[0.10, 0.15, 0.10, 0.17, 0.08, 0.40];
+    else w := array[0.36, 0.26, 0.13, 0.08, 0.06, 0.11];
     end if;
     if terms > 0 and st <> 'reinstated' then w[1] := w[1] * 1.4; w[2] := w[2] * 0.7; end if;
-    if partials >= 2 or mat - lastd < 4 or st = 'reinstated' then w[3] := case when st = 'reinstated' then w[3] else 0 end; end if;
+    if partials >= 2 or mat - lastd < 4 then w[3] := 0; end if;
     act := demo_seed.wpk(array['redeem','renew','partial','late_redeem','late_renew','abandon'], w);
 
     if act = 'abandon' then
@@ -100,7 +101,7 @@ begin
       if ts > cutoff then exit; end if;
       st := 'defaulted'; inv := 'forfeited'; defaulted_at := ts;
       perform demo_seed.ev(p_n, ts, 'default', null, null, null, null, null, false, null, P, I, thr, mat, ext, st, late, null, inv, null);
-      rp := case L.tier when 'vip' then 0.5 when 'regular' then 0.35 when 'delinquent' then 0.10 else 0.18 end;
+      rp := case L.tier when 'vip' then 0.55 when 'regular' then 0.40 when 'delinquent' then 0.12 else 0.22 end;
       if demo_seed.ch(rp) then
         rdate := demo_seed.nopen(ddate + demo_seed.ri(1, 14));
         if rdate > today then exit; end if;
@@ -203,7 +204,7 @@ begin
     end if;
   end loop;
 
-  update demo_seed.s_loan set balance = P, owed = I, through = thr, maturity = mat, ext = sim_loan.ext, status = st, late = sim_loan.late,
-    lost = lostany, defaulted_at = sim_loan.defaulted_at, reinstated_at = sim_loan.reinstated_at, redeemed_at = sim_loan.redeemed_at,
-    forfeited_at = sim_loan.forfeited_at, inv_status = inv, updated_at = lastts where n = p_n;
+  update demo_seed.s_loan set balance = P, owed = I, through = thr, maturity = mat, ext = ext, status = st, late = late,
+    lost = lostany, defaulted_at = defaulted_at, reinstated_at = reinstated_at, redeemed_at = redeemed_at,
+    forfeited_at = forfeited_at, inv_status = inv, updated_at = lastts where n = p_n;
 end $$;
