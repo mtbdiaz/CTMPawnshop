@@ -66,7 +66,8 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number)
       </span>
       {/* the message text, e.g. "Payment recorded" (flex-1 = takes the space between the icon and the X) */}
       <p className="flex-1">{toast.message}</p>
-      {/* the X button that closes the popup message */}      <button
+      {/* the X button that closes the popup message */}
+            <button
         // a normal button, not a form submit button
         type="button"
         // when clicked, close this popup
