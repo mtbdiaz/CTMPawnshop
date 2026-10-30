@@ -10,7 +10,25 @@ import { requireRole } from "@/lib/auth/require-role";
 import { customerSchema, phPhoneSchema } from "@/lib/validation/customer";
 import { runAmlCheck } from "@/lib/customers/aml";
 
-export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; customerId?: string };
+// the result the server sends back to the form after Register / Save
+export type ActionState = {
+  error?: string; // message shown in a red box at the bottom of the form
+  fieldErrors?: FieldErrors; // red message under a specific field
+  success?: boolean; // true when it saved
+  customerId?: string; // the new customer's id, used to open their profile
+  // C6: filled in when a matching customer already exists (who it is, if archived, and whether the ID or the phone matched)
+  duplicate?: { id: string; name: string; archived: boolean; match: "id" | "phone" };
+}; // end of ActionState
+
+// C6: keeps only letters and numbers, in capitals, so "0111-2222 333" becomes "01112222333"
+const onlyLettersDigits = (value: string) => value.replace(/[^a-z0-9]/gi, "").toUpperCase();
+// C6: turns any saved phone into 09XXXXXXXXX so old numbers like "+63 917 123 4567" can be compared
+const normalPhone = (value: string) => {
+  const digits = value.replace(/\D/g, ""); // keep digits only
+  return digits.startsWith("63") && digits.length === 12 ? `0${digits.slice(2)}` : digits; // 63917... becomes 0917...
+}; // end of normalPhone
+// C6: search pattern that ignores dashes and spaces, so "0111" also finds "0-1-1-1" (% = anything can be here)
+const loosePattern = (value: string) => `%${value.split("").join("%")}%`;
 
 function parseCustomerForm(formData: FormData) {
   return customerSchema.safeParse({
@@ -36,6 +54,39 @@ export async function createCustomer(
   const aml = runAmlCheck(parsed.data.full_name, parsed.data.id_number);
 
   const supabase = await createClient();
+  
+  // C6: stop double registration of the same person
+  const idClean = onlyLettersDigits(parsed.data.id_number); // the typed ID with no dashes or spaces
+  if (idClean) { // only check if the ID has letters or numbers in it
+    const { data: sameId } = await supabase // look in the customers table
+      .from("customers") // the customers table
+      .select("id, full_name, id_number, archived_at") // only the columns we need
+      .eq("id_type", parsed.data.id_type) // same ID type (UMID, Passport, ...)
+      .ilike("id_number", loosePattern(idClean)) // ID number that looks similar
+      .limit(20); // a few candidates is enough
+    const match = (sameId ?? []).find((c) => onlyLettersDigits(c.id_number) === idClean); // the exact same ID once cleaned
+    if (match) { // the ID already exists, so block the registration
+      return {
+        fieldErrors: { id_number: "This ID is already registered" }, // red text under the ID field
+        duplicate: { id: match.id, name: match.full_name, archived: !!match.archived_at, match: "id" }, // tells the form who it is
+      }; // stop here, nothing is saved
+    } // end of the ID match
+  } // end of the ID check
+
+  if (formData.get("shared_phone") !== "on") { // skip this if the cashier ticked "shares the number"
+    const { data: samePhone } = await supabase // look in the customers table
+      .from("customers") // the customers table
+      .select("id, full_name, contact_number, archived_at") // only the columns we need
+      .ilike("contact_number", loosePattern(parsed.data.contact_number.slice(1))) // numbers that look similar (without the first 0)
+      .limit(20); // a few candidates is enough
+    const match = (samePhone ?? []).find((c) => normalPhone(c.contact_number) === parsed.data.contact_number); // the exact same number once cleaned
+    if (match) { // the number is already used, so warn first
+      return {
+        fieldErrors: { contact_number: "This number is already used by another customer" }, // red text under the phone field
+        duplicate: { id: match.id, name: match.full_name, archived: !!match.archived_at, match: "phone" }, // tells the form who it is
+      }; // stop here, nothing is saved
+    } // end of the phone match
+  } // end of the phone check
   const { data, error } = await supabase
     .from("customers")
     .insert({
