@@ -181,7 +181,8 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
       </Card>
 
       <div className="grid gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
+        {/* Phone fix: min-w-0 lets this column shrink to the screen width instead of pushing the page sideways */}
+        <div className="min-w-0 space-y-6 xl:col-span-2">
           <section>
             <SectionTitle description="Newest first, archived loans included.">Loans and transactions</SectionTitle>
             {loanHistory.length === 0 ? (
@@ -212,7 +213,9 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                             {loan.extension_count > 0 ? ` Renewed ${loan.extension_count} time${loan.extension_count === 1 ? "" : "s"}.` : ""}
                           </p>
                         </div>
-                        <div className="text-right">
+                        {/* Phone fix: on phones this block sits under the ticket, left-aligned and full width;
+                            from sm (640px) up it goes back to the right side */}
+                        <div className="w-full text-left sm:w-auto sm:text-right">
                           {/* C2 + C3 + C8: same status words as the Dashboard */}
                           <StatusBadge status={label.badge} label={label.label} />
                           <div className="mt-1">
@@ -271,11 +274,12 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
               {appraisals && appraisals.length > 0 ? (
                 <ul className="divide-y divide-slate-100">
                   {appraisals.map((a) => (
-                    <li key={a.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
+                    // Phone fix: flex-wrap lets the badge, amount and button drop to a second line on small screens
+                    <li key={a.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 py-3 text-sm">
                       <span>
                         {categoryLabel(a.category, a.category_other)}, {a.karat}K, {a.weight_grams} g
                       </span>
-                      <span className="flex items-center gap-3">
+                      <span className="flex flex-wrap items-center gap-3">
                         {a.is_counterfeit_risk && (
                           <StatusBadge status={a.counterfeit_resolution ?? "pending"} label={a.counterfeit_resolution === "cleared" ? "Cleared" : a.counterfeit_resolution === "confirmed" ? "Confirmed risk" : "Counterfeit review"} />
                         )}
