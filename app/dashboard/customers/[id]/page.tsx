@@ -277,7 +277,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                       </span>
                       <span className="flex items-center gap-3">
                         {a.is_counterfeit_risk && (
-                          <StatusBadge status={a.counterfeit_resolution ?? "pending"} label={`Counterfeit: ${a.counterfeit_resolution ?? "pending"}`} />
+                          <StatusBadge status={a.counterfeit_resolution ?? "pending"} label={a.counterfeit_resolution === "cleared" ? "Cleared" : a.counterfeit_resolution === "confirmed" ? "Confirmed risk" : "Counterfeit review"} />
                         )}
                         <span className="tabular-nums text-slate-700">{formatPeso(a.computed_value)}</span>
                         <ViewButton href={`/dashboard/appraisals/${a.id}`}>View appraisal</ViewButton>
