@@ -185,6 +185,24 @@ export async function adminEditCustomer(_prev: ActionState, formData: FormData):
   const parsed = identitySchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return validationFailure(parsed.error);
   const supabase = await createClient();
+
+  // C6b: the same duplicate-ID check as Register, so an Admin correction can't copy another customer's ID
+  const idClean = onlyLettersDigits(parsed.data.id_number); // the new ID with no dashes or spaces
+  if (idClean) { // only check if the ID has letters or numbers in it
+    const { data: sameId } = await supabase // look in the customers table
+      .from("customers") // the customers table
+      .select("id, full_name, id_number") // only the columns we need
+      .eq("id_type", parsed.data.id_type) // same ID type
+      .neq("id", parsed.data.customer_id) // skip this customer (keeping their own ID is fine)
+      .ilike("id_number", loosePattern(idClean)) // ID number that looks similar
+      .limit(20); // a few candidates is enough
+    const match = (sameId ?? []).find((c) => onlyLettersDigits(c.id_number) === idClean); // the exact same ID once cleaned
+    if (match) { // another customer already has this ID, so stop
+      const message = `This ID is already registered to ${match.full_name}. Check the ID card again.`; // says who has it
+      return { error: message, fieldErrors: { id_number: "This ID is already registered" } }; // red box + red text under the field, nothing saved
+    } // end of the match
+  } // end of the duplicate check
+
   const { error } = await supabase.rpc("admin_edit_customer", {
     p_id: parsed.data.customer_id,
     p_full_name: parsed.data.full_name,
