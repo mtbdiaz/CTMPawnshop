@@ -9,6 +9,8 @@ import { requireRole } from "@/lib/auth/require-role";
 // also import the shared phone rule we just exported
 import { customerSchema, phPhoneSchema } from "@/lib/validation/customer";
 import { runAmlCheck } from "@/lib/customers/aml";
+// P3: which roles may see a full government ID number
+import { ID_REVEAL_ROLES } from "@/lib/customers/id-privacy";
 
 // the result the server sends back to the form after Register / Save
 export type ActionState = {
@@ -216,6 +218,17 @@ export async function adminEditCustomer(_prev: ActionState, formData: FormData):
   revalidatePath(`/dashboard/customers/${parsed.data.customer_id}`);
   revalidatePath("/dashboard/customers");
   return { success: true, customerId: parsed.data.customer_id };
+}
+
+// P3: sends ONE customer's full ID number, only after checking the role on the server.
+// The list and profile never send full IDs to the browser; this is the only way to get one, one at a time.
+export async function revealCustomerId(customerId: string): Promise<{ idNumber?: string; error?: string }> {
+  await requireRole(ID_REVEAL_ROLES); // not allowed -> sent back to the Dashboard with "You don't have access"
+  if (!z.string().uuid().safeParse(customerId).success) return { error: "Customer not found." }; // must look like a real customer id
+  const supabase = await createClient();
+  const { data } = await supabase.from("customers").select("id_number").eq("id", customerId).maybeSingle(); // just the one field
+  if (!data) return { error: "Customer not found." };
+  return { idNumber: data.id_number }; // the full number, for this one customer only
 }
 
 // PB-11 support: Admin can set/clear the blacklist flag (used by the

@@ -26,6 +26,9 @@ import {
 import { updateCustomer } from "../actions";
 import { AdminIdentityForm, CustomerForm } from "../customer-form";
 import { BlacklistForm } from "./blacklist-form";
+// P3: masked ID + eye button, and who may reveal a full ID
+import { IdReveal } from "../id-reveal";
+import { ID_REVEAL_ROLES, idEnding, maskId } from "@/lib/customers/id-privacy";
 
 type LoanHistoryRow = {
   id: string;
@@ -310,7 +313,12 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                     { label: "Address", value: customer.address },
                     { label: "Date of birth", value: formatDate(customer.date_of_birth) },
                     { label: "ID type", value: customer.id_type },
-                    { label: "ID number", value: <span className="font-mono">{customer.id_number}</span> },
+                    // P3: masked here too (this read-only view is what Cashier and Appraiser see). Cashier gets the eye button;
+                    // only the masked text is sent to the browser
+                    {
+                      label: "ID number",
+                      value: <IdReveal customerId={customer.id} masked={maskId(customer.id_number)} ending={idEnding(customer.id_number)} canReveal={hasRole(role, ID_REVEAL_ROLES)} />,
+                    },
                   ]}
                 />
               )}
