@@ -34,9 +34,22 @@ import {
 import { Icon } from "@/components/icons";
 // QuickSearch = the search box with a live preview of matching customers and loans (quick-search.tsx)
 import { QuickSearch } from "./quick-search";
-
+// ListPager = the Previous / Page 1 of N / Next / See all bar under each list (list-pager.tsx)
+import { ListPager } from "./list-pager";
+ 
 export const metadata = { title: "Dashboard" };
-
+ 
+// Pagination: how many loans each Dashboard list shows per page.
+// Viewport fit: 3 when both lists show (Admin with loans waiting for forfeit), so both fit on a laptop screen.
+// When Needs attention is the only list (Operator, Cashier, Appraiser), it gets 5 to use the free space.
+const PAGE_SIZE = 3;
+const PAGE_SIZE_ALONE = 5;
+// Turns "?na=3" into a safe page number: at least 1, at most the last page, 1 if it's not a number
+function pageNumber(raw: string | undefined, totalPages: number) {
+  const n = Number.parseInt(raw ?? "1", 10); // "3" -> 3, "abc" -> NaN
+  return Number.isFinite(n) ? Math.min(Math.max(n, 1), totalPages) : 1; // keep it between 1 and the last page
+}
+ 
 type LoanRow = {
   id: string;
   ticket_number: string;
@@ -48,19 +61,21 @@ type LoanRow = {
   status: string;
   customers: { full_name: string } | null;
 };
-
+ 
 // searchParams = the "?something=value" part of the address.
-// We only care about "denied".
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
+// "denied" = the no-access message. Pagination: "na" = Needs attention page, "wf" = Waiting for forfeit page.
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ denied?: string; na?: string; wf?: string }> }) {
   // "await" waits for Next.js to finish reading the address
-  const { denied } = await searchParams;
+  const { denied, na, wf } = await searchParams;
   const user = await getCurrentUser();
   if (!user) return null;
   const role = user.profile.role;
   const supabase = await createClient();
-
+ 
   const canSeeCash = hasRole(role, ["operator", "cashier"]);
-
+  // Roles: who can release (redeem) a paid item. Same rule as redeemLoan in loans/actions.ts (Cashier + Admin).
+  const canRelease = hasRole(role, ["cashier"]);
+ 
   const [{ data: openLoans }, { data: todayCash }, { count: pendingFlags }, { count: openSuspicious }, { count: customerCount }] =
     await Promise.all([
       supabase
@@ -68,7 +83,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         .select("id, ticket_number, maturity_date, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, status, customers(full_name)")
         .in("status", ["active", "extended", "reinstated"])
         .is("archived_at", null)
-        .order("maturity_date"),
+        .order("maturity_date")
+        .order("id"), // Pagination: same due date -> always the same order, so no loan shows on two pages
       canSeeCash
         ? supabase.from("cash_flow_entries").select("amount, direction, is_memo").is("archived_at", null).gte("created_at", manilaDayStart())
         : Promise.resolve({ data: [] as { amount: number; direction: "in" | "out"; is_memo: boolean }[] }),
@@ -83,7 +99,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         : Promise.resolve({ count: 0 }),
       supabase.from("customers").select("id", { count: "exact", head: true }).is("archived_at", null),
     ]);
-
+ 
   const loans = (openLoans ?? []) as unknown as LoanRow[];
   const now = new Date();
   const today = manilaToday(now);
@@ -91,37 +107,36 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // (including interest that piled up after the due date).
   // Moved to the top so the lines below can use it.
   const owedNow = (l: LoanRow) => Number(l.principal_balance) + accruedInterest(l, today).interestOwed;
-
+ 
   // D1: a loan with nothing left to pay is "paid, ready to release".
   // We check "less than 1 centavo" instead of "equals 0" because
   // computers can leave tiny leftovers like 0.0000001 when adding decimals.
   const isPaid = (l: LoanRow) => owedNow(l) < 0.01;
-
+ 
   // All paid loans whose item is still in the vault
   const readyToRelease = loans.filter(isPaid);
-
+ 
   // Overdue = past the due date AND still owes money.
   // "!isPaid(l)" means "not paid" (the ! flips true/false).
   const overdue = loans.filter((l) => !isPaid(l) && daysUntilDue(l.maturity_date, today) < 0);
-
+ 
   // Due soon = due today or within 7 days, and still owes money
   const dueSoon = loans.filter((l) => {
     if (isPaid(l)) return false; // paid loans are never "due soon"
     const days = daysUntilDue(l.maturity_date, today);
     return days >= 0 && days <= 7;
   });
-
+ 
   // Total still owed across all open loans (paid ones add ₱0)
   const outstanding = loans.reduce((sum, l) => sum + owedNow(l), 0);
   const cash = computeCashPosition(todayCash ?? []);
-
+ 
   // Needs attention list order: paid first (quick to finish at the counter),
   // then overdue, then due soon. ".slice(0, 8)" keeps only the first 8.
   // D3: keep the FULL list too, so we know if some got cut off
   const attentionAll = [...readyToRelease, ...overdue, ...dueSoon];
-  // Only the first 8 are shown in the table
-  const attention = attentionAll.slice(0, 8);
-
+ 
+ 
   // D5: defaulted loans (grace period ended, not fully paid).
   // Only an Admin can forfeit, so only Admin asks the database for them.
   // "condition ? A : B" = if Admin, run the query (A); otherwise use an empty list (B).
@@ -132,13 +147,38 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           .select("id, ticket_number, maturity_date, defaulted_at, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, status, customers(full_name)") // columns we need, plus the customer's name
           .eq("status", "defaulted") // only defaulted loans
           .is("archived_at", null) // skip archived ones
-          .order("defaulted_at") // oldest default first
+          .order("defaulted_at") // oldest default first (waiting longest = review first)
+          .order("id") // Pagination: same date -> always the same order
       : { data: [] };
-
+ 
   // Tell TypeScript each row looks like a LoanRow plus a defaulted_at date.
   // "?? []" means: if the database gave back nothing, use an empty list.
   const waitingForfeit = (defaultedRows ?? []) as unknown as (LoanRow & { defaulted_at: string | null })[];
-
+  // Pagination: only this page's loans are sent to the browser.
+  // naSize = 3 if the forfeit list is also showing, otherwise 5 (see PAGE_SIZE_ALONE at the top)
+  const naSize = waitingForfeit.length > 0 ? PAGE_SIZE : PAGE_SIZE_ALONE;
+  // Math.ceil rounds up (111 loans / 3 = 37 -> 37 pages, 112 -> 38); "|| 1" = at least 1 page when the list is empty
+  const naPages = Math.ceil(attentionAll.length / naSize) || 1;
+  const naPage = pageNumber(na, naPages); // the page asked for in the address, kept in range
+  // slice(6, 9) = loans 7 to 9 on page 3
+  const attention = attentionAll.slice((naPage - 1) * naSize, naPage * naSize);
+ 
+  // Pagination: same as Needs attention, but with its own page number ("wf")
+  const wfPages = Math.ceil(waitingForfeit.length / PAGE_SIZE) || 1;
+  const wfPage = pageNumber(wf, wfPages);
+  const forfeitPage = waitingForfeit.slice((wfPage - 1) * PAGE_SIZE, wfPage * PAGE_SIZE);
+  // Makes the address for a page of one list while keeping the other list's page.
+  // e.g. going to Needs attention page 2 while Waiting for forfeit is on page 3 -> "/dashboard?na=2&wf=3"
+  const pageHref = (list: "na" | "wf", p: number) => {
+    const q = new URLSearchParams(); // builds the "?a=1&b=2" part
+    const naNext = list === "na" ? p : naPage; // new page for this list, current page for the other
+    const wfNext = list === "wf" ? p : wfPage;
+    if (naNext > 1) q.set("na", String(naNext)); // page 1 is the default, so it's left out
+    if (wfNext > 1) q.set("wf", String(wfNext));
+    const str = q.toString();
+    return str ? `/dashboard?${str}` : "/dashboard";
+  };
+ 
   // Review #4 and #14: for paid loans, find WHEN they were fully paid (their latest payment),
   // so the table can say "Paid Oct 15, waiting 4d" instead of only the old due date.
   const paidIds = readyToRelease.map((l) => l.id); // ids of the paid loans
@@ -153,7 +193,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // loan id -> date of its newest payment. Newest comes first, so we keep the first one we see.
   const paidOn = new Map<string, string>();
   for (const p of paidPayments ?? []) if (!paidOn.has(p.loan_id)) paidOn.set(p.loan_id, p.created_at);
-
+ 
   // Review 2 #6: details of flagged appraisals (oldest first, up to 3), so the alert names them
   const { data: flaggedRows } =
     (pendingFlags ?? 0) > 0
@@ -170,7 +210,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // The flag is set when the item is appraised, so created_at is the date it was flagged.
   const oldestFlag = (flaggedRows ?? [])[0];
   const flagDays = oldestFlag ? Math.max(0, -daysUntilDue(manilaToday(new Date(oldestFlag.created_at)), today)) : 0;
-
+ 
   // Review 2 #4: a paid item waiting longer than this many days gets an amber warning.
   // TODO: confirm the number of days with CTM Pawnshop (30 is a placeholder).
   const UNCLAIMED_WARN_DAYS = 30;
@@ -179,18 +219,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const paidAt = paidOn.get(loanId); // date of the last payment
     return paidAt ? -daysUntilDue(manilaToday(new Date(paidAt)), today) : 0; // days since then
   };
-
+ 
   // Review 2 #13: loans due within 3 days (the Reminders list), shown on the Send reminders shortcut
   const remindersDue = loans.filter((l) => !isPaid(l) && isDueForReminder(l.maturity_date, today)).length;
-
-
+ 
+ 
   // Redesign: today's date under the title, in Philippine time, e.g. "Monday, October 19, 2026"
   const todayLabel = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "Asia/Manila" }).format(now);
-
+ 
   // Review #2: split what is owed into principal and interest (same numbers as before, just separated)
   const principalTotal = loans.reduce((sum, l) => sum + Number(l.principal_balance), 0);
   const interestTotal = outstanding - principalTotal;
-
+ 
   // Redesign: the 4 summary cards as one list, so the page draws them with one loop.
   // icon = small sidebar icon next to the label; tone = colour of the number.
   type IconName = Parameters<typeof Icon>[0]["name"];
@@ -209,30 +249,30 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   ];
   // picks the text colour for a number: red, amber, or the normal navy
   const toneClass = (tone: Kpi["tone"]) => (tone === "danger" ? "text-red-700" : tone === "warning" ? "text-amber-700" : "text-navy-900");
-
+ 
   // Redesign: quick links to common jobs. Each one only shows for roles that can do it
   // (hasRole also lets Admin through). These are the same pages as the sidebar, no new features.
   // Review #10: icons, and the two most-used counter jobs (main = true) shown stronger and first.
   // group = which heading it sits under (same groups as the sidebar)
   type Shortcut = { show: boolean; href: string; label: string; hint: string; icon: IconName; main?: boolean; group: "Counter" | "Vault & cash" };
   const allShortcuts: Shortcut[] = [
-    { show: hasRole(role, ["cashier"]), href: "/dashboard/loans/new", label: "New loan", hint: "Pick a customer and an appraised item", icon: "plus", main: true, group: "Counter" },
-    { show: hasRole(role, ["cashier"]), href: "/dashboard/loans?status=open", label: "Payment, renewal or redemption", hint: "Open the loan, then choose the action", icon: "ticket", main: true, group: "Counter" },
+    { show: hasRole(role, ["cashier"]), href: "/dashboard/loans/new", label: "New loan", hint: "Customer + appraised item", icon: "plus", main: true, group: "Counter" },
+    { show: hasRole(role, ["cashier"]), href: "/dashboard/loans?status=open", label: "Payment, renewal or redemption", hint: "Open the loan, pick the action", icon: "ticket", main: true, group: "Counter" },
     { show: hasRole(role, ["appraiser", "cashier"]), href: "/dashboard/appraisals?new=1", label: "New appraisal", hint: "Weigh and value an item", icon: "scale", group: "Counter" },
-    { show: hasRole(role, ["operator"]), href: "/dashboard/customers?new=1", label: "Register customer", hint: "Name, ID and contact details", icon: "users", group: "Counter" },
+    { show: hasRole(role, ["operator"]), href: "/dashboard/customers?new=1", label: "Register customer", hint: "Name, ID and contact", icon: "users", group: "Counter" },
     { show: canSeeCash, href: "/dashboard/finance", label: "Record cash entry", hint: "Expenses and other revenue", icon: "cash", group: "Vault & cash" },
     { show: hasRole(role, ["cashier"]) && role !== "admin", href: "/dashboard/compliance/reminders", label: "Send reminders", hint: remindersDue ? `${remindersDue} loan${remindersDue === 1 ? "" : "s"} due within 3 days` : "No loans due within 3 days", icon: "bell", group: "Counter" },
-    { show: hasRole(role, ["operator"]), href: "/dashboard/inventory/audit", label: "Physical audit", hint: "Check every item in the vault", icon: "clipboard", group: "Vault & cash" },
+    { show: hasRole(role, ["operator"]), href: "/dashboard/inventory/audit", label: "Physical audit", hint: "Check every vault item", icon: "clipboard", group: "Vault & cash" },
   ];
   const shortcuts = allShortcuts.filter((s) => s.show); // keep only the ones this role can use
   // split into the two groups; a group with nothing in it is skipped
   const shortcutGroups = (["Counter", "Vault & cash"] as const)
     .map((g) => ({ title: g, items: shortcuts.filter((s) => s.group === g) }))
     .filter((g) => g.items.length > 0);
-
+ 
   // How many days until a loan is due (used for the "in 3d" note on due-soon rows)
   const dueIn = (l: LoanRow) => daysUntilDue(l.maturity_date, today);
-
+ 
   const primary = hasRole(role, ["cashier"])
     ? { href: "/dashboard/loans/new", label: "New loan" }
     : hasRole(role, ["appraiser"])
@@ -240,14 +280,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       : hasRole(role, ["operator"])
         ? { href: "/dashboard/customers?new=1", label: "Register customer" }
         : null;
-
+ 
   return (
-    // space-y-6 = 24px between the big blocks (header, alerts, cards, the two columns)
-    <div className="space-y-6">
+    // Viewport fit: space-y-4 = 16px between the big blocks (was 24px), saves height on laptop screens
+    <div className="space-y-4">
       <PageHeader
-        title="Dashboard"
-        // Redesign: today's date under the title
-        description={todayLabel}
+        // Viewport fit: today's date sits on the same line as the title (saves a line of height)
+        title={
+          <>
+            Dashboard
+            {/* font-sans = normal font, not the title font; hidden on phones where space is short */}
+            <span className="ml-3 hidden font-sans text-sm font-normal tracking-normal text-slate-500 sm:inline">{todayLabel}</span>
+          </>
+        }
         actions={
           // <> </> groups the search box and the button together
           <>
@@ -265,14 +310,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </>
         }
       />
-
+ 
       {/* D2: only shows when the address has ?denied=1 */}
       {denied === "1" && (
         <Alert tone="warning" title="You don't have access to that page.">
           It is not available to your role ({ROLE_LABELS[role]}). Ask an Admin if you need it.
         </Alert>
       )}
-
+ 
+      {/* Viewport fit: the two warnings sit side by side on wide screens (counterfeit gets 3/5 of the width
+          because its text is longer), stacked on smaller ones.
+          They stay separate boxes with their own colour and their own button. Only drawn if at least one shows. */}
+      {((pendingFlags ?? 0) > 0 || (openSuspicious ?? 0) > 0) && (
+      <div className={cx("grid gap-3", (pendingFlags ?? 0) > 0 && (openSuspicious ?? 0) > 0 && "xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]")}>
       {/* Counterfeit alert (compact): ONE slim row on computers, wraps to 2 rows on phones.
           Only shows when at least 1 appraisal is waiting for counterfeit review. */}
       {(pendingFlags ?? 0) > 0 && (
@@ -317,7 +367,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       )}
       {/* Suspicious-activity alert: Admin only, only when flags are open */}
       {(openSuspicious ?? 0) > 0 && (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        // Viewport fit: px-3 py-2 = same slim size as the counterfeit alert
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           {/* left side: icon + message */}
           <span className="flex items-center gap-2">
             {/* Redesign: shield icon, same as Suspicious activity in the sidebar */}
@@ -332,14 +383,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </ButtonLink>
         </div>
       )}
-
+      {/* end of the warnings row */}
+      </div>
+      )}
+ 
       {/* Redesign: 4 summary cards in one row on wide screens (lg = 1024px and up),
           2 per row on smaller screens. Each card is a link to the matching list. */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {/* one card per number */}
         {kpis.map((k) => (
           // the whole card is a link; hover makes the border darker so you know it's clickable
-          <Link key={k.label} href={k.href} className="block rounded-md border border-slate-200 bg-white p-5 transition-colors hover:border-navy-300">
+          <Link key={k.label} href={k.href} className="block rounded-md border border-slate-200 bg-white px-4 py-2.5 transition-colors hover:border-navy-300">
             {/* top line: small icon + label */}
             <span className="flex items-center gap-2 text-sm font-medium text-slate-600">
               {/* the icon (same set as the sidebar, no coloured circle) */}
@@ -349,29 +403,44 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             {/* end of top line */}
             </span>
             {/* the big number, coloured by its tone (red = overdue, amber = due soon) */}
-            <span className={cx("mt-2 block text-3xl font-semibold tabular-nums", toneClass(k.tone))}>{k.value}</span>
+            {/* Viewport fit: text-2xl and mt-1 (was text-3xl, mt-2) so the cards are about 110px tall */}
+            <span className={cx("mt-1 block text-2xl font-semibold tabular-nums", toneClass(k.tone))}>{k.value}</span>
             {/* the explanation line under the number */}
-            <span className="mt-1 block text-sm text-slate-500">{k.hint}</span>
+            <span className="mt-0.5 block text-sm text-slate-500">{k.hint}</span>
             {/* second line: principal vs interest on Open loans; forfeit-pending count on Overdue (Admin) */}
-            {k.detail && <span className="mt-0.5 block text-sm text-slate-500">{k.detail}</span>}
+            {/* Viewport fit: text-xs for the extra detail line, so it rarely wraps */}
+            {k.detail && <span className="mt-0.5 block text-xs text-slate-500">{k.detail}</span>}
           {/* end of the card */}
           </Link>
         ))}
       {/* end of the cards row */}
       </div>
-
-      {/* Redesign: two columns on wide screens. Left (2 of 3) = the loan lists to work on.
-          Right (1 of 3) = quick actions. On phones the right side goes under the lists.
-          lg:items-start = each side is only as tall as its content */}
-      <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
-        {/* LEFT: the lists. min-w-0 lets it shrink on small screens (same fix as F1) */}
-        <div className="min-w-0 space-y-6 lg:col-span-2">
-          <section>
-            <SectionTitle description="Loans ready to release, overdue, or due within 7 days.">
-              {/* the count in brackets = how many loans are in the list */}
-              Needs attention <span className="ml-1 font-normal text-slate-500">({attentionAll.length})</span>
-            </SectionTitle>
-            <Card padded={false}>
+ 
+      {/* Redesign: two columns on wide screens. Left = the loan lists to work on, right = quick actions.
+          On smaller screens the quick actions go under the lists.
+          items-start = each item is only as tall as its content */}
+      {/* Viewport fit: quick actions get a fixed 17rem (19rem from 1536px); the lists get the rest,
+          so their columns don't squeeze and wrap. minmax(0,1fr) stops a wide table from pushing the page sideways. */}
+      {/* Alignment: ONE shared grid for both columns, so the headings and the cards line up by themselves.
+            Row 1 = the two headings (Needs attention | Quick actions)
+            Row 2 = the two cards (Needs attention table | Quick actions card, which also spans row 3)
+            Row 3 = Waiting for forfeit (left only)
+          A row is as tall as its tallest item, so if the left description wraps (zoom, small screen),
+          both cards still start at the same height. Below 1280px wide (xl; small laptops, 125%+ zoom) it's one column
+          in reading order, so the table keeps enough width for its buttons. */}
+      <div className="grid gap-x-4 xl:grid-cols-[minmax(0,1fr)_17rem] xl:items-start 2xl:grid-cols-[minmax(0,1fr)_19rem]">
+          {/* className="contents" = the section's heading and card become items of the grid above */}
+          <section className="contents">
+            {/* row 1, left: the heading. The short explanation sits to the right of the title */}
+            <div className="min-w-0 xl:col-start-1 xl:row-start-1">
+              <SectionTitle actions={<span className="text-sm text-slate-500">Ready to release, overdue, or due within 7 days</span>}>
+                {/* the count in brackets = how many loans are in the list */}
+                Needs attention <span className="ml-1 font-normal text-slate-500">({attentionAll.length})</span>
+              </SectionTitle>
+            {/* end of the heading */}
+            </div>
+            {/* row 2, left: the table card. min-w-0 lets it shrink on small screens */}
+            <Card padded={false} className="min-w-0 xl:col-start-1 xl:row-start-2">
               {attention.length === 0 ? (
                 <EmptyState title="Nothing overdue or due in the next 7 days." />
               ) : (
@@ -409,16 +478,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                       );
                     })}
                   </ul>
-
+ 
                   {/* COMPUTER ONLY (hidden sm:block): the table */}
                   <div className="hidden sm:block">
-                    <Table minWidth="640px">
-                      <THead>
-                        <TH>Ticket</TH>
+                    {/* Pagination: max-h-60 = never taller than 240px (room for 3 rows); max-h-80 = 320px when it shows 5 rows.
+                        Extra rows only scroll inside it
+                        when text wraps a lot (big zoom).
+                        key={naPage} = a fresh box on each page, so its scroll starts back at the top */}
+                    <Table minWidth="640px" className={naSize > PAGE_SIZE ? "max-h-80 overflow-y-auto" : "max-h-60 overflow-y-auto"} key={naPage}>
+                      {/* sticky = column headings stay visible while the rows scroll */}
+                      <THead sticky>
+                        {/* Viewport fit: own Ticket column only on wide screens (2xl = 1536px and up); on smaller ones it shows under the name */}
+                        <TH className="hidden 2xl:table-cell">Ticket</TH>
                         <TH>Customer</TH>
                         {/* Review #14: "Date" because paid loans show the payment date, others the due date */}
                         <TH>Date</TH>
-                        <TH align="right">Owed now</TH>
+                        {/* Viewport fit: whitespace-nowrap keeps "Owed now" on one line, so the heading row stays short */}
+                        <TH align="right" className="whitespace-nowrap">Owed now</TH>
                         <TH>Status</TH>
                         <TH>
                           <span className="sr-only">Actions</span>
@@ -432,9 +508,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                           return (
                             // Redesign: no red row tint; the red "Overdue" badge is enough
                             <TR key={loan.id}>
-                              <TD mono className="whitespace-nowrap">{loan.ticket_number}</TD>
-                              <TD>{loan.customers?.full_name ?? ""}</TD>
+                              <TD mono className="hidden whitespace-nowrap 2xl:table-cell">
+                                {/* Viewport fit: long tickets are cut with "..." at 11rem; hover shows the full number */}
+                                <span className="block max-w-[11rem] truncate" title={loan.ticket_number}>{loan.ticket_number}</span>
+                              </TD>
                               <TD>
+                                {/* the customer's name */}
+                                {loan.customers?.full_name ?? ""}
+                                {/* Viewport fit: ticket under the name on screens narrower than 1536px (the Ticket column is hidden there);
+                                    one line, ends with "..." if too long, full number on hover */}
+                                <span className="block max-w-[9rem] truncate font-mono text-xs text-slate-500 2xl:hidden" title={loan.ticket_number}>{loan.ticket_number}</span>
+                              </TD>
+                              {/* Viewport fit: the date stays on one line */}
+                              <TD className="whitespace-nowrap">
                                 {paid && paidOn.get(loan.id) ? (
                                   // Review #4: paid loan = payment date + how long the item has waited
                                   <>
@@ -468,7 +554,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                                 {/* Review #4: paid loans say what to do next. Both open the loan page, where the
                                     Cashier checks the ticket (or the customer's ID for a lost ticket) and confirms
                                     the redemption. Nothing is released automatically, and a redeemed loan can't be redeemed again. */}
-                                <ViewButton href={`/dashboard/loans/${loan.id}`}>{paid ? "Review release" : "View loan"}</ViewButton>
+                                {/* Roles: only Cashier and Admin can release an item, so Operator and Appraiser just see "View loan" */}
+                                <ViewButton href={`/dashboard/loans/${loan.id}`}>{paid && canRelease ? "Review release" : "View loan"}</ViewButton>
                               </ActionsCell>
                             </TR>
                           );
@@ -480,36 +567,67 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 {/* closes the <> fragment */}
                 </>
               )}
-
-              {/* D3: only shows when some loans were cut off */}
-              {attentionAll.length > attention.length && (
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3 text-sm text-slate-600">
-                  <span>
-                    Showing {attention.length} of {attentionAll.length}.
-                  </span>
-                  <ButtonLink href="/dashboard/loans?status=open" size="sm">
-                    View all open loans
-                  </ButtonLink>
-                </div>
+ 
+              {/* Pagination: Previous / Page X of Y / Next + See all (replaces the old "Showing 8 of N" bar) */}
+              {attentionAll.length > 0 && (
+                <ListPager
+                  label="Needs attention"
+                  page={naPage}
+                  totalPages={naPages}
+                  total={attentionAll.length}
+                  pageSize={naSize}
+                  hrefFor={(p) => pageHref("na", p)}
+                  seeAllHref="/dashboard/loans?status=open&sort=due&dir=asc"
+                  seeAllLabel="See all open loans"
+                />
               )}
             </Card>
           </section>
-
-          {/* D5: Admin-only list of defaulted loans. Hidden when there are none. */}
+ 
+          {/* D5: Admin-only list of defaulted loans. Hidden when there are none.
+              Alignment: row 3, left column; mt-3 = 12px under the Needs attention card */}
           {waitingForfeit.length > 0 && (
-            <section>
-              <SectionTitle description="Grace period ended without full payment. Open each loan to forfeit it.">
+            <section className="mt-3 min-w-0 xl:col-start-1 xl:row-start-3">
+              <SectionTitle actions={<span className="text-sm text-slate-500">Grace period ended without full payment</span>}>
                 {/* the count in brackets */}
                 Waiting for forfeit <span className="ml-1 font-normal text-slate-500">({waitingForfeit.length})</span>
               </SectionTitle>
               <Card padded={false}>
-                <Table minWidth="640px">
-                  <THead>
-                    <TH>Ticket</TH>
+                {/* PHONE ONLY (sm:hidden): one tappable block per loan, same as Needs attention */}
+                <ul className="divide-y divide-slate-100 sm:hidden">
+                  {forfeitPage.map((loan) => (
+                    <li key={loan.id}>
+                      {/* the whole block opens the loan, where the Admin reviews the forfeit */}
+                      <Link href={`/dashboard/loans/${loan.id}`} className="block px-4 py-3 hover:bg-slate-50">
+                        {/* Line 1: customer on the left, amount owed on the right */}
+                        <div className="flex items-start justify-between gap-3">
+                          <span className="font-medium text-slate-900">{loan.customers?.full_name ?? ""}</span>
+                          <span className="whitespace-nowrap font-medium tabular-nums text-slate-900">{formatPeso(owedNow(loan))}</span>
+                        </div>
+                        {/* Line 2: status, grace end date, ticket number */}
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+                          <StatusBadge status="defaulted" label="Forfeit pending" />
+                          <span>Grace ended {formatDate(loan.defaulted_at)}</span>
+                          <span className="font-mono">{loan.ticket_number}</span>
+                        </div>
+                      {/* end of the tappable block */}
+                      </Link>
+                    </li>
+                  ))}
+                {/* end of the phone list */}
+                </ul>
+ 
+                {/* COMPUTER ONLY (hidden sm:block). Pagination: same bounded, scrollable box as Needs attention, with its own page (wfPage) */}
+                <div className="hidden sm:block">
+                <Table minWidth="640px" className="max-h-60 overflow-y-auto" key={wfPage}>
+                  <THead sticky>
+                    {/* Viewport fit: own Ticket column only on wide screens (2xl = 1536px and up); on smaller ones it shows under the name */}
+                        <TH className="hidden 2xl:table-cell">Ticket</TH>
                     <TH>Customer</TH>
                     {/* Review 2 #5: the date it became eligible for forfeit review */}
-                    <TH>Grace ended</TH>
-                    <TH align="right">Owed now</TH>
+                    <TH className="whitespace-nowrap">Grace ended</TH>
+                    {/* Viewport fit: whitespace-nowrap keeps "Owed now" on one line, so the heading row stays short */}
+                        <TH align="right" className="whitespace-nowrap">Owed now</TH>
                     <TH>Status</TH>
                     <TH>
                       {/* sr-only = hidden on screen, read out by screen readers */}
@@ -518,11 +636,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   </THead>
                   <TBody>
                     {/* .map() makes one table row for each defaulted loan */}
-                    {waitingForfeit.map((loan) => (
+                    {forfeitPage.map((loan) => (
                       <TR key={loan.id}>
-                        <TD mono className="whitespace-nowrap">{loan.ticket_number}</TD>
-                        <TD>{loan.customers?.full_name ?? ""}</TD>
-                        <TD>{formatDate(loan.defaulted_at)}</TD>
+                        <TD mono className="hidden whitespace-nowrap 2xl:table-cell">
+                                {/* Viewport fit: long tickets are cut with "..." at 11rem; hover shows the full number */}
+                                <span className="block max-w-[11rem] truncate" title={loan.ticket_number}>{loan.ticket_number}</span>
+                              </TD>
+                        <TD>
+                                {/* the customer's name */}
+                                {loan.customers?.full_name ?? ""}
+                                {/* Viewport fit: ticket under the name on screens narrower than 1536px (the Ticket column is hidden there);
+                                    one line, ends with "..." if too long, full number on hover */}
+                                <span className="block max-w-[9rem] truncate font-mono text-xs text-slate-500 2xl:hidden" title={loan.ticket_number}>{loan.ticket_number}</span>
+                              </TD>
+                        <TD className="whitespace-nowrap">{formatDate(loan.defaulted_at)}</TD>
                         <TD align="right">{formatPeso(owedNow(loan))}</TD>
                         {/* Redesign: status column, same place as in the table above */}
                         <TD>
@@ -537,32 +664,50 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     ))}
                   </TBody>
                 </Table>
+                {/* closes the computer-only div */}
+                </div>
+                {/* Pagination: its own Previous / Next, so it never changes the Needs attention page */}
+                <ListPager
+                  label="Waiting for forfeit"
+                  page={wfPage}
+                  totalPages={wfPages}
+                  total={waitingForfeit.length}
+                  pageSize={PAGE_SIZE}
+                  hrefFor={(p) => pageHref("wf", p)}
+                  seeAllHref="/dashboard/loans?status=defaulted"
+                  seeAllLabel="See all defaulted loans"
+                />
               </Card>
             </section>
           )}
-        {/* end of the left side */}
-        </div>
-
-        {/* RIGHT side: quick actions */}
-        <div className="min-w-0 space-y-6">
+ 
         {/* quick actions. Hidden if this role has none. */}
         {shortcuts.length > 0 && (
-          // no visible "Quick actions" title, so the whole box fits without scrolling;
-          // aria-label still tells screen readers what this box is
-          <aside aria-label="Quick actions">
-            <Card padded={false}>
+          // aria-label tells screen readers what this box is
+          // className="contents" = its heading and card become items of the shared grid
+          <aside aria-label="Quick actions" className="contents">
+            {/* row 1, right: same SectionTitle as "Needs attention" (same size and gap).
+                mt-4 only on phones, where it sits under the lists. COUNTER / VAULT & CASH stay inside as group labels. */}
+            <div className="mt-4 min-w-0 xl:col-start-2 xl:row-start-1 xl:mt-0">
+              <SectionTitle>Quick actions</SectionTitle>
+            {/* end of the heading */}
+            </div>
+            {/* row 2 (and 3), right: the card starts on the same line as the Needs attention table.
+                row-span-2 so a tall card doesn't push Waiting for forfeit down */}
+            <Card padded={false} className="min-w-0 xl:col-start-2 xl:row-span-2 xl:row-start-2">
               {/* Review 2 #7: one block per group (Counter first, then Vault & cash) */}
               {shortcutGroups.map((g, gi) => (
                 // border-t between groups, but not above the first one
                 <div key={g.title} className={cx(gi > 0 && "border-t border-slate-200")}>
                   {/* small group heading */}
-                  <p className="px-5 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{g.title}</p>
+                  <p className="px-4 pt-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">{g.title}</p>
                   {/* the list; divide-y draws a thin line between rows */}
                   <ul className="divide-y divide-slate-100">
                     {g.items.map((s) => (
                       <li key={s.href + s.label}>
-                        {/* the whole row is a link: label + hint on the left, arrow on the right */}
-                        <Link href={s.href} className="flex items-center justify-between gap-3 px-5 py-4 hover:bg-slate-50">
+                        {/* the whole row is a link: label + hint on the left, arrow on the right.
+                            Viewport fit: py-2 (was py-4) so all actions plus the "Quick actions" heading fit beside the lists */}
+                        <Link href={s.href} className="flex items-center justify-between gap-3 px-4 py-2 hover:bg-slate-50">
                           {/* left: icon + what it does */}
                           <span className="flex min-w-0 items-start gap-3">
                             {/* Review #10: icon; navy for the 2 main jobs, grey for the rest */}
@@ -570,7 +715,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                             <span className="min-w-0">
                               {/* label: bolder and navy for the 2 main jobs */}
                               <span className={cx("block text-sm", s.main ? "font-semibold text-navy-900" : "font-medium text-slate-900")}>{s.label}</span>
-                              <span className="block text-sm text-slate-500">{s.hint}</span>
+                              {/* Viewport fit: the hint stays on one line; if it's too long it ends with "...", full text on hover */}
+                              <span className="block truncate text-sm text-slate-500" title={s.hint}>{s.hint}</span>
                             </span>
                           </span>
                           {/* right: arrow, so it looks clickable */}
@@ -587,9 +733,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           {/* end of quick actions */}
           </aside>
         )}
-        {/* end of the right side */}
-        </div>
-      {/* end of the two columns */}
+      {/* end of the shared grid */}
       </div>
     </div>
   );

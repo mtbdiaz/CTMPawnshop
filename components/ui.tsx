@@ -291,9 +291,11 @@ export function EmptyState({
 
 /* ---------- Tables ---------- */
 
-export function Table({ children, minWidth = "640px" }: { children: ReactNode; minWidth?: string }) {
+// className (optional) = extra classes for the scroll box, e.g. a max height so the table scrolls inside itself
+export function Table({ children, minWidth = "640px", className }: { children: ReactNode; minWidth?: string; className?: string }) {
   return (
-    <div className="overflow-x-auto">
+    // the box around the table; scrolls sideways on small screens, plus any extra classes passed in
+    <div className={cx("overflow-x-auto", className)}>
       <table className="w-full text-left text-sm" style={{ minWidth }}>
         {children}
       </table>
@@ -301,9 +303,11 @@ export function Table({ children, minWidth = "640px" }: { children: ReactNode; m
   );
 }
 
-export function THead({ children }: { children: ReactNode }) {
+// sticky (optional) = the column headings stay at the top while the rows scroll under them
+export function THead({ children, sticky }: { children: ReactNode; sticky?: boolean }) {
   return (
-    <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 print:bg-white">
+    // the heading row; "sticky top-0 z-10" is only added when sticky is true
+    <thead className={cx("border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 print:bg-white", sticky && "sticky top-0 z-10")}>
       <tr>{children}</tr>
     </thead>
   );
