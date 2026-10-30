@@ -5,6 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatPeso, manilaToday } from "@/lib/format";
 import { categoryLabel } from "@/lib/appraisal/valuation";
 import { computeCustomerScore, weightsFromRows } from "@/lib/customers/score";
+// C1: interest that piled up after the due date (same math as the Dashboard and loan page)
+import { accruedInterest } from "@/lib/loans/accrual";
+// C8: "how many days until this date" (negative = in the past), same helper as the Dashboard
+import { daysUntilDue } from "@/lib/compliance/reminders";
 import { ScoreBadge } from "@/components/score-badge";
 import { ArchiveForm } from "@/components/archive-controls";
 import {
@@ -22,6 +26,9 @@ import {
 import { updateCustomer } from "../actions";
 import { AdminIdentityForm, CustomerForm } from "../customer-form";
 import { BlacklistForm } from "./blacklist-form";
+// P3: masked ID + eye button, and who may reveal a full ID
+import { IdReveal } from "../id-reveal";
+import { ID_REVEAL_ROLES, idEnding, maskId } from "@/lib/customers/id-privacy";
 
 type LoanHistoryRow = {
   id: string;
@@ -29,6 +36,9 @@ type LoanHistoryRow = {
   principal_amount: number;
   principal_balance: number;
   interest_owed: number;
+  // C1: these two are needed to work out the late interest
+  interest_rate_percent: number;
+  interest_accrued_through: string | null;
   status: string;
   loan_date: string;
   maturity_date: string;
@@ -39,8 +49,27 @@ type LoanHistoryRow = {
   redeemed_at: string | null;
   archived_at: string | null;
   loan_payments: { id: string; amount: number; receipt_number: string; created_at: string }[];
-  loan_extensions: { id: string; new_maturity_date: string; additional_interest_amount: number; created_at: string }[];
+  // C4: extension_type tells a cash renewal apart from a capitalize (no cash)
+  loan_extensions: { id: string; new_maturity_date: string; additional_interest_amount: number; capitalized_amount: number; extension_type: string; created_at: string }[];
 };
+
+// C2 + C3 + C8: one status word per loan, the SAME words the Dashboard uses.
+// "badge" picks the colour of the existing StatusBadge, "label" is the word shown.
+function loanLabel(loan: LoanHistoryRow, owed: number, today: string): { badge: string; label: string } {
+  const open = loan.status === "active" || loan.status === "extended" || loan.status === "reinstated"; // still running
+  if (open && owed < 0.01) return { badge: "redeemed", label: "Paid, ready to release" }; // C2: nothing left to pay (green)
+  if (open) {
+    const days = daysUntilDue(loan.maturity_date, today); // days until due (negative = late)
+    if (days < 0) return { badge: "defaulted", label: "Overdue" }; // past the due date (red)
+    if (days <= 7) return { badge: "pending", label: "Due soon" }; // C8: due within 7 days (amber)
+    if (loan.status === "extended") return { badge: "extended", label: "Renewed" }; // C3: "Renewed", not "Extended"
+    if (loan.status === "reinstated") return { badge: "reinstated", label: "Reinstated" };
+    return { badge: "active", label: "Active" };
+  }
+  if (loan.status === "defaulted") return { badge: "defaulted", label: "Defaulted" }; // grace period ended
+  if (loan.status === "redeemed") return { badge: "redeemed", label: "Redeemed" };
+  return { badge: loan.status, label: loan.status === "forfeited" ? "Forfeited" : loan.status };
+}
 
 export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireRole(["operator", "cashier", "appraiser", "admin"]);
@@ -56,7 +85,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
     supabase
       .from("loans")
       .select(
-        "id, ticket_number, principal_amount, principal_balance, interest_owed, status, loan_date, maturity_date, extension_count, late_payment_count, defaulted_at, reinstated_at, redeemed_at, archived_at, loan_payments(id, amount, receipt_number, created_at), loan_extensions(id, new_maturity_date, additional_interest_amount, created_at)",
+        "id, ticket_number, principal_amount, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, status, loan_date, maturity_date, extension_count, late_payment_count, defaulted_at, reinstated_at, redeemed_at, archived_at, loan_payments(id, amount, receipt_number, created_at), loan_extensions(id, new_maturity_date, additional_interest_amount, capitalized_amount, extension_type, created_at)",
       )
       .eq("customer_id", id)
       .order("loan_date", { ascending: false }),
@@ -70,7 +99,8 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
   ]);
   const loanHistory = (loans ?? []) as unknown as LoanHistoryRow[];
   // Item 6: archived loans still count toward history and score.
-  const history = computeCustomerScore(loanHistory, manilaToday(), weightsFromRows(weightRows));
+  const today = manilaToday(); // today's date in Manila
+  const history = computeCustomerScore(loanHistory, today, weightsFromRows(weightRows));
   const openLoans = loanHistory.filter((l) => l.status === "active" || l.status === "extended" || l.status === "reinstated");
   const canEdit = hasRole(role, ["operator"]);
   const blocked = customer.is_blacklisted;
@@ -81,10 +111,18 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
         title={
           <span className="flex flex-wrap items-center gap-3">
             {customer.full_name}
-            <ScoreBadge score={history.score} tier={history.tier} />
-            {blocked && <Badge tone="danger">Blacklisted</Badge>}
-            {customer.archived_at && <Badge tone="neutral">Archived</Badge>}
-            {customer.aml_status === "flagged" && <Badge tone="warning">AML flagged</Badge>}
+            {/* C9: wrapper for the badges. font-sans = normal font instead of the serif title font, gap-2 = small space between badges */}
+            <span className="flex flex-wrap items-center gap-2 font-sans">
+              {/* the customer's score badge (e.g. "Good 85") */}
+              <ScoreBadge score={history.score} tier={history.tier} />
+              {/* red badge, only shows if the customer is blacklisted */}
+              {blocked && <Badge tone="danger">Blacklisted</Badge>}
+              {/* gray badge, only shows if the customer is archived */}
+              {customer.archived_at && <Badge tone="neutral">Archived</Badge>}
+              {/* yellow badge, only shows if the customer is AML flagged */}
+              {customer.aml_status === "flagged" && <Badge tone="warning">AML flagged</Badge>}
+            {/* end of the badges wrapper */}
+            </span>
           </span>
         }
         description={`Customer since ${formatDate(customer.created_at)}. ${openLoans.length} open loan${openLoans.length === 1 ? "" : "s"}.`}
@@ -146,7 +184,8 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
       </Card>
 
       <div className="grid gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
+        {/* Phone fix: min-w-0 lets this column shrink to the screen width instead of pushing the page sideways */}
+        <div className="min-w-0 space-y-6 xl:col-span-2">
           <section>
             <SectionTitle description="Newest first, archived loans included.">Loans and transactions</SectionTitle>
             {loanHistory.length === 0 ? (
@@ -159,8 +198,12 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
             ) : (
               <div className="space-y-3">
                 {loanHistory.map((loan) => {
-                  const owed = Number(loan.principal_balance) + Number(loan.interest_owed);
-                  const isOpen = loan.status === "active" || loan.status === "extended" || loan.status === "reinstated";
+                  // C1: still owed = principal left + interest, INCLUDING interest that piled up
+                  // after the due date (same as the loan page). Defaulted loans still owe money too.
+                  const owes = loan.status === "active" || loan.status === "extended" || loan.status === "reinstated" || loan.status === "defaulted";
+                  const owed = owes ? Number(loan.principal_balance) + accruedInterest(loan, today).interestOwed : 0;
+                  // the status word and colour, same as the Dashboard
+                  const label = loanLabel(loan, owed, today);
                   return (
                     <Card key={loan.id}>
                       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -169,17 +212,22 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                           {loan.archived_at && <Badge tone="neutral">Archived</Badge>}
                           <p className="mt-0.5 text-xs text-slate-500">
                             Issued {formatDate(loan.loan_date)}. Due {formatDate(loan.maturity_date)}.
-                            {loan.extension_count > 0 ? ` Renewed ${loan.extension_count} time(s).` : ""}
+                            {/* C3: "1 time" / "2 times" instead of "time(s)" */}
+                            {loan.extension_count > 0 ? ` Renewed ${loan.extension_count} time${loan.extension_count === 1 ? "" : "s"}.` : ""}
                           </p>
                         </div>
-                        <div className="text-right">
-                          <StatusBadge status={loan.status} />
+                        {/* Phone fix: on phones this block sits under the ticket, left-aligned and full width;
+                            from sm (640px) up it goes back to the right side */}
+                        <div className="w-full text-left sm:w-auto sm:text-right">
+                          {/* C2 + C3 + C8: same status words as the Dashboard */}
+                          <StatusBadge status={label.badge} label={label.label} />
                           <div className="mt-1">
                             <ViewButton href={`/dashboard/loans/${loan.id}`}>View loan</ViewButton>
                           </div>
                           <p className="mt-1 text-sm tabular-nums text-slate-700">
                             {formatPeso(loan.principal_amount)} principal
-                            {isOpen && <span className="block font-semibold text-navy-900">{formatPeso(owed)} owed</span>}
+                            {/* C1: shown for open AND defaulted loans */}
+                            {owes && <span className="block font-semibold text-navy-900">{formatPeso(owed)} owed</span>}
                           </p>
                         </div>
                       </div>
@@ -193,14 +241,27 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                               <span className="tabular-nums font-medium text-emerald-700">{formatPeso(p.amount)}</span>
                             </li>
                           ))}
-                          {loan.loan_extensions.map((ext) => (
-                            <li key={ext.id} className="flex justify-between gap-2">
-                              <span>
-                                Extended to {formatDate(ext.new_maturity_date)}, {formatDate(ext.created_at)}
-                              </span>
-                              <span className="tabular-nums">{formatPeso(ext.additional_interest_amount)} new-period interest</span>
-                            </li>
-                          ))}
+                          {loan.loan_extensions.map((ext) =>
+                            // C4: a capitalize adds the unpaid interest to the principal (no cash paid),
+                            // so it must not look like a normal cash renewal
+                            ext.extension_type === "capitalized" ? (
+                              <li key={ext.id} className="flex justify-between gap-2">
+                                <span>
+                                  Capitalized (no cash), new due date {formatDate(ext.new_maturity_date)}, {formatDate(ext.created_at)}
+                                </span>
+                                <span className="tabular-nums">{formatPeso(ext.capitalized_amount)} added to principal</span>
+                              </li>
+                            ) : (
+                              <li key={ext.id} className="flex justify-between gap-2">
+                                <span>
+                                  {/* C3: "Renewed", the same word as everywhere else */}
+                                  Renewed, new due date {formatDate(ext.new_maturity_date)}, {formatDate(ext.created_at)}
+                                </span>
+                                {/* the interest charged for the new 30-day term */}
+                                <span className="tabular-nums">{formatPeso(ext.additional_interest_amount)} interest for the new term</span>
+                              </li>
+                            ),
+                          )}
                         </ul>
                       )}
                     </Card>
@@ -216,13 +277,14 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
               {appraisals && appraisals.length > 0 ? (
                 <ul className="divide-y divide-slate-100">
                   {appraisals.map((a) => (
-                    <li key={a.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
+                    // Phone fix: flex-wrap lets the badge, amount and button drop to a second line on small screens
+                    <li key={a.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 py-3 text-sm">
                       <span>
                         {categoryLabel(a.category, a.category_other)}, {a.karat}K, {a.weight_grams} g
                       </span>
-                      <span className="flex items-center gap-3">
+                      <span className="flex flex-wrap items-center gap-3">
                         {a.is_counterfeit_risk && (
-                          <StatusBadge status={a.counterfeit_resolution ?? "pending"} label={`Counterfeit: ${a.counterfeit_resolution ?? "pending"}`} />
+                          <StatusBadge status={a.counterfeit_resolution ?? "pending"} label={a.counterfeit_resolution === "cleared" ? "Cleared" : a.counterfeit_resolution === "confirmed" ? "Confirmed risk" : "Counterfeit review"} />
                         )}
                         <span className="tabular-nums text-slate-700">{formatPeso(a.computed_value)}</span>
                         <ViewButton href={`/dashboard/appraisals/${a.id}`}>View appraisal</ViewButton>
@@ -251,7 +313,12 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                     { label: "Address", value: customer.address },
                     { label: "Date of birth", value: formatDate(customer.date_of_birth) },
                     { label: "ID type", value: customer.id_type },
-                    { label: "ID number", value: <span className="font-mono">{customer.id_number}</span> },
+                    // P3: masked here too (this read-only view is what Cashier and Appraiser see). Cashier gets the eye button;
+                    // only the masked text is sent to the browser
+                    {
+                      label: "ID number",
+                      value: <IdReveal customerId={customer.id} masked={maskId(customer.id_number)} ending={idEnding(customer.id_number)} canReveal={hasRole(role, ID_REVEAL_ROLES)} />,
+                    },
                   ]}
                 />
               )}
