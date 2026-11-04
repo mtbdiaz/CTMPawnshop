@@ -1,11 +1,14 @@
 "use client"; // this file runs in the browser (it uses buttons, router, form state)
 
 import Link from "next/link"; // C6: for the "Open their profile" link
+import { useState } from "react"; // F5: remembers the chosen ID type, to show the right format example
 import { useRouter } from "next/navigation"; // lets us go to another page after saving
 import { ActionForm, CheckboxField, Field, SelectField, SubmitButton, TextareaField } from "@/components/form"; // shared form parts (C6: added CheckboxField)
-import { Alert } from "@/components/ui"; // C6: the red/yellow message box
+import { Alert, buttonClasses } from "@/components/ui"; // C6: the red/yellow message box; F1: button look for Cancel
 import { adminEditCustomer, type ActionState } from "./actions"; // server actions + the result type
 import type { Tables } from "@/lib/supabase/database.types"; // the customer row type from the database
+import { ID_RULES } from "@/lib/validation/customer"; // F10: the ID format rules (same list the server checks)
+import { manilaToday } from "@/lib/format"; // F11: today's date in Manila, the latest birthday the date box allows
 
 // the ID types shown in the "Valid ID type" dropdown
 const ID_TYPES = [
@@ -24,11 +27,14 @@ const ID_TYPES = [
 export function CustomerForm({
   action, // the server action to run on submit (createCustomer or updateCustomer)
   customer, // the existing customer when editing, empty when registering
+  onCancel, // F1: when given (the Register popup), a Cancel button shows next to the main button
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>; // type of the action
   customer?: Tables<"customers">; // type of the customer (optional)
+  onCancel?: () => void; // what Cancel does (optional)
 }) {
   const router = useRouter(); // used to open the new profile after registering
+  const [idType, setIdType] = useState(""); // F5: the ID type picked so far (for the format example)
   // if the customer has an old ID type not in the list, add it so the dropdown can still show it
   const idTypes = customer && !ID_TYPES.includes(customer.id_type) ? [customer.id_type, ...ID_TYPES] : ID_TYPES;
 
@@ -37,7 +43,15 @@ export function CustomerForm({
     <ActionForm
       action={action}
       className="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2"
-      successMessage={customer ? "Customer profile saved." : "Customer registered. AML check completed."}
+      // F3: after registering, say what the AML check actually found (it never blocks registration)
+      successMessage={
+        customer
+          ? "Customer profile saved."
+          : (s) =>
+              s.amlFlagged
+                ? "Customer registered. The AML check flagged a possible watchlist match, so ask an Admin to review it before lending."
+                : "Customer registered. AML check: clear."
+      }
       onSuccess={(state) => {
         // after registering, go straight to the new customer's profile
         if (!customer && state.customerId) router.push(`/dashboard/customers/${state.customerId}`);
@@ -45,6 +59,10 @@ export function CustomerForm({
     >
       {(state) => ( // C6: "state" = what the server sent back, so we can show who the duplicate is
       <>
+      {/* F4: says once what the red * means, instead of repeating it */}
+      <p className="-mb-1 text-xs text-slate-500 sm:col-span-2">
+        <span className="text-red-600" aria-hidden="true">*</span> Required fields
+      </p>
       {/* hidden customer id, only when editing */}
       {customer && <input type="hidden" name="customer_id" value={customer.id} />}
 
@@ -55,7 +73,8 @@ export function CustomerForm({
           <span className="font-mono">{customer.id_number}</span>. Only an Admin can correct them.
         </p>
       ) : (
-        <Field label="Full name" name="full_name" required autoComplete="off" />
+        // F6: autoFocus = the cursor starts in Full name when the popup opens
+        <Field label="Full name" name="full_name" required autoComplete="off" autoFocus />
       )}
       {/* phone number field */}
       <Field
@@ -65,15 +84,21 @@ export function CustomerForm({
         defaultValue={customer?.contact_number}
         required
         placeholder="09XX XXX XXXX"
+        // F2: +63 and 63 numbers are accepted too (saved as 09...)
+        hint="+63 numbers work too."
       />
       {/* email, address and birthday fields */}
-      <Field label="Email" name="email" type="email" defaultValue={customer?.email ?? ""} hint="Optional" className="sm:col-span-2" />
-      <Field label="Address" name="address" defaultValue={customer?.address} required className="sm:col-span-2" />
-      <Field label="Date of birth" name="date_of_birth" type="date" defaultValue={customer?.date_of_birth ?? ""} hint="Optional" />
+      {/* F4: "(optional)" in the label instead of a hint line under the field */}
+      <Field label="Email (optional)" name="email" type="email" defaultValue={customer?.email ?? ""} className="sm:col-span-2" />
+      {/* F7: 2-line box, because full addresses (purok, barangay, town) are long. Same database field as before */}
+      <TextareaField label="Address" name="address" rows={2} defaultValue={customer?.address} required className="sm:col-span-2" />
+      {/* F11: min/max = the date picker won't offer days before 1900 or after today (the server checks this too) */}
+      <Field label="Date of birth (optional)" name="date_of_birth" type="date" min="1900-01-01" max={manilaToday()} defaultValue={customer?.date_of_birth ?? ""} />
       {/* ID type and ID number, only when registering (locked after) */}
       {!customer && (
         <>
-          <SelectField label="Valid ID type" name="id_type" defaultValue="" required>
+          {/* F5: onChange remembers the type, to show its format example under ID number */}
+          <SelectField label="Valid ID type" name="id_type" defaultValue="" required onChange={(e) => setIdType(e.target.value)}>
             <option value="" disabled>
               Select an ID type
             </option>
@@ -88,7 +113,8 @@ export function CustomerForm({
             name="id_number"
             required
             className="sm:col-span-2"
-            hint="Used to verify identity if the customer loses their pawn ticket. Locked after registration."
+            // F10: the expected format for the chosen type (the server blocks a wrong one) + why it matters. F13: says who can correct it later
+            hint={`${ID_RULES[idType] ? `Format: ${ID_RULES[idType].example}.` : "Pick the ID type first."} Used to verify identity if the pawn ticket is lost. After registration, only an Admin can correct it.`}
           />
         </>
       )}
@@ -131,10 +157,17 @@ export function CustomerForm({
         </div>
       )}
 
-      {/* the submit button row */}
-      <div className="sm:col-span-2">
+      {/* the submit button row. F1: in the Register popup, Cancel + Register sit on the right */}
+      <div className={onCancel ? "flex flex-wrap justify-end gap-2 sm:col-span-2" : "sm:col-span-2"}>
+        {/* F1: Cancel (only in the popup). Same height as the main button */}
+        {onCancel && (
+          <button type="button" onClick={onCancel} className={buttonClasses("secondary")}>
+            Cancel
+          </button>
+        )}
         <SubmitButton
-          pendingLabel="Saving"
+          // F3: "Registering" while it saves (the button is also disabled, so it can't be clicked twice)
+          pendingLabel={customer ? "Saving" : "Registering"}
           confirm={
             customer
               ? undefined

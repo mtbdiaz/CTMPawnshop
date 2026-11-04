@@ -196,7 +196,8 @@ export default async function CustomersPage({
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500"
           >
             <EyeIcon off={!hideIds} />
-            {hideIds ? "Show IDs" : "Hide IDs"}
+            {/* F14: says it hides the whole column. It never shows full ID numbers (only the eye does that, one at a time) */}
+            {hideIds ? "Show ID column" : "Hide ID column"}
           </Link>
           {/* U4: filter tabs with counts. "All" clears the filter */}
           <FilterTabs
@@ -406,7 +407,7 @@ export default async function CustomersPage({
               <dt className="font-semibold text-slate-800">Flags and ID</dt>
               <dd>
                 {FLAGS_HELP} ID numbers show only the last 4 characters. Admin, Operator and Cashier can click the eye to see one
-                full ID; it hides again after 30 seconds. Hide IDs removes the ID column, e.g. when a customer can see the screen.
+                full ID; it hides again after 30 seconds. Hide ID column removes the ID column, e.g. when a customer can see the screen.
               </dd>
             </div>
           </dl>

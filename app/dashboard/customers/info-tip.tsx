@@ -39,12 +39,13 @@ export function InfoTip({ label, children }: { label: string; children: ReactNod
       </button>
       {/* the explanation box. popover="auto" = Esc or clicking outside closes it.
           normal-case / font-normal / tracking-normal undo the uppercase style of the column heading it sits in.
+          whitespace-normal = the text always wraps, even inside a heading that is set to stay on one line (the AML heading).
           The shadow is allowed because it floats above the page. */}
       <div
         ref={box}
         id={id}
         popover="auto"
-        className="fixed inset-auto m-0 w-72 rounded-md border border-slate-200 bg-white p-3 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-slate-700 shadow-lg"
+        className="fixed inset-auto m-0 w-72 whitespace-normal rounded-md border border-slate-200 bg-white p-3 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-slate-700 shadow-lg"
       >
         {/* the title of the box, e.g. "Score" */}
         <p className="mb-1 font-semibold text-slate-900">{label}</p>

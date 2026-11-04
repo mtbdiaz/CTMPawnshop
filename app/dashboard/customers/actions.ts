@@ -7,7 +7,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 // also import the shared phone rule we just exported
-import { customerSchema, phPhoneSchema } from "@/lib/validation/customer";
+import { customerSchema, dateOfBirthSchema, idNumberError, phPhoneSchema } from "@/lib/validation/customer";
 import { runAmlCheck } from "@/lib/customers/aml";
 // P3: which roles may see a full government ID number
 import { ID_REVEAL_ROLES } from "@/lib/customers/id-privacy";
@@ -18,6 +18,7 @@ export type ActionState = {
   fieldErrors?: FieldErrors; // red message under a specific field
   success?: boolean; // true when it saved
   customerId?: string; // the new customer's id, used to open their profile
+  amlFlagged?: boolean; // F3: true when the AML check at registration found a possible watchlist match
   // C6: filled in when a matching customer already exists (who it is, if archived, and whether the ID or the phone matched)
   duplicate?: { id: string; name: string; archived: boolean; match: "id" | "phone" };
 }; // end of ActionState
@@ -107,10 +108,13 @@ export async function createCustomer(
     .select("id")
     .single();
 
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("createCustomer failed:", error.message); // F12: the technical details stay in the server log for the developers
+    return { error: "Couldn't register the customer, so nothing was saved. Please try again. If it keeps happening, tell an Admin." }; // F12: plain message for staff
+  }
 
   revalidatePath("/dashboard/customers");
-  return { success: true, customerId: data.id };
+  return { success: true, customerId: data.id, amlFlagged: aml.status === "flagged" }; // F3: tell the form what AML found
 }
 
 // PB-9: update contact details. Name and ID lock after registration
@@ -145,7 +149,7 @@ export async function updateCustomer(_prev: ActionState, formData: FormData): Pr
   // number may not fit 09XXXXXXXXX. If staff leave the number as it is, keep it and
   // let them save the other fields (e.g. a new address). If they type a NEW number,
   // it must pass the full phone rule.
-  const { data: current } = await supabase.from("customers").select("contact_number").eq("id", customerId).maybeSingle();
+  const { data: current } = await supabase.from("customers").select("contact_number, date_of_birth").eq("id", customerId).maybeSingle(); // F11: also the saved birthday
   const saved = current?.contact_number ?? ""; // the number in the database now
   let contactNumber = saved; // keep the saved number unless it was changed
   if (cleanPhone(parsed.data.contact_number) !== cleanPhone(saved)) {
@@ -157,6 +161,15 @@ export async function updateCustomer(_prev: ActionState, formData: FormData): Pr
     contactNumber = phone.data; // the cleaned new number
   }
 
+  // F11: same idea for the birthday: only check it when staff changed it, so an old record can still be saved
+  if ((parsed.data.date_of_birth || null) !== (current?.date_of_birth ?? null)) {
+    const dob = dateOfBirthSchema.safeParse(parsed.data.date_of_birth); // not in the future, not before 1900
+    if (!dob.success) {
+      const message = dob.error.issues[0]?.message ?? "Enter a real date of birth"; // the rule's message
+      return { error: message, fieldErrors: { date_of_birth: message } }; // shows under the date field, nothing saved
+    } // end of the failed check
+  } // end of the birthday check
+
   const { error } = await supabase
     .from("customers")
     .update({
@@ -166,7 +179,10 @@ export async function updateCustomer(_prev: ActionState, formData: FormData): Pr
       date_of_birth: parsed.data.date_of_birth || null,
     })
     .eq("id", customerId);
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("updateCustomer failed:", error.message); // F12: technical details stay in the server log
+    return { error: "Couldn't save the changes, so nothing was changed. Please try again. If it keeps happening, tell an Admin." }; // F12: plain message for staff
+  }
 
   revalidatePath("/dashboard/customers");
   revalidatePath(`/dashboard/customers/${customerId}`);
@@ -187,6 +203,16 @@ export async function adminEditCustomer(_prev: ActionState, formData: FormData):
   const parsed = identitySchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return validationFailure(parsed.error);
   const supabase = await createClient();
+
+  // F10: if the Admin changes the ID type or number, the new one must fit the format for its type.
+  // If only the name is being fixed, the saved ID is left alone even if it's an old one that doesn't fit.
+  const { data: current } = await supabase.from("customers").select("id_type, id_number").eq("id", parsed.data.customer_id).maybeSingle(); // the ID saved now, before this correction
+  const cleanId = (v: string) => v.replace(/[\s-]/g, "").toUpperCase(); // ignore dashes, spaces and capitals
+  const idChanged = !current || current.id_type !== parsed.data.id_type || cleanId(current.id_number) !== cleanId(parsed.data.id_number); // true if the type or the number is different
+  if (idChanged) { // only check the format when the ID itself is being changed
+    const formatError = idNumberError(parsed.data.id_type, parsed.data.id_number); // null = format is fine
+    if (formatError) return { error: formatError, fieldErrors: { id_number: formatError } }; // red text under ID number, nothing saved
+  } // end of the ID format check
 
   // C6b: the same duplicate-ID check as Register, so an Admin correction can't copy another customer's ID
   const idClean = onlyLettersDigits(parsed.data.id_number); // the new ID with no dashes or spaces

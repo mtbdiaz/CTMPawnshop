@@ -25,7 +25,7 @@ describe("validationFailure", () => {
       address: "Davao",
       contact_number: "",
       id_type: "UMID",
-      id_number: "123",
+      id_number: "0111-2222333-4", // F10: a real-looking 12-digit UMID, so only the phone is wrong
     });
     if (parsed.success) throw new Error("expected failure");
     expect(validationFailure(parsed.error).error).toBe("Contact number is required");
