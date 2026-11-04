@@ -1,3 +1,4 @@
+import { isFullyPaid } from "@/lib/loans/status"; // F3: the shared "nothing left to pay" rule
 // Item 6: customer history score. Weights live in the score_weights table so
 // the owner can tune them; DEFAULT_WEIGHTS mirrors the seeded values.
 
@@ -35,6 +36,12 @@ export function weightsFromRows(rows: { key: string; value: number }[] | null | 
 
 export type ScoreLoan = {
   status: string;
+  // F3: needed to tell a fully paid loan apart from an unpaid one. Optional so older callers still work
+  // (without them a loan past its due date is treated as unpaid, the old behaviour).
+  principal_balance?: number;
+  interest_owed?: number;
+  interest_rate_percent?: number;
+  interest_accrued_through?: string | null;
   loan_date: string;
   maturity_date: string;
   extension_count: number;
@@ -67,6 +74,22 @@ export type CustomerScore = {
 };
 
 const OPEN = new Set(["active", "extended", "reinstated"]);
+
+// F3: true when the loan's balance is known and nothing is left to pay (shared rule in lib/loans/status.ts)
+function paidInFull(loan: ScoreLoan, today: string): boolean {
+  if (loan.principal_balance === undefined || loan.interest_owed === undefined || loan.interest_rate_percent === undefined) return false; // balance unknown: treat as unpaid
+  return isFullyPaid(
+    {
+      status: loan.status,
+      maturity_date: loan.maturity_date,
+      principal_balance: Number(loan.principal_balance),
+      interest_owed: Number(loan.interest_owed),
+      interest_rate_percent: Number(loan.interest_rate_percent),
+      interest_accrued_through: loan.interest_accrued_through ?? null,
+    },
+    today,
+  );
+}
 
 export function tierFor(score: number): Tier {
   if (score >= 85) return "Excellent";
@@ -106,7 +129,9 @@ export function computeCustomerScore(loans: ScoreLoan[], today: string, weights:
     if (loan.late_payment_count > 0) points += weights.delinquent * factor;
     if (loan.reinstated_at) points += weights.reinstated * factor;
     if (defaulted) points += weights.defaulted * factor;
-    if (isOpen && loan.maturity_date.slice(0, 10) < today) {
+    // F3: "overdue now" (and its penalty) only when money is still owed. A paid loan waiting for its item to be
+    // released is not overdue (same rule as the Dashboard's "Paid, ready to release").
+    if (isOpen && loan.maturity_date.slice(0, 10) < today && !paidInFull(loan, today)) {
       counts.overdue += 1;
       points += weights.currently_overdue;
     }

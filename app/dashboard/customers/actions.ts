@@ -7,7 +7,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 // also import the shared phone rule we just exported
-import { customerSchema, dateOfBirthSchema, idNumberError, phPhoneSchema } from "@/lib/validation/customer";
+import { customerSchema, requiredDateOfBirthSchema, idNumberError, phPhoneSchema, MAX } from "@/lib/validation/customer"; // F4: MAX = length limits
 import { runAmlCheck } from "@/lib/customers/aml";
 // P3: which roles may see a full government ID number
 import { ID_REVEAL_ROLES } from "@/lib/customers/id-privacy";
@@ -122,9 +122,9 @@ export async function createCustomer(
 // Phone fix: here the number is only checked loosely (not empty). The full
 // 09XXXXXXXXX rule runs in updateCustomer below, and only when the number changed.
 const contactSchema = z.object({
-  address: z.string().trim().min(1, "Address is required"),
+  address: z.string().trim().min(1, "Address is required").max(MAX.address, `Address can be at most ${MAX.address} characters`), // F4
   contact_number: z.string().trim().min(1, "Contact number is required"),
-  email: z.string().trim().email("Enter a valid email").optional().or(z.literal("")),
+  email: z.string().trim().max(MAX.email, `Email can be at most ${MAX.email} characters`).email("Enter a valid email").optional().or(z.literal("")), // F4
   date_of_birth: z.string().trim().optional().or(z.literal("")),
 });
 
@@ -161,9 +161,11 @@ export async function updateCustomer(_prev: ActionState, formData: FormData): Pr
     contactNumber = phone.data; // the cleaned new number
   }
 
-  // F11: same idea for the birthday: only check it when staff changed it, so an old record can still be saved
-  if ((parsed.data.date_of_birth || null) !== (current?.date_of_birth ?? null)) {
-    const dob = dateOfBirthSchema.safeParse(parsed.data.date_of_birth); // not in the future, not before 1900
+  // F16: the birthday is required here too (email is the only optional field). An older record saved without one
+  // must get one the next time it's edited. A saved birthday that wasn't changed is kept as it is (same idea as the phone).
+  const dobChanged = (parsed.data.date_of_birth || null) !== (current?.date_of_birth ?? null); // true if staff typed a different birthday
+  if (!parsed.data.date_of_birth || dobChanged) { // empty, or changed: check it
+    const dob = requiredDateOfBirthSchema.safeParse(parsed.data.date_of_birth ?? ""); // required, real date, and 18 or older (F15)
     if (!dob.success) {
       const message = dob.error.issues[0]?.message ?? "Enter a real date of birth"; // the rule's message
       return { error: message, fieldErrors: { date_of_birth: message } }; // shows under the date field, nothing saved
@@ -190,10 +192,10 @@ export async function updateCustomer(_prev: ActionState, formData: FormData): Pr
 }
 
 const identitySchema = z.object({
-  customer_id: z.string().uuid(),
-  full_name: z.string().trim().min(1, "Full name is required"),
+  customer_id: z.string().uuid("Customer not found."), // PR12: plain message instead of "Invalid UUID" if the link is broken
+  full_name: z.string().trim().min(1, "Full name is required").max(MAX.full_name, `Full name can be at most ${MAX.full_name} characters`).transform((v) => v.replace(/\s+/g, " ")), // PR4: extra spaces become one, same as Register; F4: length limit
   id_type: z.string().trim().min(1, "ID type is required"),
-  id_number: z.string().trim().min(1, "ID number is required"),
+  id_number: z.string().trim().max(MAX.id_number, `ID number can be at most ${MAX.id_number} characters`), // PR4: may be empty = keep the current number; F4: length limit
   reason: z.string().trim().min(5, "Write a reason of at least 5 characters"),
 });
 
@@ -206,9 +208,16 @@ export async function adminEditCustomer(_prev: ActionState, formData: FormData):
 
   // F10: if the Admin changes the ID type or number, the new one must fit the format for its type.
   // If only the name is being fixed, the saved ID is left alone even if it's an old one that doesn't fit.
-  const { data: current } = await supabase.from("customers").select("id_type, id_number").eq("id", parsed.data.customer_id).maybeSingle(); // the ID saved now, before this correction
+  const { data: current } = await supabase.from("customers").select("full_name, id_type, id_number").eq("id", parsed.data.customer_id).maybeSingle(); // the name and ID saved now, before this correction
+  if (!current) return { error: "Customer not found." }; // PR4: wrong or deleted customer id
+  // PR4: an empty "New ID number" means keep the current number
+  parsed.data.id_number = parsed.data.id_number || current.id_number;
   const cleanId = (v: string) => v.replace(/[\s-]/g, "").toUpperCase(); // ignore dashes, spaces and capitals
-  const idChanged = !current || current.id_type !== parsed.data.id_type || cleanId(current.id_number) !== cleanId(parsed.data.id_number); // true if the type or the number is different
+  // PR4: stop a "correction" that changes nothing (same name, same ID type, same number)
+  if (current.full_name === parsed.data.full_name && current.id_type === parsed.data.id_type && cleanId(current.id_number) === cleanId(parsed.data.id_number)) {
+    return { error: "Nothing to correct: the name and ID are the same as what's saved now." }; // nothing saved, nothing written to the audit trail
+  } // end of the nothing-changed check
+  const idChanged = current.id_type !== parsed.data.id_type || cleanId(current.id_number) !== cleanId(parsed.data.id_number); // true if the type or the number is different
   if (idChanged) { // only check the format when the ID itself is being changed
     const formatError = idNumberError(parsed.data.id_type, parsed.data.id_number); // null = format is fine
     if (formatError) return { error: formatError, fieldErrors: { id_number: formatError } }; // red text under ID number, nothing saved

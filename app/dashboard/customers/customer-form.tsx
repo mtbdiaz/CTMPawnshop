@@ -7,8 +7,9 @@ import { ActionForm, CheckboxField, Field, SelectField, SubmitButton, TextareaFi
 import { Alert, buttonClasses } from "@/components/ui"; // C6: the red/yellow message box; F1: button look for Cancel
 import { adminEditCustomer, type ActionState } from "./actions"; // server actions + the result type
 import type { Tables } from "@/lib/supabase/database.types"; // the customer row type from the database
-import { ID_RULES } from "@/lib/validation/customer"; // F10: the ID format rules (same list the server checks)
-import { manilaToday } from "@/lib/format"; // F11: today's date in Manila, the latest birthday the date box allows
+import { ID_RULES, MIN_AGE, MAX, adultCutoff } from "@/lib/validation/customer"; // F10: the ID format rules (same list the server checks); F15: the 18+ rule; F4: MAX = length limits
+import { IdReveal } from "./id-reveal"; // PR4: masked ID + eye button, for the current ID in the Admin correction form
+import { idEnding } from "@/lib/customers/id-privacy"; // PR4: the last 4 characters, for screen readers
 
 // the ID types shown in the "Valid ID type" dropdown
 const ID_TYPES = [
@@ -28,10 +29,12 @@ export function CustomerForm({
   action, // the server action to run on submit (createCustomer or updateCustomer)
   customer, // the existing customer when editing, empty when registering
   onCancel, // F1: when given (the Register popup), a Cancel button shows next to the main button
+  onSaved, // PR1: on the profile, closes the edit form after a successful save
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>; // type of the action
   customer?: Tables<"customers">; // type of the customer (optional)
   onCancel?: () => void; // what Cancel does (optional)
+  onSaved?: () => void; // what to do after saving (optional)
 }) {
   const router = useRouter(); // used to open the new profile after registering
   const [idType, setIdType] = useState(""); // F5: the ID type picked so far (for the format example)
@@ -55,6 +58,8 @@ export function CustomerForm({
       onSuccess={(state) => {
         // after registering, go straight to the new customer's profile
         if (!customer && state.customerId) router.push(`/dashboard/customers/${state.customerId}`);
+        // PR1: after saving contact details on the profile, go back to the details list
+        if (customer) onSaved?.();
       }}
     >
       {(state) => ( // C6: "state" = what the server sent back, so we can show who the duplicate is
@@ -69,12 +74,13 @@ export function CustomerForm({
       {/* when editing: show the locked name and ID. when registering: show the Full name field */}
       {customer ? (
         <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600 sm:col-span-2">
+          {/* PR4: customer.id_number is already masked by the profile page ("•••• 0418"), so the full ID never reaches the browser here */}
           Name and ID are locked after registration: <span className="font-medium text-slate-900">{customer.full_name}</span>, {customer.id_type}{" "}
           <span className="font-mono">{customer.id_number}</span>. Only an Admin can correct them.
         </p>
       ) : (
         // F6: autoFocus = the cursor starts in Full name when the popup opens
-        <Field label="Full name" name="full_name" required autoComplete="off" autoFocus />
+        <Field label="Full name" name="full_name" required autoComplete="off" autoFocus maxLength={MAX.full_name} />
       )}
       {/* phone number field */}
       <Field
@@ -89,11 +95,23 @@ export function CustomerForm({
       />
       {/* email, address and birthday fields */}
       {/* F4: "(optional)" in the label instead of a hint line under the field */}
-      <Field label="Email (optional)" name="email" type="email" defaultValue={customer?.email ?? ""} className="sm:col-span-2" />
+      {/* F4: maxLength = the box stops accepting letters at the limit (the server checks it too) */}
+      <Field label="Email (optional)" name="email" type="email" defaultValue={customer?.email ?? ""} className="sm:col-span-2" maxLength={MAX.email} />
       {/* F7: 2-line box, because full addresses (purok, barangay, town) are long. Same database field as before */}
-      <TextareaField label="Address" name="address" rows={2} defaultValue={customer?.address} required className="sm:col-span-2" />
-      {/* F11: min/max = the date picker won't offer days before 1900 or after today (the server checks this too) */}
-      <Field label="Date of birth (optional)" name="date_of_birth" type="date" min="1900-01-01" max={manilaToday()} defaultValue={customer?.date_of_birth ?? ""} />
+      <TextareaField label="Address" name="address" rows={2} defaultValue={customer?.address} required className="sm:col-span-2" maxLength={MAX.address} />
+      {/* F15 + F16: required on Register AND Edit (email is the only optional field). 18+ rule.
+          min/max = the date picker won't offer days before 1900 or anyone younger than 18 (the server checks this too).
+          If an old record's saved birthday is outside that range, the limits are left off so the rest of the form can still be saved. */}
+      <Field
+        label="Date of birth"
+        name="date_of_birth"
+        type="date"
+        required
+        min={!customer?.date_of_birth || customer.date_of_birth >= "1900-01-01" ? "1900-01-01" : undefined}
+        max={!customer?.date_of_birth || customer.date_of_birth <= adultCutoff() ? adultCutoff() : undefined}
+        defaultValue={customer?.date_of_birth ?? ""}
+        hint={`Customers must be ${MIN_AGE} or older.`}
+      />
       {/* ID type and ID number, only when registering (locked after) */}
       {!customer && (
         <>
@@ -111,6 +129,7 @@ export function CustomerForm({
           <Field
             label="ID number"
             name="id_number"
+        maxLength={MAX.id_number} // F4: length limit
             required
             className="sm:col-span-2"
             // F10: the expected format for the chosen type (the server blocks a wrong one) + why it matters. F13: says who can correct it later
@@ -191,28 +210,48 @@ export function CustomerForm({
 }
 
 /** Item 5: Admin-only correction of locked identity fields. */
+// PR4: the current ID shows masked (with the eye to check it), and "New ID number" starts EMPTY.
+// Leaving it empty keeps the current number, so the full ID is never put in the page.
 export function AdminIdentityForm({ customer }: { customer: Tables<"customers"> }) {
   // same trick as above: keep an old ID type in the dropdown
   const idTypes = !ID_TYPES.includes(customer.id_type) ? [customer.id_type, ...ID_TYPES] : ID_TYPES;
+  const [idType, setIdType] = useState(customer.id_type); // the ID type picked (for the format example)
   return (
     // the Admin correction form
-    <ActionForm action={adminEditCustomer} className="grid grid-cols-1 gap-3" successMessage="Identity corrected. The change is in the audit trail.">
+    <ActionForm action={adminEditCustomer} className="grid grid-cols-1 gap-3 sm:grid-cols-2" successMessage="Identity corrected. The change is in the audit trail.">
       <input type="hidden" name="customer_id" value={customer.id} />
-      <Field label="Full name" name="full_name" defaultValue={customer.full_name} required />
-      <SelectField label="ID type" name="id_type" defaultValue={customer.id_type} required>
+      {/* PR4: what is saved now. customer.id_number is already masked by the page; the eye asks the server for the full number */}
+      <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600 sm:col-span-2">
+        Current ID: {customer.id_type}{" "}
+        <IdReveal customerId={customer.id} masked={customer.id_number} ending={idEnding(customer.id_number)} canReveal />
+      {/* end of the current ID line */}
+      </p>
+      {/* the name, filled in with the current name */}
+      <Field label="Full name" name="full_name" defaultValue={customer.full_name} required className="sm:col-span-2" maxLength={MAX.full_name} />
+      {/* the ID type, filled in with the current type. onChange updates the format example */}
+      <SelectField label="ID type" name="id_type" defaultValue={customer.id_type} required onChange={(e) => setIdType(e.target.value)}>
         {idTypes.map((t) => (
           <option key={t} value={t}>
             {t}
           </option>
         ))}
       </SelectField>
-      <Field label="ID number" name="id_number" defaultValue={customer.id_number} required />
-      <TextareaField label="Reason for the change" name="reason" rows={2} required hint="At least 5 characters. Saved in the audit trail." />
+      {/* PR4: empty on purpose. Blank = keep the current number. The format example follows the chosen type */}
+      <Field
+        label="New ID number (optional)"
+        name="id_number"
+        maxLength={MAX.id_number} // F4: length limit
+        autoComplete="off"
+        hint={`Leave blank to keep the current number.${ID_RULES[idType] ? ` Format: ${ID_RULES[idType].example}.` : ""}`}
+      />
+      {/* the reason, saved in the audit trail */}
+      <TextareaField label="Reason for the change" name="reason" rows={2} required className="sm:col-span-2" hint='At least 5 characters, e.g. "ID number typo, checked the card". Saved in the audit trail.' />
       {/* C10: no variant = navy primary button. justify-self-start = button only as wide as its text, not the whole card */}
       <SubmitButton className="justify-self-start" pendingLabel="Saving" confirm={{ title: "Save this correction?", message: "The before and after values and your reason are written to the audit trail.", confirmLabel: "Save correction", tone: "primary" }}>
         {/* clear label: says exactly what clicking it does, same words as the confirm popup */}
         Save correction
       </SubmitButton>
+    {/* end of the Admin correction form */}
     </ActionForm>
   );
 }

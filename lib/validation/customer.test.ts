@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { customerSchema } from "./customer";
+import { customerSchema, requiredDateOfBirthSchema, adultCutoff, isCalendarDate, MAX } from "./customer";
 
 describe("customerSchema (PB-7 AC2)", () => {
   const valid = {
@@ -7,7 +7,7 @@ describe("customerSchema (PB-7 AC2)", () => {
     address: "123 Rizal St, Davao City",
     contact_number: "09171234567",
     email: "",
-    date_of_birth: "",
+    date_of_birth: "1985-06-15", // F15: a birthday is now required (18+)
     id_type: "Passport",
     id_number: "P1234567",
   };
@@ -87,10 +87,34 @@ describe("customerSchema (PB-7 AC2)", () => {
     }
   });
 
-  // F11: date of birth is optional, but not in the future or before 1900
-  it("accepts an empty or real date of birth", () => {
-    expect(customerSchema.safeParse({ ...valid, date_of_birth: "" }).success).toBe(true); // empty is fine
-    expect(customerSchema.safeParse({ ...valid, date_of_birth: "1985-06-15" }).success).toBe(true); // a real birthday
+  // F15: on Register the birthday is required and the customer must be 18 or older
+  it("requires a date of birth when registering", () => {
+    const r = customerSchema.safeParse({ ...valid, date_of_birth: "" }); // left empty
+    expect(r.success).toBe(false); // must fail
+    if (!r.success) expect(r.error.issues[0].path).toEqual(["date_of_birth"]); // message under the date field
+  });
+
+  it("accepts exactly 18 today, blocks 17", () => {
+    const eighteenToday = adultCutoff(); // turns 18 today
+    const [y, m, d] = eighteenToday.split("-"); // split it to make "one day younger"
+    const oneDayShort = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d) + 1)).toISOString().slice(0, 10); // turns 18 tomorrow
+    expect(customerSchema.safeParse({ ...valid, date_of_birth: eighteenToday }).success).toBe(true); // 18 today: OK
+    const r = customerSchema.safeParse({ ...valid, date_of_birth: oneDayShort }); // still 17
+    expect(r.success).toBe(false); // blocked
+    if (!r.success) expect(r.error.issues[0].message).toContain("at least 18"); // with the 18+ message
+  });
+
+  it("adultCutoff is 18 years before today, same month and day", () => {
+    expect(adultCutoff("2026-11-04")).toBe("2008-11-04"); // normal day
+    expect(adultCutoff("2026-03-01")).toBe("2008-03-01"); // a Feb 29, 2008 baby turns 18 on Mar 1, 2026
+  });
+
+  // F16: the same birthday rule is used when editing: required, real, and 18+
+  it("birthday rule: empty, a minor or a future date is not accepted", () => {
+    expect(requiredDateOfBirthSchema.safeParse("").success).toBe(false); // required now (only email is optional)
+    expect(requiredDateOfBirthSchema.safeParse("1985-06-15").success).toBe(true); // an adult
+    expect(requiredDateOfBirthSchema.safeParse(adultCutoff().replace(/^\d{4}/, (yr) => String(Number(yr) + 1))).success).toBe(false); // 17 years old
+    expect(requiredDateOfBirthSchema.safeParse("2999-01-01").success).toBe(false); // in the future
   });
 
   it("rejects a date of birth in the future or before 1900", () => {
@@ -99,5 +123,31 @@ describe("customerSchema (PB-7 AC2)", () => {
       expect(r.success).toBe(false); // it must fail
       if (!r.success) expect(r.error.issues[0].path).toEqual(["date_of_birth"]); // and the message goes under the date field
     }
+  });
+  // F5 regression: dates that don't exist are refused, real leap days are fine
+  it("F5: rejects impossible calendar dates, accepts real leap days", () => {
+    expect(isCalendarDate("1990-02-30")).toBe(false); // Feb 30 doesn't exist
+    expect(isCalendarDate("2003-02-29")).toBe(false); // 2003 isn't a leap year
+    expect(isCalendarDate("1900-02-29")).toBe(false); // 1900 isn't a leap year (century rule)
+    expect(isCalendarDate("2000-02-29")).toBe(true); // 2000 is (divisible by 400)
+    expect(isCalendarDate("2004-02-29")).toBe(true); // normal leap year
+    expect(isCalendarDate("1990-13-01")).toBe(false); // month 13
+    expect(isCalendarDate("1990-04-31")).toBe(false); // April has 30 days
+    expect(isCalendarDate("1990-1-5")).toBe(false); // wrong shape
+    const r = customerSchema.safeParse({ ...valid, date_of_birth: "1990-02-30" }); // through the whole form rule
+    expect(r.success).toBe(false); // refused
+    if (!r.success) expect(r.error.issues[0].path).toEqual(["date_of_birth"]); // message under the date field
+    expect(customerSchema.safeParse({ ...valid, date_of_birth: "2004-02-29" }).success).toBe(true); // a real leap-day birthday, over 18
+  });
+
+  // F4 regression: length limits stop junk but allow real long names and addresses
+  it("F4: length limits", () => {
+    const longRealName = "Ma. Teresa Josefina Dela Cruz-Santos y Villanueva-Macaraeg de los Reyes Jr."; // 75 characters, a real-looking name
+    expect(customerSchema.safeParse({ ...valid, full_name: longRealName }).success).toBe(true); // allowed
+    expect(customerSchema.safeParse({ ...valid, full_name: "A".repeat(MAX.full_name) }).success).toBe(true); // exactly the limit: OK
+    expect(customerSchema.safeParse({ ...valid, full_name: "A".repeat(MAX.full_name + 1) }).success).toBe(false); // one over: refused
+    expect(customerSchema.safeParse({ ...valid, address: "B".repeat(MAX.address + 1) }).success).toBe(false); // address too long
+    expect(customerSchema.safeParse({ ...valid, email: "a".repeat(250) + "@x.ph" }).success).toBe(false); // email too long
+    expect(customerSchema.safeParse({ ...valid, id_type: "Postal ID", id_number: "C".repeat(MAX.id_number + 1) }).success).toBe(false); // ID too long
   });
 });

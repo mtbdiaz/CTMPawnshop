@@ -41,12 +41,8 @@ import { ID_REVEAL_ROLES, idEnding, maskId } from "@/lib/customers/id-privacy";
 
 // R2 + R3: the explanations, written once and used both in the "i" boxes and in the help at the bottom.
 // They describe what the code really does (lib/customers/score.ts, lib/customers/aml.ts).
-const AML_HELP =
-  "Checked once, when the customer is registered: the name and ID number are compared with the watchlist. Clear = no match. Flagged = possible match, so an Admin should review before lending. The check date shows when you hover the badge.";
-const SCORE_HELP =
-  "A guide from this customer's own loans at this shop, worked out each time the page opens. It is not a credit rating. Everyone with at least one loan starts at 60 (Fair). On-time redemptions and renewals add points; late payments, reinstated or defaulted loans, and loans overdue now take points away. Results older than 2 years count half. Excellent 85+, Good 70 to 84, Fair 50 to 69, Risky below 50. No history = no loans yet, not a bad score.";
-const FLAGS_HELP =
-  "Blacklisted = cannot get new loans. History warning = has paid late, been reinstated or defaulted before. None = neither. On screens narrower than 1536px this column is called Compliance and also shows the AML result (AML clear or AML flagged).";
+// PR7: the (i) help texts now live in help-text.ts (the profile page uses the Score one too)
+import { AML_HELP, SCORE_HELP, FLAGS_HELP } from "./help-text";
 
 export const metadata = { title: "Customers" };
 
@@ -188,11 +184,10 @@ export default async function CustomersPage({
           {/* right group: the Hide/Show IDs button sits next to the filter tabs */}
           <div className="flex flex-wrap items-center gap-2">
           {/* P2: Hide/Show IDs. Hides the whole ID column (and the ID on the cards), e.g. when a customer can see the screen.
-              aria-pressed tells screen readers whether the IDs are hidden right now */}
+              F6: no aria-pressed (it isn't allowed on a link); the words "Hide" / "Show" already say what it does */}
           <Link
             href={idsHref}
             scroll={false}
-            aria-pressed={hideIds}
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500"
           >
             <EyeIcon off={!hideIds} />
@@ -321,7 +316,8 @@ export default async function CustomersPage({
                         U9: type above the number on smaller screens, side by side from 1536px */}
                     {!hideIds && (
                       <TD className="whitespace-nowrap text-slate-600">
-                        <span className="block text-xs text-slate-500 2xl:inline">{c.id_type}</span>{" "}
+                        {/* F7: slate-600 instead of slate-500, so it stays readable (4.5:1+) on the pink blacklisted rows */}
+                        <span className="block text-xs text-slate-600 2xl:inline">{c.id_type}</span>{" "}
                         {/* P3: masked number + eye button for allowed roles. Only the masked text is sent to the browser */}
                         <IdReveal customerId={c.id} masked={maskId(c.id_number)} ending={idEnding(c.id_number)} canReveal={canReveal} />
                       </TD>

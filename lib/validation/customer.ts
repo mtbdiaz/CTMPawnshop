@@ -59,27 +59,57 @@ export function idNumberError(idType: string, idNumber: string): string | null {
     : `Enter the ${idType} number as printed on the card (4 to 30 letters or numbers).`;
 }
 
-// F11: date of birth is optional, but if it's filled in it must be a real one:
-// not in the future and not before 1900. The date box sends "YYYY-MM-DD", so the dates can be compared as text.
-export const dateOfBirthSchema = z
+// F15: customers must be 18 or older. 18 is the age of majority in the Philippines (RA 6809), and a minor
+// can't fully consent to a contract like a pawn loan (Civil Code). Big pawnshops (e.g. Cebuana) also require 18+.
+export const MIN_AGE = 18;
+
+// F15: the latest birthday that is still 18 today, e.g. today 2026-11-04 -> "2008-11-04".
+// Born on or before this date = 18 or older. Uses Manila's date, like the rest of the app.
+export function adultCutoff(today: string = manilaToday()): string {
+  const [y, m, d] = today.split("-"); // "2026-11-04" -> "2026", "11", "04"
+  return `${Number(y) - MIN_AGE}-${m}-${d}`; // same month and day, 18 years earlier
+}
+
+// the two date checks used below. The date box sends "YYYY-MM-DD", so the dates can be compared as text.
+// F5: the date must really exist on the calendar ("1990-02-30" or "2023-02-29" are refused; "2024-02-29" is fine,
+// 2024 is a leap year). We build the date and check that the year, month and day come back the same.
+export function isCalendarDate(v: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v); // must look exactly like YYYY-MM-DD
+  if (!m) return false; // wrong shape, e.g. "hello" or "1990/01/01"
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])]; // the three numbers
+  const date = new Date(Date.UTC(y, mo - 1, d)); // JavaScript rolls Feb 30 over to Mar 2
+  return date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d; // same numbers back = real date
+}
+const realDate = (v: string) => isCalendarDate(v) && v >= "1900-01-01" && v <= manilaToday(); // F5 + F11: a real date, not in the future, not before 1900
+const isAdult = (v: string) => v <= adultCutoff(); // F15: born on or before the 18-years-ago date
+const realDateMessage = "Enter a real date of birth (not in the future or before 1900)"; // F5: also covers dates that don't exist
+
+// F4: length limits, long enough for real Filipino names and addresses, short enough to stop junk.
+// The same numbers are used as maxLength on the form boxes.
+export const MAX = { full_name: 120, address: 300, email: 254, id_number: 30 } as const;
+const adultMessage = `The customer must be at least ${MIN_AGE} years old to pawn`;
+
+// F15 + F16: used for both Register and Edit contact details. Required (email is the only optional field),
+// because the 18+ rule can't be checked without it.
+export const requiredDateOfBirthSchema = z
   .string() // the value from the date box
   .trim() // remove spaces around it
-  .optional() // the field can be missing
-  .or(z.literal("")) // or empty
-  .refine((v) => !v || (v >= "1900-01-01" && v <= manilaToday()), "Date of birth can't be in the future or before 1900"); // empty is fine; otherwise 1900 to today
+  .min(1, `Date of birth is required (customers must be ${MIN_AGE} or older)`) // can't be empty
+  .refine(realDate, realDateMessage) // a real date
+  .refine(isAdult, adultMessage); // 18 or older
 
 // PB-7 AC2: missing required fields block submission.
 // This is the rule set for the Register customer form.
 export const customerSchema = z.object({
   // F8: extra spaces inside the name are turned into one ("Juan  Dela   Cruz" -> "Juan Dela Cruz").
   // Any letters, hyphens, apostrophes and periods are allowed (e.g. Ma. Teresa, O'Brien, Dela Cruz-Santos).
-  full_name: z.string().trim().min(1, "Full name is required").transform((v) => v.replace(/\s+/g, " ")),
-  address: z.string().trim().min(1, "Address is required"),
+  full_name: z.string().trim().min(1, "Full name is required").max(MAX.full_name, `Full name can be at most ${MAX.full_name} characters`).transform((v) => v.replace(/\s+/g, " ")), // F4: length limit
+  address: z.string().trim().min(1, "Address is required").max(MAX.address, `Address can be at most ${MAX.address} characters`), // F4: length limit
   contact_number: phPhoneSchema, // uses the shared phone rule above
-  email: z.string().trim().email("Enter a valid email").optional().or(z.literal("")),
-  date_of_birth: dateOfBirthSchema, // F11: optional, but not in the future
+  email: z.string().trim().max(MAX.email, `Email can be at most ${MAX.email} characters`).email("Enter a valid email").optional().or(z.literal("")), // F4: length limit
+  date_of_birth: requiredDateOfBirthSchema, // F15: required on Register, and the customer must be 18 or older
   id_type: z.string().trim().min(1, "Select an ID type"),
-  id_number: z.string().trim().min(1, "ID number is required"),
+  id_number: z.string().trim().min(1, "ID number is required").max(MAX.id_number, `ID number can be at most ${MAX.id_number} characters`), // F4: length limit
 })
   // F10: after the basic checks, the ID number must match the format of the chosen ID type
   .superRefine((data, ctx) => {

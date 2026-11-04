@@ -23,6 +23,7 @@ describe("validationFailure", () => {
     const parsed = customerSchema.safeParse({
       full_name: "Juan",
       address: "Davao",
+      date_of_birth: "1990-01-01", // F15: required now, so it's filled in to keep only the phone wrong
       contact_number: "",
       id_type: "UMID",
       id_number: "0111-2222333-4", // F10: a real-looking 12-digit UMID, so only the phone is wrong
