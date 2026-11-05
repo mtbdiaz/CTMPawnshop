@@ -514,7 +514,9 @@ export function FilterTabs({
   tabs,
   current,
 }: {
-  tabs: { label: string; value: string; href: string; count?: number }[];
+  // tone (optional): a small amber or red dot before the label for tabs that need attention (e.g. Awaiting review).
+  // The label still says what it is, so color is never the only signal.
+  tabs: { label: string; value: string; href: string; count?: number; tone?: "warning" | "danger" }[];
   current: string;
 }) {
   return (
@@ -532,6 +534,10 @@ export function FilterTabs({
               active ? "bg-white text-navy-800" : "text-slate-600 hover:text-slate-900",
             )}
           >
+            {/* the dot only shows when a tone is set and the count is above 0 */}
+            {tab.tone && (tab.count ?? 0) > 0 && (
+              <span aria-hidden="true" className={cx("mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle", tab.tone === "danger" ? "bg-red-600" : "bg-amber-500")} />
+            )}
             {tab.label}
                         {/* F3: darker grey so the count is readable on the grey tab bar */}
             {tab.count !== undefined && <span className="ml-1 text-slate-600">{tab.count}</span>}
