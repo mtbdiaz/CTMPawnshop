@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { hasRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { accruedInterest, capitalizePreview, renewPreview, TERM_DAYS } from "@/lib/loans/accrual";
+import { isOverdueUnpaid } from "@/lib/loans/status"; // F3: shared overdue rule
 import { categoryLabel } from "@/lib/appraisal/valuation";
 import { formatDate, formatDateTime, formatPeso, humanize, manilaToday } from "@/lib/format";
 import {
@@ -70,7 +71,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
   const owed = Math.round((principal + interest) * 100) / 100;
   const open = OPEN.has(loan.status);
   const canTransact = hasRole(role, ["cashier"]);
-  const overdue = open && loan.maturity_date < today;
+  const overdue = isOverdueUnpaid(loan, today); // F3: past due AND still owes money (a paid loan waiting for release isn't overdue)
   const renew = renewPreview(loan, today);
   const cap = capitalizePreview(loan, today);
   const itemLabel = item ? `${categoryLabel(item.category, item.category_other)}, ${item.karat}K, ${item.weight_grams} g` : "";

@@ -26,6 +26,7 @@ import type { Enums } from "@/lib/supabase/database.types";
 import { categoryLabel } from "@/lib/appraisal/valuation";
 import { accruedInterest } from "@/lib/loans/accrual";
 import { runDefaultDetection } from "./actions";
+import { isOverdueUnpaid } from "@/lib/loans/status"; // F3: shared overdue rule
 
 export const metadata = { title: "Loans" };
 
@@ -140,7 +141,7 @@ export default async function LoansPage({
                     customers: { full_name: string } | null;
                     appraisal_items: { category: string; category_other: string | null; karat: number; weight_grams: number } | null;
                   };
-                  const late = open && loan.maturity_date < today;
+                  const late = isOverdueUnpaid(loan, today); // F3: past due AND still owes money (a paid loan waiting for release isn't overdue)
                   return (
                     <TR key={loan.id} highlight={late ? "danger" : undefined}>
                       <TD mono>{loan.ticket_number}</TD>
