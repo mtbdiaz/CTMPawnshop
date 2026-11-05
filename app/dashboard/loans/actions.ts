@@ -7,6 +7,8 @@ import { requireRole } from "@/lib/auth/require-role";
 import type { FieldErrors } from "@/lib/validation/errors";
 import { validationFailure } from "@/lib/validation/errors";
 import { isSuspiciousLoanVelocity } from "@/lib/compliance/suspicious";
+import { manilaToday } from "@/lib/format"; // today in Manila (business day)
+import { addDaysIso } from "@/lib/loans/accrual"; // due date + grace days
 
 export type ActionState = {
   error?: string;
@@ -27,6 +29,16 @@ const createSchema = z.object({
   principal_amount: z.coerce.number().gt(0, "Loan amount must be greater than 0"),
   vault_location: z.string().trim().max(80).optional().or(z.literal("")),
 });
+
+// L20: what staff see when a loan action fails. The database's own messages (raised with RAISE EXCEPTION,
+// code P0001) are written for staff, e.g. "Payment of 5000 exceeds the total owed (4300.00)", so they are shown.
+// A permission refusal (42501) gets a plain sentence. Anything else is technical: it goes to the server log only.
+function friendlyError(action: string, error: { code?: string; message: string } | null): string {
+  if (error?.code === "P0001" && error.message) return error.message; // a business rule said no, in plain words
+  if (error?.code === "42501") return "You don't have permission to do that. Ask an Admin if you need it.";
+  console.error(`${action} failed:`, error?.code, error?.message); // the details stay in the server log
+  return `Couldn't ${action}, so nothing was changed. Reload the page to see the latest balance, then try again. If it keeps happening, tell an Admin.`;
+}
 
 function revalidateLoan(id?: string) {
   revalidatePath("/dashboard/loans");
@@ -52,7 +64,7 @@ export async function createLoan(_prev: ActionState, formData: FormData): Promis
     p_principal_amount: parsed.data.principal_amount,
     p_vault_location: parsed.data.vault_location || "Vault A",
   });
-  if (error || !loanId) return { error: error?.message ?? "Could not create the loan" };
+  if (error || !loanId) return { error: friendlyError("create the loan", error) }; // L20
 
   // PB-32: placeholder AML velocity rule.
   const { data: recent } = await supabase.from("loans").select("created_at").eq("customer_id", parsed.data.customer_id);
@@ -94,7 +106,7 @@ export async function recordPayment(_prev: ActionState, formData: FormData): Pro
     p_lost_ticket: parsed.data.lost_ticket,
     p_id_confirm: parsed.data.id_number_confirm ?? undefined,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyError("record the payment", error) }; // L20
   revalidateLoan(parsed.data.loan_id);
   return { success: true, id: parsed.data.loan_id, receiptNumber: (data as { receipt_number?: string } | null)?.receipt_number };
 }
@@ -108,10 +120,10 @@ function loanIdFrom(formData: FormData): string | null {
 export async function processExtension(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["cashier", "admin"]);
   const id = loanIdFrom(formData);
-  if (!id) return { error: "Invalid loan" };
+  if (!id) return { error: "Loan not found. Reload the page." };
   const supabase = await createClient();
   const { error } = await supabase.rpc("renew_loan", { p_loan_id: id });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyError("renew the loan", error) }; // L20
   revalidateLoan(id);
   return { success: true, id };
 }
@@ -120,10 +132,10 @@ export async function processExtension(_prev: ActionState, formData: FormData): 
 export async function capitalizeLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["cashier", "admin"]);
   const id = loanIdFrom(formData);
-  if (!id) return { error: "Invalid loan" };
+  if (!id) return { error: "Loan not found. Reload the page." };
   const supabase = await createClient();
   const { error } = await supabase.rpc("capitalize_loan", { p_loan_id: id });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyError("capitalize the loan", error) }; // L20
   revalidateLoan(id);
   return { success: true, id };
 }
@@ -132,10 +144,10 @@ export async function capitalizeLoan(_prev: ActionState, formData: FormData): Pr
 export async function reinstateLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["cashier", "admin"]);
   const id = loanIdFrom(formData);
-  if (!id) return { error: "Invalid loan" };
+  if (!id) return { error: "Loan not found. Reload the page." };
   const supabase = await createClient();
   const { error } = await supabase.rpc("reinstate_loan", { p_loan_id: id });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyError("reinstate the loan", error) }; // L20
   revalidateLoan(id);
   revalidatePath("/dashboard/inventory");
   return { success: true, id };
@@ -145,10 +157,10 @@ export async function reinstateLoan(_prev: ActionState, formData: FormData): Pro
 export async function forfeitLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["admin"]);
   const id = loanIdFrom(formData);
-  if (!id) return { error: "Invalid loan" };
+  if (!id) return { error: "Loan not found. Reload the page." };
   const supabase = await createClient();
   const { error } = await supabase.rpc("forfeit_loan", { p_loan_id: id });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyError("forfeit the loan", error) }; // L20
   revalidateLoan(id);
   return { success: true, id };
 }
@@ -157,14 +169,14 @@ export async function forfeitLoan(_prev: ActionState, formData: FormData): Promi
 export async function redeemLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["cashier", "admin"]);
   const id = loanIdFrom(formData);
-  if (!id) return { error: "Invalid loan" };
+  if (!id) return { error: "Loan not found. Reload the page." };
   const supabase = await createClient();
   const { error } = await supabase.rpc("redeem_loan", {
     p_loan_id: id,
     p_lost_ticket: formData.get("lost_ticket") === "on",
     p_id_confirm: String(formData.get("id_number_confirm") ?? "") || undefined,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyError("redeem the loan", error) }; // L20
   revalidateLoan(id);
   return { success: true, id };
 }
@@ -190,7 +202,7 @@ export async function adminEditLoan(_prev: ActionState, formData: FormData): Pro
     p_maturity_date: parsed.data.maturity_date,
     p_reason: parsed.data.reason,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyError("save the correction", error) }; // L20
   revalidateLoan(parsed.data.loan_id);
   return { success: true, id: parsed.data.loan_id };
 }
@@ -212,13 +224,47 @@ export async function adminEditPayment(_prev: ActionState, formData: FormData): 
     p_amount: parsed.data.amount,
     p_reason: parsed.data.reason,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyError("save the payment correction", error) }; // L20
   revalidateLoan(parsed.data.loan_id);
   return { success: true, id: parsed.data.loan_id };
 }
 
-// PB-21: opportunistic default detection (no scheduler, see DECISIONS_LOG.md).
-export async function runDefaultDetection(): Promise<void> {
+// L0 (Phase 0): default detection no longer runs when someone OPENS the Loans list, because opening a list
+// must never change loans (and, until Matt's fix #1, it could mark a fully paid loan as Defaulted).
+// An Admin runs it on purpose with "Check for defaults now". It is the same database function (run_default_detection).
+export type DefaultCheckState = { error?: string; success?: boolean; message?: string };
+
+export async function checkDefaultsNow(_prev: DefaultCheckState, _formData: FormData): Promise<DefaultCheckState> {
+  void _prev; // not used: every check starts fresh
+  void _formData; // the button sends no fields
+  await requireRole(["admin"]);
   const supabase = await createClient();
-  await supabase.rpc("run_default_detection");
+
+  // Safety net until Matt #1 is fixed: the database function doesn't check whether a loan is paid.
+  // So if any FULLY PAID running loan is already past its due date + grace period, stop and name it,
+  // instead of letting the check mark it Defaulted. (The function only checks active and renewed loans.)
+  const { data: paidLoans, error: readError } = await supabase
+    .from("loans")
+    .select("ticket_number, maturity_date, grace_period_days")
+    .in("status", ["active", "extended"])
+    .is("archived_at", null)
+    .eq("principal_balance", 0)
+    .eq("interest_owed", 0);
+  if (readError) return { error: friendlyError("check the loans", readError) };
+  const todayIso = manilaToday();
+  const atRisk = (paidLoans ?? []).filter((l) => addDaysIso(l.maturity_date, Number(l.grace_period_days ?? 0)) < todayIso);
+  if (atRisk.length) {
+    const one = atRisk.length === 1;
+    const tickets = atRisk.slice(0, 5).map((l) => l.ticket_number).join(", ");
+    return {
+      error: `Not run: ${atRisk.length} fully paid loan${one ? " is" : "s are"} past the grace period (${tickets}${atRisk.length > 5 ? ", and more" : ""}). The check would wrongly mark ${one ? "it" : "them"} Defaulted (Matt #1). Redeem ${one ? "it" : "them"} first.`,
+    };
+  }
+
+  const { data, error } = await supabase.rpc("run_default_detection");
+  if (error) return { error: friendlyError("run the default check", error) };
+  revalidateLoan();
+  revalidatePath("/dashboard/inventory");
+  const n = Number(data ?? 0);
+  return { success: true, message: n ? `Default check done. ${n} loan${n === 1 ? "" : "s"} past the grace period moved to Defaulted.` : "Default check done. No loans needed to change." };
 }

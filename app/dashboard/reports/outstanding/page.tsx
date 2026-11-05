@@ -81,7 +81,7 @@ export default async function OutstandingLoansReport() {
                     <TD align="right">{formatPeso(loan.principal_balance)}</TD>
                     <TD align="right">{formatPeso(loan.interest_now)}</TD>
                     <TD>{formatDate(loan.maturity_date)}</TD>
-                    <TD>{late ? <StatusBadge status="defaulted" label="Overdue" /> : <StatusBadge status={loan.status} label={loan.status === "extended" ? "Renewed" : undefined} />}</TD>
+                    <TD>{late ? <StatusBadge status="pending" label="Overdue" /> : <StatusBadge status={loan.status} label={loan.status === "extended" ? "Renewed" : undefined} />}</TD>
                     <ActionsCell>
                       <ViewButton href={`/dashboard/loans/${loan.id}`}>View loan</ViewButton>
                     </ActionsCell>

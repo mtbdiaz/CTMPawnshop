@@ -42,6 +42,13 @@ export function PaymentForm({
 }) {
   const [amount, setAmount] = useState("");
   const total = Math.round((interestDue + principalBalance) * 100) / 100;
+  // L17: what this payment does, with the database's own rule (record_payment): interest is paid first, the rest
+  // goes to principal. interestDue already includes interest added after the due date, as the database does first.
+  const paid = Math.min(Math.max(Number(amount) || 0, 0), total); // the payment, never more than what is owed
+  const toInterest = Math.round(Math.min(paid, interestDue) * 100) / 100;
+  const toPrincipal = Math.round((paid - toInterest) * 100) / 100;
+  const interestLeft = Math.round((interestDue - toInterest) * 100) / 100;
+  const principalLeft = Math.round((principalBalance - toPrincipal) * 100) / 100;
 
   return (
     <ActionForm
@@ -85,10 +92,15 @@ export function PaymentForm({
           confirmLabel: "Record payment",
           tone: "primary",
           locked: true,
+          // L17: the full effect before confirming (your saved to-do: interest and principal left after)
           details: [
-            ["Amount", formatPeso(Number(amount))],
-            ["To interest", formatPeso(Math.min(Number(amount) || 0, interestDue))],
-            ["To principal", formatPeso(Math.max(0, (Number(amount) || 0) - interestDue))],
+            ["Owed now", formatPeso(total)],
+            ["Payment", formatPeso(paid)],
+            ["To interest", formatPeso(toInterest)],
+            ["To principal", formatPeso(toPrincipal)],
+            ["Interest left after", formatPeso(interestLeft)],
+            ["Principal left after", formatPeso(principalLeft)],
+            ["Total left after", formatPeso(Math.round((interestLeft + principalLeft) * 100) / 100)],
           ],
         }}
       >
@@ -281,21 +293,48 @@ export function AdminEditLoanForm({
       <Field label="Interest rate (%)" name="interest_rate_percent" type="number" step="0.01" min="0" defaultValue={rate} required />
       <Field label="Due date" name="maturity_date" type="date" defaultValue={maturity} required />
       <TextareaField label="Reason for the change" name="reason" rows={2} required hint="At least 5 characters. Saved in the audit trail." />
+      {/* L19: says what it does (was "Edit (Admin)") */}
       <SubmitButton variant="secondary" pendingLabel="Saving" confirm={{ title: "Save this correction?", message: "The before and after values and your reason are written to the audit trail.", confirmLabel: "Save correction", tone: "primary" }}>
-        Edit (Admin)
+        Save correction
       </SubmitButton>
     </ActionForm>
   );
 }
 
-export function AdminEditPaymentForm({ paymentId, loanId, amount }: { paymentId: string; loanId: string; amount: number }) {
+/** L19: Admin correction of one payment, picked from a list (it used to open inside the payments table row). */
+export function AdminCorrectPaymentForm({
+  loanId,
+  payments,
+}: {
+  loanId: string;
+  payments: { id: string; receipt: string; amount: number; date: string }[];
+}) {
+  const [paymentId, setPaymentId] = useState(payments[0]?.id ?? ""); // the payment being corrected
+  const picked = payments.find((p) => p.id === paymentId);
   return (
-    <ActionForm action={adminEditPayment} className="space-y-2" successMessage="Payment corrected.">
-      <input type="hidden" name="payment_id" value={paymentId} />
+    <ActionForm key={paymentId} action={adminEditPayment} className="space-y-3" successMessage="Payment corrected. The ledger and audit trail are updated.">
       <input type="hidden" name="loan_id" value={loanId} />
-      <Field label="Amount (₱)" name="amount" type="number" step="0.01" min="0.01" defaultValue={amount} required />
-      <TextareaField label="Reason" name="reason" rows={2} required />
-      <SubmitButton size="sm" variant="secondary" pendingLabel="Saving" confirm={{ title: "Correct this payment?", message: "The ledger entry is corrected to match, and the change is audited.", confirmLabel: "Save correction", tone: "primary" }}>
+      <div>
+        <label htmlFor="correct-payment" className="block text-sm font-medium text-slate-700">
+          Payment
+        </label>
+        <select
+          id="correct-payment"
+          name="payment_id"
+          value={paymentId}
+          onChange={(e) => setPaymentId(e.target.value)}
+          className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20"
+        >
+          {payments.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.receipt} · {formatPeso(p.amount)} · {p.date}
+            </option>
+          ))}
+        </select>
+      </div>
+      <Field label="Correct amount (₱)" name="amount" type="number" step="0.01" min="0.01" defaultValue={picked?.amount} required />
+      <TextareaField label="Reason for the change" name="reason" rows={2} required hint="At least 5 characters. Saved in the audit trail." />
+      <SubmitButton variant="secondary" pendingLabel="Saving" confirm={{ title: "Correct this payment?", message: "The ledger entry is corrected to match, and the change is audited.", confirmLabel: "Save correction", tone: "primary" }}>
         Save correction
       </SubmitButton>
     </ActionForm>
