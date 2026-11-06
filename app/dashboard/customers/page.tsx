@@ -112,10 +112,13 @@ export default async function CustomersPage({
     countOf("blacklisted"),
     countOf("aml"),
   ]);
-  if (error) throw error;
-  // R5: a page number past the last page (e.g. an old link to page 9 after a search) -> go to the last page instead of "no customers"
-  if ((customers?.length ?? 0) === 0 && (count ?? 0) > 0 && page > 1) {
-    const last = Math.ceil((count ?? 0) / PAGE_SIZE); // the last page that has customers
+  // R5: a page number past the last page (e.g. an old link to page 9 after a search) -> go to the last page instead of "no customers".
+  // PGRST103 = the database refuses a page past the end ("range not satisfiable") instead of returning an empty list,
+  // so that case goes back to page 1 (we don't know the last page without the count).
+  const pastEnd = error?.code === "PGRST103" && page > 1;
+  if (error && !pastEnd) throw error;
+  if (pastEnd || ((customers?.length ?? 0) === 0 && (count ?? 0) > 0 && page > 1)) {
+    const last = pastEnd ? 1 : Math.ceil((count ?? 0) / PAGE_SIZE); // the last page that has customers
     const qs = new URLSearchParams(); // keep the search, filter and sort
     if (q) qs.set("q", q);
     if (params.sort) qs.set("sort", params.sort);
@@ -411,4 +414,4 @@ export default async function CustomersPage({
       </Card>
     </div>
   );
-}
+}
