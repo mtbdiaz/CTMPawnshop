@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { setOwnPassword } from "./actions";
 import { AuthCard } from "@/components/auth-card";
 import { Alert, buttonClasses, cx } from "@/components/ui";
 
@@ -28,11 +28,10 @@ export default function ForcePasswordChangePage() {
     if (password !== confirm) return setError("The two passwords don't match.");
 
     setLoading(true);
-    const supabase = createClient();
-    const { error: updateError } = await supabase.auth.updateUser({ password, data: { force_password_change: false } });
+    const { error: updateError } = await setOwnPassword(password);
     if (updateError) {
       setLoading(false);
-      setError(updateError.message);
+      setError(updateError);
       return;
     }
     router.push("/dashboard");

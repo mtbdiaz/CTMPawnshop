@@ -34,13 +34,21 @@ describe("accruedInterest (mirrors ctm_accrue_interest)", () => {
 });
 
 describe("capitalizePreview (item 8)", () => {
-  it("adds unpaid accrued interest to principal and extends from today when past due", () => {
+  it("adds unpaid accrued interest to principal and starts the new term where that interest ends", () => {
     const r = capitalizePreview({ ...base, maturity_date: "2026-08-29", interest_accrued_through: "2026-08-29" }, "2026-10-08");
-    // 40 days past -> 2 terms of 500
+    // 40 days past -> 2 terms of 500, which pay up to Oct 28; the new term runs Oct 28 -> Nov 27
     expect(r.capitalized).toBe(1000);
     expect(r.newPrincipal).toBe(11000);
     expect(r.newInterestOwed).toBe(550);
-    expect(r.newMaturity).toBe("2026-11-07");
+    expect(r.newMaturity).toBe("2026-11-27");
+  });
+
+  it("never charges the same days twice (#30: new term does not start before the paid-up date)", () => {
+    const loan = { ...base, maturity_date: "2026-10-16", interest_accrued_through: "2026-10-16" };
+    const r = capitalizePreview(loan, "2026-11-05");
+    const paidUpTo = accruedInterest(loan, "2026-11-05").accruedThrough; // Nov 15
+    expect(paidUpTo).toBe("2026-11-15");
+    expect(r.newMaturity).toBe("2026-12-15");
   });
 
   it("extends from the current maturity when not yet due", () => {

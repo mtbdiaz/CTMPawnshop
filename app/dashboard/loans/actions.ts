@@ -57,11 +57,14 @@ export async function createLoan(_prev: ActionState, formData: FormData): Promis
   // PB-32: placeholder AML velocity rule.
   const { data: recent } = await supabase.from("loans").select("created_at").eq("customer_id", parsed.data.customer_id);
   if (isSuspiciousLoanVelocity((recent ?? []).map((l) => new Date(l.created_at)))) {
-    await supabase.from("suspicious_activity_flags").insert({
+    // At most one open flag per customer (unique index): a second one is simply skipped.
+    // The loan is already saved, so a flag problem must not undo it; it is logged instead.
+    const { error: flagError } = await supabase.from("suspicious_activity_flags").insert({
       customer_id: parsed.data.customer_id,
       loan_id: loanId,
       reason: "Unusually high number of loans opened by this customer in a short window",
     });
+    if (flagError && flagError.code !== "23505") console.error("Suspicious-activity flag not saved:", flagError.message);
   }
 
   revalidatePath("/dashboard/appraisals");

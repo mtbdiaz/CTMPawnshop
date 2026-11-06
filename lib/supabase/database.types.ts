@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.15"
   }
   public: {
     Tables: {
@@ -34,6 +34,7 @@ export type Database = {
           gold_price_used: number
           id: string
           is_counterfeit_risk: boolean
+          is_demo: boolean
           karat: number
           ltv_percent_used: number
           photo_paths: string[]
@@ -63,6 +64,7 @@ export type Database = {
           gold_price_used: number
           id?: string
           is_counterfeit_risk?: boolean
+          is_demo?: boolean
           karat: number
           ltv_percent_used: number
           photo_paths?: string[]
@@ -92,6 +94,7 @@ export type Database = {
           gold_price_used?: number
           id?: string
           is_counterfeit_risk?: boolean
+          is_demo?: boolean
           karat?: number
           ltv_percent_used?: number
           photo_paths?: string[]
@@ -145,16 +148,19 @@ export type Database = {
           batch_id: string
           id: string
           inventory_item_id: string
+          is_demo: boolean
         }
         Insert: {
           batch_id: string
           id?: string
           inventory_item_id: string
+          is_demo?: boolean
         }
         Update: {
           batch_id?: string
           id?: string
           inventory_item_id?: string
+          is_demo?: boolean
         }
         Relationships: [
           {
@@ -181,6 +187,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          is_demo: boolean
           notes: string | null
         }
         Insert: {
@@ -190,6 +197,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          is_demo?: boolean
           notes?: string | null
         }
         Update: {
@@ -199,6 +207,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          is_demo?: boolean
           notes?: string | null
         }
         Relationships: [
@@ -225,6 +234,8 @@ export type Database = {
           changed_data: Json | null
           created_at: string
           id: string
+          is_demo: boolean
+          old_data: Json | null
           record_id: string
           table_name: string
         }
@@ -234,6 +245,8 @@ export type Database = {
           changed_data?: Json | null
           created_at?: string
           id?: string
+          is_demo?: boolean
+          old_data?: Json | null
           record_id: string
           table_name: string
         }
@@ -243,6 +256,8 @@ export type Database = {
           changed_data?: Json | null
           created_at?: string
           id?: string
+          is_demo?: boolean
+          old_data?: Json | null
           record_id?: string
           table_name?: string
         }
@@ -260,6 +275,7 @@ export type Database = {
           direction: Database["public"]["Enums"]["cash_flow_direction"]
           entry_type: Database["public"]["Enums"]["cash_flow_type"]
           id: string
+          is_demo: boolean
           is_memo: boolean
           related_loan_id: string | null
         }
@@ -274,6 +290,7 @@ export type Database = {
           direction: Database["public"]["Enums"]["cash_flow_direction"]
           entry_type: Database["public"]["Enums"]["cash_flow_type"]
           id?: string
+          is_demo?: boolean
           is_memo?: boolean
           related_loan_id?: string | null
         }
@@ -288,6 +305,7 @@ export type Database = {
           direction?: Database["public"]["Enums"]["cash_flow_direction"]
           entry_type?: Database["public"]["Enums"]["cash_flow_type"]
           id?: string
+          is_demo?: boolean
           is_memo?: boolean
           related_loan_id?: string | null
         }
@@ -335,6 +353,7 @@ export type Database = {
           id_number: string
           id_type: string
           is_blacklisted: boolean
+          is_demo: boolean
           updated_at: string
         }
         Insert: {
@@ -356,6 +375,7 @@ export type Database = {
           id_number: string
           id_type: string
           is_blacklisted?: boolean
+          is_demo?: boolean
           updated_at?: string
         }
         Update: {
@@ -377,6 +397,7 @@ export type Database = {
           id_number?: string
           id_type?: string
           is_blacklisted?: boolean
+          is_demo?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -404,6 +425,7 @@ export type Database = {
           archived_by: string | null
           created_at: string
           id: string
+          is_demo: boolean
           status: Database["public"]["Enums"]["inventory_status"]
           updated_at: string
           vault_location: string
@@ -415,6 +437,7 @@ export type Database = {
           archived_by?: string | null
           created_at?: string
           id?: string
+          is_demo?: boolean
           status?: Database["public"]["Enums"]["inventory_status"]
           updated_at?: string
           vault_location: string
@@ -426,6 +449,7 @@ export type Database = {
           archived_by?: string | null
           created_at?: string
           id?: string
+          is_demo?: boolean
           status?: Database["public"]["Enums"]["inventory_status"]
           updated_at?: string
           vault_location?: string
@@ -452,6 +476,7 @@ export type Database = {
           changed_at: string
           id: string
           inventory_item_id: string
+          is_demo: boolean
           new_status: Database["public"]["Enums"]["inventory_status"]
           old_status: Database["public"]["Enums"]["inventory_status"] | null
         }
@@ -459,6 +484,7 @@ export type Database = {
           changed_at?: string
           id?: string
           inventory_item_id: string
+          is_demo?: boolean
           new_status: Database["public"]["Enums"]["inventory_status"]
           old_status?: Database["public"]["Enums"]["inventory_status"] | null
         }
@@ -466,6 +492,7 @@ export type Database = {
           changed_at?: string
           id?: string
           inventory_item_id?: string
+          is_demo?: boolean
           new_status?: Database["public"]["Enums"]["inventory_status"]
           old_status?: Database["public"]["Enums"]["inventory_status"] | null
         }
@@ -490,6 +517,7 @@ export type Database = {
           created_by: string | null
           extension_type: Database["public"]["Enums"]["extension_type"]
           id: string
+          is_demo: boolean
           loan_id: string
           new_maturity_date: string
           previous_maturity_date: string
@@ -504,6 +532,7 @@ export type Database = {
           created_by?: string | null
           extension_type?: Database["public"]["Enums"]["extension_type"]
           id?: string
+          is_demo?: boolean
           loan_id: string
           new_maturity_date: string
           previous_maturity_date: string
@@ -518,6 +547,7 @@ export type Database = {
           created_by?: string | null
           extension_type?: Database["public"]["Enums"]["extension_type"]
           id?: string
+          is_demo?: boolean
           loan_id?: string
           new_maturity_date?: string
           previous_maturity_date?: string
@@ -556,6 +586,7 @@ export type Database = {
           created_by: string | null
           id: string
           interest_portion: number
+          is_demo: boolean
           loan_id: string
           principal_portion: number
           receipt_number: string
@@ -570,6 +601,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           interest_portion?: number
+          is_demo?: boolean
           loan_id: string
           principal_portion?: number
           receipt_number: string
@@ -584,6 +616,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           interest_portion?: number
+          is_demo?: boolean
           loan_id?: string
           principal_portion?: number
           receipt_number?: string
@@ -631,6 +664,7 @@ export type Database = {
           interest_owed: number
           interest_rate_percent: number
           inventory_item_id: string | null
+          is_demo: boolean
           late_payment_count: number
           loan_date: string
           lost_ticket_used: boolean
@@ -660,6 +694,7 @@ export type Database = {
           interest_owed?: number
           interest_rate_percent: number
           inventory_item_id?: string | null
+          is_demo?: boolean
           late_payment_count?: number
           loan_date?: string
           lost_ticket_used?: boolean
@@ -689,6 +724,7 @@ export type Database = {
           interest_owed?: number
           interest_rate_percent?: number
           inventory_item_id?: string | null
+          is_demo?: boolean
           late_payment_count?: number
           loan_date?: string
           lost_ticket_used?: boolean
@@ -753,6 +789,7 @@ export type Database = {
           found: boolean
           id: string
           inventory_item_id: string
+          is_demo: boolean
           notes: string | null
         }
         Insert: {
@@ -761,6 +798,7 @@ export type Database = {
           found: boolean
           id?: string
           inventory_item_id: string
+          is_demo?: boolean
           notes?: string | null
         }
         Update: {
@@ -769,6 +807,7 @@ export type Database = {
           found?: boolean
           id?: string
           inventory_item_id?: string
+          is_demo?: boolean
           notes?: string | null
         }
         Relationships: [
@@ -796,6 +835,7 @@ export type Database = {
           created_at: string
           discrepancy_count: number
           id: string
+          is_demo: boolean
           notes: string | null
           performed_by: string | null
         }
@@ -806,6 +846,7 @@ export type Database = {
           created_at?: string
           discrepancy_count?: number
           id?: string
+          is_demo?: boolean
           notes?: string | null
           performed_by?: string | null
         }
@@ -816,6 +857,7 @@ export type Database = {
           created_at?: string
           discrepancy_count?: number
           id?: string
+          is_demo?: boolean
           notes?: string | null
           performed_by?: string | null
         }
@@ -842,6 +884,7 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean
+          is_demo: boolean
           role: Database["public"]["Enums"]["staff_role"]
           updated_at: string
         }
@@ -850,6 +893,7 @@ export type Database = {
           full_name: string
           id: string
           is_active?: boolean
+          is_demo?: boolean
           role?: Database["public"]["Enums"]["staff_role"]
           updated_at?: string
         }
@@ -858,6 +902,7 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean
+          is_demo?: boolean
           role?: Database["public"]["Enums"]["staff_role"]
           updated_at?: string
         }
@@ -870,6 +915,7 @@ export type Database = {
           archived_by: string | null
           created_by: string | null
           id: string
+          is_demo: boolean
           loan_id: string
           sent_at: string
         }
@@ -879,6 +925,7 @@ export type Database = {
           archived_by?: string | null
           created_by?: string | null
           id?: string
+          is_demo?: boolean
           loan_id: string
           sent_at?: string
         }
@@ -888,6 +935,7 @@ export type Database = {
           archived_by?: string | null
           created_by?: string | null
           id?: string
+          is_demo?: boolean
           loan_id?: string
           sent_at?: string
         }
@@ -941,6 +989,7 @@ export type Database = {
           created_at: string
           customer_id: string | null
           id: string
+          is_demo: boolean
           loan_id: string | null
           reason: string
           resolved_at: string | null
@@ -954,6 +1003,7 @@ export type Database = {
           created_at?: string
           customer_id?: string | null
           id?: string
+          is_demo?: boolean
           loan_id?: string | null
           reason: string
           resolved_at?: string | null
@@ -967,6 +1017,7 @@ export type Database = {
           created_at?: string
           customer_id?: string | null
           id?: string
+          is_demo?: boolean
           loan_id?: string | null
           reason?: string
           resolved_at?: string | null
@@ -1115,18 +1166,113 @@ export type Database = {
         Returns: undefined
       }
       capitalize_loan: { Args: { p_loan_id: string }; Returns: Json }
-      create_pawn_loan: {
-        Args: {
-          p_appraisal_item_id: string
-          p_customer_id: string
-          p_principal_amount: number
-          p_vault_location?: string
-        }
+      create_auction_batch: {
+        Args: { p_item_ids: string[]; p_notes: string }
         Returns: string
       }
+      create_pawn_loan:
+        | {
+            Args: {
+              p_appraisal_item_id: string
+              p_customer_id: string
+              p_principal_amount: number
+              p_vault_location?: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_appraisal_item_id: string
+              p_created_by: string
+              p_customer_id: string
+              p_grace_period_days: number
+              p_interest_rate_percent: number
+              p_loan_date: string
+              p_maturity_date: string
+              p_principal_amount: number
+              p_ticket_number: string
+              p_vault_location: string
+            }
+            Returns: string
+          }
+      ctm_accrue_interest: {
+        Args: { p_loan: string }
+        Returns: {
+          appraisal_item_id: string
+          archive_reason: string | null
+          archived_at: string | null
+          archived_by: string | null
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          defaulted_at: string | null
+          extension_count: number
+          forfeited_at: string | null
+          grace_period_days: number
+          id: string
+          interest_accrued_through: string | null
+          interest_owed: number
+          interest_rate_percent: number
+          inventory_item_id: string | null
+          is_demo: boolean
+          late_payment_count: number
+          loan_date: string
+          lost_ticket_used: boolean
+          maturity_date: string
+          principal_amount: number
+          principal_balance: number
+          redeemed_at: string | null
+          reinstated_at: string | null
+          status: Database["public"]["Enums"]["loan_status"]
+          ticket_number: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "loans"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      ctm_assert_role: {
+        Args: { allowed: Database["public"]["Enums"]["staff_role"][] }
+        Returns: Database["public"]["Enums"]["staff_role"]
+      }
+      ctm_default_detection_core: { Args: never; Returns: number }
       ctm_is_system: { Args: never; Returns: boolean }
+      ctm_log_admin_edit: {
+        Args: {
+          p_after: Json
+          p_before: Json
+          p_id: string
+          p_reason: string
+          p_table: string
+        }
+        Returns: undefined
+      }
       ctm_norm_id: { Args: { v: string }; Returns: string }
       ctm_receipt_number: { Args: never; Returns: string }
+      ctm_selftest: {
+        Args: never
+        Returns: {
+          outcome: string
+          test: string
+        }[]
+      }
+      ctm_selftest_lifecycle: {
+        Args: never
+        Returns: {
+          outcome: string
+          test: string
+        }[]
+      }
+      ctm_selftest_review: {
+        Args: never
+        Returns: {
+          outcome: string
+          test: string
+        }[]
+      }
       ctm_today: { Args: never; Returns: string }
       forfeit_loan: { Args: { p_loan_id: string }; Returns: undefined }
       get_my_role: {
@@ -1158,6 +1304,11 @@ export type Database = {
         Returns: undefined
       }
       run_default_detection: { Args: never; Returns: number }
+      run_default_detection_job: { Args: never; Returns: number }
+      submit_inventory_audit: {
+        Args: { p_items: Json; p_notes: string }
+        Returns: string
+      }
     }
     Enums: {
       aml_status: "clear" | "flagged"
@@ -1306,3 +1457,72 @@ export type Enums<
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never) = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      aml_status: ["clear", "flagged"],
+      appraisal_status: ["available", "pawned"],
+      cash_flow_direction: ["in", "out"],
+      cash_flow_type: [
+        "loan_disbursement",
+        "payment_received",
+        "expense",
+        "revenue",
+        "forfeiture",
+        "adjustment",
+        "capitalization",
+      ],
+      counterfeit_resolution: ["pending", "cleared", "confirmed"],
+      extension_type: ["renewal", "capitalized"],
+      inventory_status: [
+        "pawned",
+        "extended",
+        "redeemed",
+        "forfeited",
+        "queued_for_auction",
+      ],
+      item_category: [
+        "earrings",
+        "ring",
+        "pendant",
+        "chain",
+        "bracelet",
+        "pendant_with_chain",
+        "others",
+      ],
+      loan_status: [
+        "active",
+        "extended",
+        "redeemed",
+        "defaulted",
+        "forfeited",
+        "reinstated",
+      ],
+      staff_role: ["admin", "operator", "cashier", "appraiser"],
+      suspicious_flag_status: [
+        "open",
+        "dismissed",
+        "investigating",
+        "blacklisted",
+      ],
+    },
+  },
+} as const

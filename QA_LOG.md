@@ -251,3 +251,14 @@ aren't wrapped in a transaction (lower-risk than the fixed PB-17 case).
 - The sandbox network blocks `*.supabase.co` and `*.vercel.app`, so the logged-in app could not be clicked through from here. Workaround: the DB self-tests plus the fixture-rendered print PDFs. A manual walkthrough on the deployed URL is listed in the final report.
 - The Supabase MCP hangs on long scripts or statements containing DROP/DELETE. Workaround: migrations were applied one statement at a time, and the files in `supabase/migrations/0016-0018` mirror what is live.
 - The Vercel MCP was disconnected. Workaround: deployment status is checked through the GitHub deployments API.
+
+## Pass 5 — Backend review fixes (2026-11-06)
+Self-tests:
+- `ctm_selftest` 10/10 PASS
+- `ctm_selftest_lifecycle` PASS
+- `ctm_selftest_review` 7/7 PASS
+
+Checks:
+- 180/180 unit tests pass
+- tsc and lint are clean
+- `next build` succeeds

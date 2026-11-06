@@ -9,6 +9,8 @@ import { ToastProvider } from "@/components/toast";
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  // #8: the forced password change can't be skipped by typing /dashboard
+  if (user.mustChangePassword) redirect("/force-password-change");
 
   return (
     <ToastProvider>

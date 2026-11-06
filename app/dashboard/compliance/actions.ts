@@ -21,20 +21,25 @@ export async function resolveSuspiciousFlag(
   }
 
   const supabase = await createClient();
-  const { data: flag, error } = await supabase
+  // Blacklist first: if that fails, the flag stays as it was and the Admin sees the error.
+  if (decision === "blacklisted") {
+    const { data: target, error: readError } = await supabase.from("suspicious_activity_flags").select("customer_id").eq("id", flagId).single();
+    if (readError) return { error: readError.message };
+    if (target?.customer_id) {
+      const { error: blError } = await supabase
+        .from("customers")
+        .update({ is_blacklisted: true, blacklist_reason: "Blacklisted following suspicious activity review" })
+        .eq("id", target.customer_id);
+      if (blError) return { error: `Could not blacklist the customer: ${blError.message}` };
+    }
+  }
+
+  const { error } = await supabase
     .from("suspicious_activity_flags")
     .update({ status: decision as never, resolved_by: user.id, resolved_at: new Date().toISOString() })
-    .eq("id", flagId)
-    .select("customer_id")
-    .single();
+    .eq("id", flagId);
   if (error) return { error: error.message };
-
-  if (decision === "blacklisted" && flag?.customer_id) {
-    await supabase
-      .from("customers")
-      .update({ is_blacklisted: true, blacklist_reason: "Blacklisted following suspicious activity review" })
-      .eq("id", flag.customer_id);
-  }
+  revalidatePath("/dashboard/customers");
 
   revalidatePath("/dashboard/compliance");
   return { success: true };

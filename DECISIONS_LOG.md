@@ -303,3 +303,19 @@ The printed ticket reproduces the owner's pre-printed form exactly: half-letter 
 - **Expiry Date of Redemption Period = due date + the loan's grace period.** ⚠ Confirm.
 - **Amount in words** is generated (TEN THOUSAND PESOS ONLY, or "... AND 50/100"); long amounts, names and addresses shrink to fit their blank.
 - **Reverse side (terms and conditions) is not built.** The PDF has only the front.
+
+## Backend review fixes (from Wush's "System Fixes for Matt", 2026-11-06)
+
+Migrations 0020–0025, all applied live.
+- **#1 / #32:** Default detection only defaults loans that still owe money and returns a count. A daily pg_cron job, `ctm-default-detection`, runs it at 00:05 Manila time.
+- **#2:** Defaulting no longer marks the vault item as forfeited; only an Admin forfeit does that. The 78 items this affected were reset.
+- **#5:** Auction batches and inventory audits are saved by single RPCs (`create_auction_batch`, `submit_inventory_audit`), all or nothing. Only items an Admin forfeited are accepted.
+- **#8:** The forced password change flag is also stored in `app_metadata`, which users cannot edit. It is enforced in `requireRole` and in the dashboard layout.
+- **#11:** Staff can read `profiles`.
+- **#12:** `audit_log.old_data` stores the row as it was before each update or delete.
+- **#24 / #27:** Locked appraisals: `appraised_by` and `created_at` can no longer be changed. Editing a cleared item's karat, weight or category sends its counterfeit check back to pending.
+- **#25:** Photos are limited to 5 MB, JPEG/PNG/WebP only, and only appraisers, cashiers and admins can upload. ⚠ Cleaning up orphaned uploads is not done.
+- **#26:** Direct inserts into loans, payments and extensions are blocked; these go through RPCs only.
+- **#30:** Capitalizing starts the new term from the later of the due date and the accrued-through date, so no interest is charged twice.
+- **Data:** Pedro's wrongly defaulted loan was restored. 5 test customers were archived. Unique indexes were added on customer ID (normalized) and on open suspicious flags.
+- **#9:** Updated to next 16.4.5 and vitest 4.1.12. npm audit went from 16 issues (1 critical) to 8 moderate. Install needs `--legacy-peer-deps`.
