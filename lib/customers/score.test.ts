@@ -65,6 +65,28 @@ describe("computeCustomerScore", () => {
     expect(r.counts.overdue).toBe(1);
   });
 
+  // F3 regression: a fully paid loan waiting for release is not "overdue now" and gets no penalty
+  it("F3: no overdue penalty for a fully paid loan that isn't released yet", () => {
+    const paid = loan({ status: "active", redeemed_at: null, maturity_date: "2026-10-01", principal_balance: 0, interest_owed: 0, interest_rate_percent: 3, interest_accrued_through: "2026-10-01" });
+    const r = computeCustomerScore([paid], TODAY);
+    expect(r.counts.overdue).toBe(0); // not counted as overdue
+    expect(r.score).toBe(60); // base score, no -10
+  });
+
+  it("F3: still penalises an unpaid loan past due (partial payment)", () => {
+    const unpaid = loan({ status: "active", redeemed_at: null, maturity_date: "2026-10-01", principal_balance: 5000, interest_owed: 0, interest_rate_percent: 3, interest_accrued_through: "2026-10-01" });
+    const r = computeCustomerScore([unpaid], TODAY);
+    expect(r.counts.overdue).toBe(1); // overdue
+    expect(r.score).toBe(50); // 60 - 10
+  });
+
+  it("F3: renewed and reinstated loans follow the same rule", () => {
+    const renewedPaid = loan({ status: "extended", redeemed_at: null, extension_count: 1, maturity_date: "2026-10-01", principal_balance: 0, interest_owed: 0, interest_rate_percent: 3, interest_accrued_through: "2026-10-01" });
+    const reinstatedUnpaid = loan({ status: "reinstated", redeemed_at: null, reinstated_at: "2026-09-01", maturity_date: "2026-10-01", principal_balance: 2000, interest_owed: 60, interest_rate_percent: 3, interest_accrued_through: "2026-10-01" });
+    expect(computeCustomerScore([renewedPaid], TODAY).counts.overdue).toBe(0); // paid: not overdue
+    expect(computeCustomerScore([reinstatedUnpaid], TODAY).counts.overdue).toBe(1); // unpaid: overdue
+  });
+
   it("counts outcomes older than 24 months at half weight", () => {
     const old = loan({ loan_date: "2024-01-01", redeemed_at: "2024-01-20", status: "defaulted", defaulted_at: "2024-02-15T00:00:00Z" });
     expect(computeCustomerScore([old], TODAY).score).toBe(48); // 60 - 12.5 -> 47.5 rounds to 48
