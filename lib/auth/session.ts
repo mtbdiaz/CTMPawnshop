@@ -5,6 +5,8 @@ export type CurrentUser = {
   id: string;
   email: string | null;
   profile: Tables<"profiles">;
+  /** True after an Admin reset: the user must set their own password before using the app (#8). */
+  mustChangePassword: boolean;
 };
 
 /** Loads the logged-in user's auth + profile row, or null if not signed in / deactivated / profile missing. */
@@ -24,5 +26,6 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
   if (!profile || !profile.is_active) return null;
 
-  return { id: user.id, email: user.email ?? null, profile };
+  const mustChangePassword = Boolean(user.app_metadata?.force_password_change || user.user_metadata?.force_password_change);
+  return { id: user.id, email: user.email ?? null, profile, mustChangePassword };
 }

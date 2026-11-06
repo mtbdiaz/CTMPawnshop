@@ -1,0 +1,86 @@
+// L3 + L4: what a loan's badges say, in ONE place, so the Loans list and the loan page always agree
+// (and match the Dashboard). A loan has two separate things:
+//   1. its STATE in the system: Active, Renewed, Reinstated, Defaulted, Forfeited, Redeemed (stored in loans.status)
+//   2. its PAYMENT SITUATION today: Paid, ready to release / Overdue / Due soon (worked out from the balances and dates)
+// Nothing here changes the stored status; it only decides what the screen shows.
+import { daysUntilDue } from "@/lib/compliance/reminders"; // days from today to the due date (negative = late)
+import { OPEN_STATUSES, isFullyPaid, isOverdueUnpaid, owedNow } from "./status"; // the shared paid / overdue rules (F3)
+import { addDaysIso, type AccrualLoan } from "./accrual"; // addDaysIso = add days to a YYYY-MM-DD date
+
+export type LoanBadge = { status: string; label: string }; // status = the StatusBadge color, label = the words
+
+// the words for each stored state ("extended" is what the database calls a renewed loan)
+const STATE_LABELS: Record<string, string> = {
+  active: "Active",
+  extended: "Renewed",
+  reinstated: "Reinstated",
+  defaulted: "Defaulted",
+  forfeited: "Forfeited",
+  redeemed: "Redeemed",
+};
+
+export const DUE_SOON_DAYS = 7; // same window as the Dashboard's "Due in 7 days"
+
+/** 1. The loan's state, e.g. "Renewed". */
+export function stateBadge(status: string): LoanBadge {
+  return { status, label: STATE_LABELS[status] ?? status };
+}
+
+/** 2. The payment situation today, or null when there's nothing to flag (a running loan not due yet, or a closed loan). */
+export function situationBadge(loan: AccrualLoan, today: string): LoanBadge | null {
+  if (!OPEN_STATUSES.has(loan.status)) return null; // defaulted, forfeited and redeemed already say it all
+  if (isFullyPaid(loan, today)) return { status: "redeemed", label: "Paid, ready to release" }; // owes ₱0, the item is still in the vault
+  if (isOverdueUnpaid(loan, today)) return { status: "pending", label: "Overdue" }; // past the due date and still owes money. L26: amber (needs attention), red is only for Defaulted
+  const days = daysUntilDue(loan.maturity_date, today);
+  if (days >= 0 && days <= DUE_SOON_DAYS) return { status: "pending", label: "Due soon" }; // due today up to 7 days from now
+  return null;
+}
+
+/**
+ * L5: the amount to show as "Owed now".
+ * - running or defaulted loan: principal left + interest (incl. interest after the due date), the same as "To redeem today"
+ * - forfeited: null, because the item became shop property and the loan isn't collected any more
+ * - redeemed: 0
+ */
+export function owedDisplay(loan: AccrualLoan, today: string): number | null {
+  if (loan.status === "forfeited") return null;
+  if (loan.status === "redeemed") return 0;
+  return owedNow(loan, today);
+}
+
+// L1: the same "fully paid" rule written as a database filter, so a tab can count and page through ALL loans.
+// Verified against the code: there are no fees or penalties, interest only grows while principal is above 0,
+// and the database's record_payment uses principal_balance + interest_owed as the total owed.
+// So a loan owes ₱0 exactly when both stored balances are 0.
+export const STILL_OWES_FILTER = "principal_balance.gt.0,interest_owed.gt.0"; // use with .or(...)
+
+/**
+ * L24: the last day a loan can still be renewed, or null when the grace period doesn't apply.
+ * Same rule as the database's renew_loan: "Grace period has expired" when today > due date + grace days,
+ * except reinstated loans, which the database lets renew at any time. (Capitalize has no such rule in the database.)
+ */
+export function renewGraceEnd(loan: { status: string; maturity_date: string; grace_period_days: number }): string | null {
+  if (loan.status === "reinstated") return null; // reinstated loans skip the grace check
+  return addDaysIso(loan.maturity_date, loan.grace_period_days); // due date + grace days
+}
+
+/** L24: true when renew_loan would refuse this loan today because the grace period is over. */
+export function renewBlocked(loan: { status: string; maturity_date: string; grace_period_days: number }, today: string): boolean {
+  const end = renewGraceEnd(loan);
+  return end !== null && today > end; // ISO dates (YYYY-MM-DD) compare correctly as text
+}
+
+/**
+ * L30: true when the database's run_default_detection would mark this loan Defaulted today.
+ * Same rule as the function (0017_improvement_pass.sql): status active or renewed (not reinstated),
+ * not archived, and today is after the due date + grace days. It does NOT check if the loan is paid (Matt #1).
+ */
+export function wouldBeDefaulted(
+  loan: { status: string; maturity_date: string; grace_period_days: number | null; archived_at?: string | null },
+  today: string,
+): boolean {
+  if (loan.status !== "active" && loan.status !== "extended") return false; // reinstated / closed loans are skipped
+  if (loan.archived_at) return false; // archived loans are skipped
+  return today > addDaysIso(loan.maturity_date, Number(loan.grace_period_days ?? 0)); // ISO dates compare as text
+}
+

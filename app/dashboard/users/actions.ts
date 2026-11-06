@@ -33,6 +33,8 @@ export async function createAccount(
     email: parsed.data.email,
     password: parsed.data.temp_password,
     email_confirm: true,
+    // app_metadata can only be changed by the server, so the user can't clear it themselves (#8)
+    app_metadata: { force_password_change: true },
     user_metadata: { force_password_change: true },
   });
   if (error || !data.user) return { error: error?.message ?? "Could not create account" };
@@ -107,6 +109,7 @@ export async function resetPassword(
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.updateUserById(userId, {
     password: tempPassword,
+    app_metadata: { force_password_change: true },
     user_metadata: { force_password_change: true },
   });
   if (error) return { error: error.message };

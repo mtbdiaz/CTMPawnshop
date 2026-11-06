@@ -36,9 +36,10 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Counter",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: "home", roles: EVERYONE },
-      { href: "/dashboard/loans", label: "Loans", icon: "ticket", roles: EVERYONE },
+      // Same order as a real pawn: register the customer, appraise the item, then make the loan.
       { href: "/dashboard/customers", label: "Customers", icon: "users", roles: EVERYONE },
       { href: "/dashboard/appraisals", label: "Appraisals", icon: "scale", roles: EVERYONE },
+      { href: "/dashboard/loans", label: "Loans", icon: "ticket", roles: EVERYONE },
       { href: "/dashboard/compliance/reminders", label: "Reminders", icon: "bell", roles: ["cashier"] },
     ],
   },

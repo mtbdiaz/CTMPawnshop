@@ -72,7 +72,7 @@ function loanLabel(loan: LoanHistoryRow, owed: number, today: string): { badge: 
   if (open && owed < 0.01) return { badge: "redeemed", label: "Paid, ready to release" }; // C2: nothing left to pay (green)
   if (open) {
     const days = daysUntilDue(loan.maturity_date, today); // days until due (negative = late)
-    if (days < 0) return { badge: "defaulted", label: "Overdue" }; // past the due date (red)
+    if (days < 0) return { badge: "pending", label: "Overdue" }; // past the due date (L26: amber, red is only for Defaulted)
     if (days <= 7) return { badge: "pending", label: "Due soon" }; // C8: due within 7 days (amber)
     if (loan.status === "extended") return { badge: "extended", label: "Renewed" }; // C3: "Renewed", not "Extended"
     if (loan.status === "reinstated") return { badge: "reinstated", label: "Reinstated" };

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>CTM PawnTrack Progress Report</title>
+<style>
+body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.35;color:#111}
+h1{font-size:24pt;color:#14213d;margin:0 0 4pt}
+h2{font-size:15pt;color:#14213d;border-bottom:1.5pt solid #c9a227;padding-bottom:2pt;margin-top:20pt}
+h3{font-size:12pt;color:#14213d;margin-top:12pt;margin-bottom:3pt}
+table{border-collapse:collapse;width:100%;margin:6pt 0}
+th{background:#14213d;color:#fff;text-align:left;padding:4pt 6pt;font-size:10pt}
+td{border:0.5pt solid #999;padding:3pt 6pt;vertical-align:top;font-size:10pt}
+.sub{color:#555;font-size:11pt;margin-bottom:10pt}
+.note{background:#fff7dd;border:0.5pt solid #c9a227;padding:6pt;margin:8pt 0}
+ul{margin-top:2pt}
+h2,h3{break-after:avoid}
+tr{break-inside:avoid}
+tr:first-child{break-after:avoid}
+</style></head><body>
+
+<h1>CTM PawnTrack: Project Progress Report</h1>
+<div class="sub">Web-based pawnshop management system for CTM Pawnshop (Kiblawan, Davao del Sur)<br>
+Report date: October 29, 2026 &nbsp;|&nbsp; Prepared for: Project Adviser<br>
+Live system: https://ctm-pawnshop.vercel.app &nbsp;|&nbsp; Source code: github.com/mtbdiaz/CTMPawnshop (branch <i>main</i>)</div>
+
+<h2>1. Summary</h2>
+<p>CTM PawnTrack replaces the originally planned JavaFX desktop application with a web application that runs in a browser. It covers all 40 product backlog items (PB-1 to PB-40) across the ten sprints in the project plan, and a later improvement pass requested by the owner added 19 further changes (archiving, customer scoring, a new loan flow, thermal and A4 printing, and others).</p>
+<ul>
+<li><b>Status:</b> every backlog item is implemented and deployed. The latest production deployment of <i>main</i> succeeded on October 27, 2026.</li>
+<li><b>Size:</b> about 11,400 lines of application code, 19 database migrations, about 30 screens, 155 automated tests (all passing).</li>
+<li><b>Data:</b> the live database now holds a demo data set of 1,241 loans, 420 customers and 1,290 appraisals covering July 1 to October 27, 2026, so the system can be shown with realistic activity.</li>
+<li><b>Open items:</b> a few business rules were set by assumption and need CTM's confirmation (section 9). A hands-on walkthrough of the live site by each user role has not yet been done.</li>
+</ul>
+
+<h2>2. Technology and architecture</h2>
+<table>
+<tr><th style="width:28%">Layer</th><th>Choice</th></tr>
+<tr><td>Application</td><td>Next.js 16 (App Router) with TypeScript and Tailwind CSS</td></tr>
+<tr><td>Database and login</td><td>Supabase (PostgreSQL, Auth, Row Level Security, file storage for item photos)</td></tr>
+<tr><td>Hosting</td><td>Vercel, deploying automatically from GitHub</td></tr>
+<tr><td>Testing</td><td>Vitest (unit tests), TypeScript type checking, ESLint, production build</td></tr>
+<tr><td>Roles</td><td>Admin, Operator, Cashier, Appraiser. Access is enforced in the database (Row Level Security) as well as on each page, so hiding a button is never the only protection.</td></tr>
+</table>
+<p>Key design decisions: every loan change (new loan, payment, renewal, redemption, default, reinstatement) runs inside a database function that checks the user's role and updates the loan, vault item, appraisal and cash ledger together, so the records cannot drift apart. Saved loans, payments and customer names are locked and cannot be edited directly.</p>
+
+<h2>3. How the work progressed</h2>
+<table>
+<tr><th style="width:17%">Date</th><th style="width:30%">Phase</th><th>What was done</th></tr>
+<tr><td>Apr 2026</td><td>Prototype</td><td>Static HTML prototype used as a UX reference (screens and fields).</td></tr>
+<tr><td>Sep 3 to 15</td><td>Sprints 0 to 10</td><td>Project scaffold, then all backlog modules built in sprint order: login and roles, customers, appraisals, loans, inventory, finance, compliance and reports. Documentation, user guide and deployment set up.</td></tr>
+<tr><td>Sep 5 to 15</td><td>QA sweeps</td><td>Security and functional audit of all 40 items. Fixed missing table permissions, narrowed update rights on appraisals, added audit-log coverage to five tables, made loan creation atomic, replaced a placeholder transaction history, corrected a double-charged interest bug.</td></tr>
+<tr><td>Sep 24</td><td>UX pass</td><td>Role-aware navigation, a common design system, confirmation dialogs, filters and pagination, and a re-scan of every screen for each role.</td></tr>
+<tr><td>Oct 8</td><td>Improvement pass</td><td>19 owner-requested changes (section 5), including new database rules, a new loan flow, thermal printing and A4 report printing.</td></tr>
+<tr><td>Oct 16 to 24</td><td>Front-end polish (teammate)</td><td>Jhomyr Palmera: dashboard redesign with a quick search box, mobile layout fixes, readability and style fixes, and Philippine mobile number validation.</td></tr>
+<tr><td>Oct 27</td><td>Pawn ticket form</td><td>The printed ticket was rebuilt to match CTM's own pre-printed form exactly.</td></tr>
+<tr><td>Oct 27 to 28</td><td>Demo data</td><td>Realistic data loaded for July to October 2026 (section 7).</td></tr>
+</table>
+
+<h2>4. Features delivered (all 40 backlog items)</h2>
+<table>
+<tr><th style="width:8%">Sprint</th><th style="width:27%">Module</th><th>What the system does</th></tr>
+<tr><td>1</td><td>Login, access and settings (PB-1 to 6)</td><td>Staff login with Supabase accounts; Admin creates, edits and deactivates accounts and issues temporary passwords; 15-minute idle sign-out; role-based access; Admin-set interest rate, gold prices, loan-to-value percentage and grace period.</td></tr>
+<tr><td>2</td><td>Customers (PB-7 to 11)</td><td>Register customers with ID details; automatic identity (AML) check; update contact details; full transaction history; blacklist check that blocks new loans.</td></tr>
+<tr><td>3</td><td>Appraisal (PB-12 to 16)</td><td>Record gold items with photos and notes; calculate value and the maximum loan; flag possible counterfeits for Admin review.</td></tr>
+<tr><td>4 and 5</td><td>Loans (PB-17 to 22)</td><td>Issue a pawn ticket; record payments (interest first, then principal); renew; redeem; automatic default after the grace period; Admin forfeiture; lost-ticket redemption checked against the ID on file.</td></tr>
+<tr><td>6</td><td>Inventory (PB-23 to 26)</td><td>Vault inventory with automatic status changes and history; physical vault audits that count discrepancies; auction batches for forfeited items.</td></tr>
+<tr><td>7</td><td>Finance (PB-27 to 30)</td><td>Cash ledger with a running balance, daily cash position, and entry of expenses and other revenue.</td></tr>
+<tr><td>8</td><td>Compliance (PB-31 to 33)</td><td>Audit trail of every change; suspicious-activity flags for Admin review; due-date reminder log.</td></tr>
+<tr><td>9</td><td>Reports (PB-34 to 40)</td><td>Outstanding loans, overdue loans, inventory aging, financial summary, compliance and trends reports, all printable.</td></tr>
+<tr><td>10</td><td>Release (items 41 to 46)</td><td>Backups are handled by Supabase. User guide, decisions log and QA logs written. Deployed on Vercel.</td></tr>
+</table>
+
+<h2>5. Improvement pass (19 owner-requested changes)</h2>
+<table>
+<tr><th style="width:5%">#</th><th style="width:30%">Change</th><th>Result</th></tr>
+<tr><td>1</td><td>Archive instead of delete</td><td>Nothing is ever deleted. Records are archived with a reason; Admins can restore them from an Archive page. Delete permission was removed from the database for all users.</td></tr>
+<tr><td>2</td><td>Item category</td><td>Earrings, Ring, Pendant, Chain, Bracelet, Pendant with Chain, or Others with a text label; existing items were set to Others.</td></tr>
+<tr><td>3</td><td>Karat prices</td><td>Prices for 24K, 21K and 18K only. Value = weight × the price for that karat; the loan amount uses the loan-to-value percentage.</td></tr>
+<tr><td>4</td><td>Appraisal pool</td><td>The Appraisals page lists only items not yet pawned; pawning an item moves it out of the list.</td></tr>
+<tr><td>5</td><td>Locked records</td><td>Saved loans, payments and customer names/IDs are locked. Only an Admin can correct them, with a written reason; the before and after values go to the audit trail and the ledger is corrected to match.</td></tr>
+<tr><td>6</td><td>Customer score</td><td>A 0 to 100 score (Excellent, Good, Fair, Risky) from the customer's history, shown in search and profiles. Weights are stored in a table and can be tuned.</td></tr>
+<tr><td>7</td><td>Reinstate</td><td>Defaulted loans can be given another chance (labelled "Reinstated"). Interest keeps accruing; the item stays out of forfeiture and auction.</td></tr>
+<tr><td>8</td><td>Capitalize and extend</td><td>Unpaid interest is added to the principal and the loan is extended one term, recorded as a non-cash memo; it counts as a renewal.</td></tr>
+<tr><td>9</td><td>Appraisal calculator</td><td>Category, karat and weight give a live value and maximum loan, with no customer needed.</td></tr>
+<tr><td>10</td><td>New loan flow</td><td>Customer search as you type with ranking and score badges; history panel with warnings; pick an appraised item or appraise on the spot; review-and-confirm step; vault defaults to "Vault A".</td></tr>
+<tr><td>11</td><td>Action buttons</td><td>Record names are no longer links. Every table has visible buttons such as "View loan".</td></tr>
+<tr><td>12</td><td>Sidebar</td><td>Collapses to an icon rail with tooltips, remembers its state and works from the keyboard.</td></tr>
+<tr><td>13</td><td>Merged pages</td><td>Users moved into Settings; Audit Trail moved into Reports. Old addresses redirect.</td></tr>
+<tr><td>14</td><td>Header</td><td>Greeting removed; plain name, role and Sign out.</td></tr>
+<tr><td>15 to 17</td><td>Printing</td><td>Receipts print on 80mm thermal paper (switchable to 58mm); reports print on A4 with repeated table headers, no split rows and page numbers. Checked by printing to PDF and inspecting the pages, including very long text.</td></tr>
+<tr><td>18, 19</td><td>Design review</td><td>Research notes with sources (DESIGN_NOTES.md); decoration and clutter removed (gradients, shadows, marketing text, em dashes).</td></tr>
+</table>
+
+<h2>6. Printed pawn ticket</h2>
+<p>CTM supplied its own pawn ticket form as a PDF (half-letter, landscape). The system now prints tickets on that form. Every word, box and line was placed at the exact position read from the PDF, and only the blanks are filled in from the loan: ticket number, dates, name, address, amount in digits and in words, interest rate, appraised value, item description, and the principal, interest, service charge and net proceeds table. A test print compared against the owner's PDF matched to within half a point (about 0.2 mm) vertically and 0.01 point horizontally. The long-text test (very long name, address and item notes) stays inside the boxes.</p>
+
+<h2>7. Demo data</h2>
+<p>To demonstrate the system, a repeatable (fixed random seed) data set was generated and loaded into the live database. All figures below were checked after loading.</p>
+<table>
+<tr><th>Item</th><th>Count</th><th>Item</th><th>Count</th></tr>
+<tr><td>Staff accounts</td><td>7</td><td>Payments</td><td>1,292</td></tr>
+<tr><td>Customers</td><td>420</td><td>Renewals and capitalizations</td><td>413</td></tr>
+<tr><td>Appraisals</td><td>1,290</td><td>Cash ledger entries</td><td>2,651</td></tr>
+<tr><td>Loans</td><td>1,241</td><td>Auction batches (items)</td><td>6 (53)</td></tr>
+<tr><td>Vault items</td><td>1,241</td><td>Vault audits (items)</td><td>5 (1,214)</td></tr>
+<tr><td>Suspicious-activity flags</td><td>17</td><td>Audit log entries</td><td>8,245</td></tr>
+</table>
+<p>Loan statuses: 760 redeemed, 240 active, 140 renewed, 55 forfeited, 40 defaulted, 6 reinstated. Monthly loans: July 320, August 340, September 326, October 255 (about 11 tickets per open day, median loan about ₱6,450). The data includes busier weekends and paydays, six closed days, late redemptions, loans renewed up to three times, a forfeited item later sold at auction, voided tickets, corrected payment mistakes, and lost-ticket redemptions. Checks passed: no orphan records, no duplicate ticket or receipt numbers, balances reconcile with payments, the ledger matches the loans, and dates are in the correct order.</p>
+<div class="note"><b>Note:</b> this demo data is in the live database and is included in the live dashboard, reports and cash ledger. Seeded rows are not marked in the app; they can be removed with one database command if needed. The original 17 test loans and 14 customers are unchanged.</div>
+
+<h2>8. Quality and security</h2>
+<ul>
+<li><b>Automated tests:</b> 155 unit tests in 28 files, all passing. Type checking, lint and production build are clean.</li>
+<li><b>Database self-tests:</b> 10 of 10 passed on the live database (for example, a cashier cannot change a saved loan, only an Admin can restore archived data, and every Admin edit needs a reason and writes before and after values to the audit log).</li>
+<li><b>Data rules:</b> Row Level Security is enabled on every table; no delete permission exists for staff accounts; every change is written to the audit trail.</li>
+<li><b>Regular QA logs:</b> QA_LOG.md records each audit pass, what was fixed and what was left open.</li>
+<li><b>Secrets:</b> a repository scan found no live secrets in tracked files. One earlier commit once contained a Supabase service key; it was removed, but it remains in the repository history and should be rotated in the Supabase dashboard.</li>
+</ul>
+
+<h2>9. Decisions and open items needing confirmation</h2>
+<h3>Business rules set by assumption (please confirm with CTM)</h3>
+<ul>
+<li><b>Valuation:</b> value = weight × price per gram for the karat; no purity multiplier. The earlier backlog item PB-14 was marked not estimable because the exact formula was never confirmed.</li>
+<li><b>Interest after the due date:</b> every 30 days, or part of 30 days, past the due date adds one full month of interest (5% of the remaining principal). There is no separate late-payment penalty fee; a flat or percentage penalty could be added if CTM wants one.</li>
+<li><b>Default and forfeiture:</b> a loan becomes defaulted the day after the 7-day grace period ends. Interest keeps accruing while it is defaulted.</li>
+<li><b>Capitalizing:</b> the new due date is the old date plus 30 days, or today plus 30 days if the loan is already past due.</li>
+<li><b>Customer score weights:</b> start at 60; +8 per on-time redemption; +3 per renewal (capped at +15); −6 for late payments; −15 for a reinstatement; −25 for a default; −10 if overdue now.</li>
+<li><b>21K and 18K prices:</b> set as 21/24 and 18/24 of the 24K price.</li>
+<li><b>Counterfeit check:</b> now a manual flag by the appraiser, cleared by an Admin, because the purity-based check was dropped with the new formula.</li>
+</ul>
+<h3>Pawn ticket form questions</h3>
+<ul>
+<li>Net Proceeds is printed as principal minus service charge, because the system pays out the full principal and collects interest at redemption. Does CTM deduct interest in advance?</li>
+<li>Service Charge prints 0.00 because the system has no such field.</li>
+<li>Expiry Date of Redemption Period is the due date plus the grace period.</li>
+<li>The form's wording was kept exactly, including "Thumbrark" and "has pledges to this Pawnee", which look like typos.</li>
+<li>The back of the ticket (terms and conditions) was not in the supplied PDF and is not yet printed.</li>
+</ul>
+
+<h2>10. Known limitations</h2>
+<ul>
+<li><b>Default detection</b> runs when staff open the loans page, not on a timer. A scheduled job is needed before real use.</li>
+<li><b>Reminders</b> are logged in the app only; no SMS or email service is connected.</li>
+<li><b>AML check</b> is a keyword-based placeholder, not a real sanctions-list service.</li>
+<li><b>Live walkthrough:</b> the development environment could not open the live site, so a hands-on check of every screen with each of the four roles has not yet been done. It is recommended before real use.</li>
+<li><b>Not supported by the current design:</b> items other than gold jewelry (phones, appliances), sale records, a voided-ticket status, e-wallet payments and cash-drawer counts.</li>
+</ul>
+
+<h2>11. Contributors and AI assistance</h2>
+<p>Main branch history (69 commits, April 14 to October 27, 2026): Matthew Theron Diaz (project owner) 27, Claude Code (AI coding assistant) 27, Jhomyr Palmera 15. Most of the development and testing in this report was produced with Claude Code working from the owner's requirements and decisions; Jhomyr Palmera contributed the dashboard and front-end polish in October. All work went through pull requests into <i>main</i> (PRs #1 to #11).</p>
+
+<h2>12. Suggested next steps</h2>
+<ol>
+<li>Walk through the live system with each role (Admin, Operator, Cashier, Appraiser) using the demo accounts; log any issues.</li>
+<li>Confirm the business rules in section 9 with CTM, and decide whether a late-payment penalty is wanted.</li>
+<li>Supply the back page of the ticket and confirm the Net Proceeds and Service Charge rules.</li>
+<li>Replace the demo data with real data (or remove it) before production use; rotate the Supabase service key.</li>
+<li>Add a scheduled default-detection job and, if wanted, SMS or email reminders.</li>
+</ol>
+
+<h2>Appendix: project documents in the repository</h2>
+<table>
+<tr><th style="width:32%">File</th><th>Contents</th></tr>
+<tr><td>SPRINT_PROGRESS.md</td><td>Checklist of all backlog items by sprint</td></tr>
+<tr><td>DECISIONS_LOG.md</td><td>Every assumption, placeholder and fix, with reasons</td></tr>
+<tr><td>QA_LOG.md and QA_LOG_part1 to 3</td><td>Audit results and fixes for every pass</td></tr>
+<tr><td>IMPROVEMENTS_CHECKLIST.md</td><td>The 19-item improvement pass checklist</td></tr>
+<tr><td>DESIGN_NOTES.md</td><td>Interface research with sources and the design audit</td></tr>
+<tr><td>USER_GUIDE.md</td><td>Staff how-to guide</td></tr>
+<tr><td>scripts/demo-seed/README.md</td><td>How the demo data was built and how to remove it</td></tr>
+<tr><td>qa/ticket-form and qa/print</td><td>Printed samples of the ticket and receipts, including the overlay against CTM's form</td></tr>
+</table>
+</body></html>

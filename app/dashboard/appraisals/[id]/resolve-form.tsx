@@ -3,10 +3,11 @@
 import { ActionForm, SubmitButton } from "@/components/form";
 import { resolveCounterfeitFlag } from "../actions";
 
-export function ResolveForm({ appraisalId }: { appraisalId: string }) {
+export function ResolveForm({ appraisalId, updatedAt }: { appraisalId: string; updatedAt: string }) {
   return (
     <ActionForm action={resolveCounterfeitFlag} successMessage="Counterfeit flag resolved." className="mt-4 flex flex-wrap gap-2">
       <input type="hidden" name="appraisal_id" value={appraisalId} />
+      <input type="hidden" name="updated_at" value={updatedAt} /> {/* the version the Admin is looking at */}
       <SubmitButton
         name="decision"
         value="cleared"

@@ -47,9 +47,11 @@ export function accruedInterest(loan: AccrualLoan, today: string): { interestOwe
 
 /** Item 8: add unpaid interest to principal and extend one term. No cash moves. */
 export function capitalizePreview(loan: AccrualLoan, today: string) {
-  const { interestOwed } = accruedInterest(loan, today);
+  const { interestOwed, accruedThrough } = accruedInterest(loan, today);
   const newPrincipal = round2(Number(loan.principal_balance) + interestOwed);
-  const base = daysUntilDue(loan.maturity_date, today) >= 0 ? loan.maturity_date : today;
+  // The capitalized interest already pays up to accruedThrough, so the new term starts there
+  // (same rule as renew_loan); starting it today would charge the overlap twice (#30).
+  const base = accruedThrough > loan.maturity_date ? accruedThrough : loan.maturity_date;
   return {
     capitalized: interestOwed,
     newPrincipal,

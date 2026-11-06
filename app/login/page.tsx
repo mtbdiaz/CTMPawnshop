@@ -37,7 +37,7 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      router.push(data.user.user_metadata?.force_password_change ? "/force-password-change" : "/dashboard");
+      router.push(data.user.app_metadata?.force_password_change || data.user.user_metadata?.force_password_change ? "/force-password-change" : "/dashboard");
       router.refresh();
     } catch (err) {
       setError(friendlyAuthError(err instanceof Error ? err.message : "Sign-in failed."));

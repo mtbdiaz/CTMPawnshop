@@ -239,7 +239,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     // card 1: open loans and the total still owed
     { label: "Open loans", value: String(loans.length), hint: `${formatPeso(outstanding)} outstanding`, detail: `${formatPeso(principalTotal)} principal, ${formatPeso(interestTotal)} interest`, href: "/dashboard/loans?status=open", icon: "ticket", tone: "default" },
     // card 2: overdue loans (Admin goes to the Overdue report, others to the Loans list)
-    { label: "Overdue", value: String(overdue.length), hint: "Past due date, not yet defaulted", detail: waitingForfeit.length ? `+${waitingForfeit.length} past grace period (forfeit pending)` : undefined, href: role === "admin" ? "/dashboard/reports/overdue" : "/dashboard/loans?status=overdue", icon: "alert", tone: overdue.length ? "danger" : "default" },
+    { label: "Overdue", value: String(overdue.length), hint: "Past due date, not yet defaulted", detail: waitingForfeit.length ? `+${waitingForfeit.length} past grace period (forfeit pending)` : undefined, href: role === "admin" ? "/dashboard/reports/overdue" : "/dashboard/loans?status=overdue", icon: "alert", tone: overdue.length ? "warning" : "default" }, // L26: amber, like the Overdue badge
     // card 3: loans due today up to 7 days from now (Cashier goes to Reminders)
     { label: "Due in 7 days", value: String(dueSoon.length), hint: "Due today up to 7 days from now", href: hasRole(role, ["cashier"]) ? "/dashboard/compliance/reminders" : "/dashboard/loans?status=open", icon: "bell", tone: dueSoon.length ? "warning" : "default" },
     // card 4: staff who handle cash see today's cash; everyone else sees the customer count
@@ -402,7 +402,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               {k.label}
             {/* end of top line */}
             </span>
-            {/* the big number, coloured by its tone (red = overdue, amber = due soon) */}
+            {/* the big number, coloured by its tone (amber = overdue or due soon) */}
             {/* Viewport fit: text-2xl and mt-1 (was text-3xl, mt-2) so the cards are about 110px tall */}
             <span className={cx("mt-1 block text-2xl font-semibold tabular-nums", toneClass(k.tone))}>{k.value}</span>
             {/* the explanation line under the number */}
@@ -431,9 +431,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <div className="grid gap-x-4 xl:grid-cols-[minmax(0,1fr)_17rem] xl:items-start 2xl:grid-cols-[minmax(0,1fr)_19rem]">
           {/* className="contents" = the section's heading and card become items of the grid above */}
           <section className="contents">
-            {/* row 1, left: the heading. The short explanation sits to the right of the title */}
+            {/* row 1, left: the heading */}
             <div className="min-w-0 xl:col-start-1 xl:row-start-1">
-              <SectionTitle actions={<span className="text-sm text-slate-500">Ready to release, overdue, or due within 7 days</span>}>
+              {/* D6: no grey line next to the title any more (removed Nov 6): it listed kinds of loans that weren't always there.
+                   The count in brackets says how many loans are in the list. */}
+              <SectionTitle>
                 {/* the count in brackets = how many loans are in the list */}
                 Needs attention <span className="ml-1 font-normal text-slate-500">({attentionAll.length})</span>
               </SectionTitle>
@@ -465,7 +467,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                               {paid ? (
                                 <StatusBadge status="redeemed" label="Paid, ready to release" />
                               ) : late > 0 ? (
-                                <StatusBadge status="defaulted" label="Overdue" />
+                                <StatusBadge status="pending" label="Overdue" />
                               ) : (
                                 <StatusBadge status="pending" label="Due soon" />
                               )}
@@ -506,7 +508,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                           const paid = isPaid(loan);
                           const late = paid ? 0 : -dueIn(loan);
                           return (
-                            // Redesign: no red row tint; the red "Overdue" badge is enough
+                            // Redesign: no red row tint; the amber "Overdue" badge is enough
                             <TR key={loan.id}>
                               <TD mono className="hidden whitespace-nowrap 2xl:table-cell">
                                 {/* Viewport fit: long tickets are cut with "..." at 11rem; hover shows the full number */}
@@ -534,18 +536,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                                   // everyone else: the due date
                                   <>Due {formatDate(loan.maturity_date)}</>
                                 )}
-                                {/* small note: how late, or how many days left */}
-                                {late > 0 && <span className="ml-1 text-xs font-semibold text-red-700">({late}d late)</span>}
+                                {/* small note: how late (amber like the Overdue badge, L26), or how many days left */}
+                                {late > 0 && <span className="ml-1 text-xs font-semibold text-amber-800">({late}d late)</span>}
                                 {!paid && late <= 0 && <span className="ml-1 text-xs text-slate-500">({dueIn(loan) === 0 ? "today" : `in ${dueIn(loan)}d`})</span>}
                               </TD>
                               <TD align="right">{formatPeso(owedNow(loan))}</TD>
                               <TD>
                                 {/* Redesign: one clear status per row.
-                                    Paid = green, Overdue = red, Due soon = amber. Words, not just colour. */}
+                                    Paid = green, Overdue and Due soon = amber (L26). Words, not just colour. */}
                                 {paid ? (
                                   <StatusBadge status="redeemed" label="Paid, ready to release" />
                                 ) : late > 0 ? (
-                                  <StatusBadge status="defaulted" label="Overdue" />
+                                  <StatusBadge status="pending" label="Overdue" />
                                 ) : (
                                   <StatusBadge status="pending" label="Due soon" />
                                 )}

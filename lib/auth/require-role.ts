@@ -9,6 +9,8 @@ import { hasRole, type StaffRole } from "@/lib/auth/roles";
 export async function requireRole(allowed: StaffRole[]): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  // #8: a temporary password only lets you set a new one
+  if (user.mustChangePassword) redirect("/force-password-change");
   // D2: "?denied=1" tells the Dashboard to explain why the user landed there
   if (!hasRole(user.profile.role, allowed)) redirect("/dashboard?denied=1");
   return user;
