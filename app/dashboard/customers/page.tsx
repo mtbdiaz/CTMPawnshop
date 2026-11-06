@@ -392,7 +392,9 @@ export default async function CustomersPage({
         )}
         {/* U7: short explanation of the columns. Closed by default so it takes one line */}
         <details className="border-t border-slate-200 px-4 py-2.5 text-sm text-slate-600">
-          <summary className="cursor-pointer font-medium text-navy-700 hover:underline">What do AML check, Score, Flags and Compliance mean?</summary>
+          {/* B4: keyboard focus ring (same classes as the Loans "What do the loan statuses mean?" box), so a keyboard user
+              can see when this line is selected before pressing Enter or Space (WCAG 2.4.7 Focus Visible) */}
+          <summary className="cursor-pointer rounded font-medium text-navy-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500">What do AML check, Score, Flags and Compliance mean?</summary>
           <dl className="mt-2 grid gap-2 sm:grid-cols-3">
             <div>
               <dt className="font-semibold text-slate-800">AML check</dt>

@@ -43,7 +43,7 @@ export default async function InventoryAuditPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Physicalaudit"
+        title="Physical audit" // B1: was "Physicalaudit" (missing space); now matches the menu and breadcrumb
         description="Walk the vault and check each item against the system. Untick anything you cannot physically find, and add a note."
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },

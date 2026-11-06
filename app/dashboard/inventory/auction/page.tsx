@@ -35,7 +35,8 @@ export default async function AuctionPrepPage() {
     return {
       id: item.id,
       location: item.vault_location,
-      label: `${appraisal ? categoryLabel(appraisal.category, appraisal.category_other) : ""}, ${appraisal?.karat}K, ${appraisal?.weight_grams} g, forfeited by ${appraisal?.customers?.full_name ?? ""}`,
+      // B2: "pawned by <customer>" (was "forfeited by"): the customer pawned the item; an Admin is the one who forfeited it
+      label: `${appraisal ? categoryLabel(appraisal.category, appraisal.category_other) : ""}, ${appraisal?.karat}K, ${appraisal?.weight_grams} g, pawned by ${appraisal?.customers?.full_name ?? ""}`,
     };
   });
 
