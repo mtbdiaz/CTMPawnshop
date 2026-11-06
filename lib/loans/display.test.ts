@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { owedDisplay, renewBlocked, renewGraceEnd, situationBadge, stateBadge, wouldBeDefaulted } from "./display";
+import { owedDisplay, pastGracePeriod, renewBlocked, renewGraceEnd, situationBadge, stateBadge, wouldBeDefaulted } from "./display"; // A1: + pastGracePeriod
 import { accruedInterest } from "./accrual";
 
 const today = "2026-11-05";
@@ -67,7 +67,8 @@ describe("renewBlocked (L24, same rule as renew_loan)", () => {
 });
 
 describe("wouldBeDefaulted (L30, same rule as run_default_detection)", () => {
-  const loan = { status: "active", maturity_date: "2026-10-29", grace_period_days: 7, archived_at: null };
+  // A1: the loan still owes money (the database only defaults loans that do, since Matt's fix #1)
+  const loan = { status: "active", maturity_date: "2026-10-29", grace_period_days: 7, archived_at: null, principal_balance: 1000, interest_owed: 50 };
   it("not on the last grace day, yes the day after", () => {
     expect(wouldBeDefaulted(loan, "2026-11-05")).toBe(false);
     expect(wouldBeDefaulted(loan, "2026-11-06")).toBe(true);
@@ -79,5 +80,15 @@ describe("wouldBeDefaulted (L30, same rule as run_default_detection)", () => {
   });
   it("a missing grace period counts as 0 days", () => {
     expect(wouldBeDefaulted({ ...loan, grace_period_days: null }, "2026-10-30")).toBe(true);
+  });
+  // A1: Matt's fix #1 (migration 0020): a loan that owes ₱0 is never defaulted, but it is still past the grace period
+  it("skips a fully paid loan, which is still past the grace period", () => {
+    const paid = { ...loan, principal_balance: 0, interest_owed: 0 }; // like Pedro Reyes's loan
+    expect(wouldBeDefaulted(paid, "2026-11-06")).toBe(false); // the database skips it
+    expect(pastGracePeriod(paid, "2026-11-06")).toBe(true); // so the Admin box lists it as "skipped"
+  });
+  // A1: owing only interest (principal paid off) still counts as owing money, same as the database
+  it("still defaults a loan that owes only interest", () => {
+    expect(wouldBeDefaulted({ ...loan, principal_balance: 0, interest_owed: 50 }, "2026-11-06")).toBe(true);
   });
 });
