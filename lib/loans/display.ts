@@ -70,17 +70,33 @@ export function renewBlocked(loan: { status: string; maturity_date: string; grac
   return end !== null && today > end; // ISO dates (YYYY-MM-DD) compare correctly as text
 }
 
+// A1: the loan fields the default check needs (the stored balances are what the database looks at)
+type DefaultCheckLoan = {
+  status: string; // active / extended (renewed) / reinstated / ...
+  maturity_date: string; // due date, YYYY-MM-DD
+  grace_period_days: number | null; // extra days after the due date (null counts as 0)
+  archived_at?: string | null; // archived loans are never checked
+  principal_balance: number; // stored principal still unpaid
+  interest_owed: number; // stored interest still unpaid
+};
+
 /**
- * L30: true when the database's run_default_detection would mark this loan Defaulted today.
- * Same rule as the function (0017_improvement_pass.sql): status active or renewed (not reinstated),
- * not archived, and today is after the due date + grace days. It does NOT check if the loan is paid (Matt #1).
+ * A1: true when an active or renewed loan is past its due date + grace days (the date part of the check).
+ * Reinstated, closed and archived loans are never checked by the database (Matt #3), so they are false here too.
  */
-export function wouldBeDefaulted(
-  loan: { status: string; maturity_date: string; grace_period_days: number | null; archived_at?: string | null },
-  today: string,
-): boolean {
+export function pastGracePeriod(loan: DefaultCheckLoan, today: string): boolean {
   if (loan.status !== "active" && loan.status !== "extended") return false; // reinstated / closed loans are skipped
   if (loan.archived_at) return false; // archived loans are skipped
   return today > addDaysIso(loan.maturity_date, Number(loan.grace_period_days ?? 0)); // ISO dates compare as text
+}
+
+/**
+ * L30 + A1: true when the database's default check would mark this loan Defaulted today.
+ * Same rule as ctm_default_detection_core (migration 0020): past the grace period AND it still owes money
+ * (stored principal or interest above 0). A fully paid loan is skipped since Matt's fix #1.
+ */
+export function wouldBeDefaulted(loan: DefaultCheckLoan, today: string): boolean {
+  const owesMoney = Number(loan.principal_balance) > 0 || Number(loan.interest_owed) > 0; // same check as the database
+  return pastGracePeriod(loan, today) && owesMoney; // both must be true
 }
 

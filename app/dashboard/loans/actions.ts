@@ -233,8 +233,8 @@ export async function adminEditPayment(_prev: ActionState, formData: FormData): 
 }
 
 // L0 (Phase 0): default detection no longer runs when someone OPENS the Loans list, because opening a list
-// must never change loans (and, until Matt's fix #1, it could mark a fully paid loan as Defaulted).
-// An Admin runs it on purpose with "Check for defaults now". It is the same database function (run_default_detection).
+// must never change loans. A1: since Matt's fix #7 the database runs it by itself every day at 12:05 AM;
+// an Admin can still run it on purpose here ("Check for defaults"). Same database function (run_default_detection).
 export type DefaultCheckState = { error?: string; success?: boolean; message?: string };
 
 export async function checkDefaultsNow(_prev: DefaultCheckState, formData: FormData): Promise<DefaultCheckState> {
@@ -243,20 +243,12 @@ export async function checkDefaultsNow(_prev: DefaultCheckState, formData: FormD
   const supabase = await createClient();
 
   // L30: work out the list again right now with the same rule the preview used (read-only)
-  const { error: readError, candidates, paid } = await loadDefaultCandidates(manilaToday());
+  // A1: fully paid loans are no longer in this list (the database skips them since Matt's fix #1), so they don't block it
+  const { error: readError, candidates } = await loadDefaultCandidates(manilaToday());
   if (readError) return { error: friendlyError("check the loans", readError) };
 
-  // Safety net until Matt #1 is fixed: the database function doesn't check whether a loan is paid.
-  // If any FULLY PAID running loan is past its due date + grace period, stop and name it instead.
-  if (paid.length) {
-    const one = paid.length === 1;
-    const tickets = paid.slice(0, 5).map((l) => l.ticket_number).join(", ");
-    return {
-      error: `Not run: ${paid.length} fully paid loan${one ? " is" : "s are"} past the grace period (${tickets}${paid.length > 5 ? ", and more" : ""}). The check would wrongly mark ${one ? "it" : "them"} Defaulted (Matt #1). Redeem ${one ? "it" : "them"} first.`,
-    };
-  }
   // L30: nothing to do -> don't call the database at all
-  if (candidates.length === 0) return { success: true, message: "Nothing to change. No running loans are past their grace period." };
+  if (candidates.length === 0) return { success: true, message: "Nothing to change. No active or renewed loan that still owes money is past its grace period." };
   // L30: the Admin confirmed the list shown on the page. If it changed since (a payment, a renewal, a new day),
   // stop, so nothing is defaulted that the Admin didn't see.
   if (String(formData.get("expected") ?? "") !== candidateKey(candidates)) {
@@ -267,8 +259,8 @@ export async function checkDefaultsNow(_prev: DefaultCheckState, formData: FormD
   if (error) return { error: friendlyError("run the default check", error) };
   revalidateLoan();
   revalidatePath("/dashboard/inventory");
-  // L30: the function returns how many vault ITEMS it updated, not loans, so the message uses the confirmed list
-  void data;
-  const n = candidates.length;
-  return { success: true, message: `Default check done. ${n} loan${n === 1 ? "" : "s"} past the grace period moved to Defaulted. Each change is in the audit trail.` };
+  // A1: since Matt's fix #32 the function returns how many LOANS it defaulted, so the message uses that number
+  // (the confirmed list's count is only a fallback if the database sends back nothing)
+  const n = typeof data === "number" ? data : candidates.length;
+  return { success: true, message: `Default check done. ${n} loan${n === 1 ? "" : "s"} past the grace period moved to Defaulted. Their items stay in the vault until an Admin forfeits each one. Each change is in the audit trail.` };
 }
