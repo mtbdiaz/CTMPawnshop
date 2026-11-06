@@ -431,9 +431,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <div className="grid gap-x-4 xl:grid-cols-[minmax(0,1fr)_17rem] xl:items-start 2xl:grid-cols-[minmax(0,1fr)_19rem]">
           {/* className="contents" = the section's heading and card become items of the grid above */}
           <section className="contents">
-            {/* row 1, left: the heading. The short explanation sits to the right of the title */}
+            {/* row 1, left: the heading */}
             <div className="min-w-0 xl:col-start-1 xl:row-start-1">
-              <SectionTitle actions={<span className="text-sm text-slate-500">Ready to release, overdue, or due within 7 days</span>}>
+              {/* D6: no grey line next to the title any more (removed Nov 6): it listed kinds of loans that weren't always there.
+                   The count in brackets says how many loans are in the list. */}
+              <SectionTitle>
                 {/* the count in brackets = how many loans are in the list */}
                 Needs attention <span className="ml-1 font-normal text-slate-500">({attentionAll.length})</span>
               </SectionTitle>

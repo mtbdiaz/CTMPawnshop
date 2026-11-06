@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { owedDisplay, renewBlocked, renewGraceEnd, situationBadge, stateBadge } from "./display";
+import { owedDisplay, renewBlocked, renewGraceEnd, situationBadge, stateBadge, wouldBeDefaulted } from "./display";
 import { accruedInterest } from "./accrual";
 
 const today = "2026-11-05";
@@ -63,5 +63,21 @@ describe("renewBlocked (L24, same rule as renew_loan)", () => {
   it("reinstated loans have no grace limit", () => {
     expect(renewGraceEnd({ ...loan, status: "reinstated" })).toBeNull();
     expect(renewBlocked({ ...loan, status: "reinstated" }, "2027-06-01")).toBe(false);
+  });
+});
+
+describe("wouldBeDefaulted (L30, same rule as run_default_detection)", () => {
+  const loan = { status: "active", maturity_date: "2026-10-29", grace_period_days: 7, archived_at: null };
+  it("not on the last grace day, yes the day after", () => {
+    expect(wouldBeDefaulted(loan, "2026-11-05")).toBe(false);
+    expect(wouldBeDefaulted(loan, "2026-11-06")).toBe(true);
+    expect(wouldBeDefaulted({ ...loan, status: "extended" }, "2026-11-06")).toBe(true);
+  });
+  it("skips reinstated, closed and archived loans", () => {
+    for (const status of ["reinstated", "defaulted", "forfeited", "redeemed"]) expect(wouldBeDefaulted({ ...loan, status }, "2027-01-01")).toBe(false);
+    expect(wouldBeDefaulted({ ...loan, archived_at: "2026-11-01" }, "2027-01-01")).toBe(false);
+  });
+  it("a missing grace period counts as 0 days", () => {
+    expect(wouldBeDefaulted({ ...loan, grace_period_days: null }, "2026-10-30")).toBe(true);
   });
 });

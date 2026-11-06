@@ -69,3 +69,18 @@ export function renewBlocked(loan: { status: string; maturity_date: string; grac
   const end = renewGraceEnd(loan);
   return end !== null && today > end; // ISO dates (YYYY-MM-DD) compare correctly as text
 }
+
+/**
+ * L30: true when the database's run_default_detection would mark this loan Defaulted today.
+ * Same rule as the function (0017_improvement_pass.sql): status active or renewed (not reinstated),
+ * not archived, and today is after the due date + grace days. It does NOT check if the loan is paid (Matt #1).
+ */
+export function wouldBeDefaulted(
+  loan: { status: string; maturity_date: string; grace_period_days: number | null; archived_at?: string | null },
+  today: string,
+): boolean {
+  if (loan.status !== "active" && loan.status !== "extended") return false; // reinstated / closed loans are skipped
+  if (loan.archived_at) return false; // archived loans are skipped
+  return today > addDaysIso(loan.maturity_date, Number(loan.grace_period_days ?? 0)); // ISO dates compare as text
+}
+

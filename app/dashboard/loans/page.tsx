@@ -5,12 +5,14 @@ import { hasRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatPeso, manilaToday } from "@/lib/format";
 import {
+  Alert,
   ButtonLink,
   Card,
+  cx,
   EmptyState,
-  FilterTabs,
   PageHeader,
   Pagination,
+  SectionTitle,
   SortTH,
   StatusBadge,
   Table,
@@ -28,6 +30,10 @@ import { DUE_SOON_DAYS, STILL_OWES_FILTER, owedDisplay, situationBadge, stateBad
 import { InfoTip } from "../customers/info-tip"; // the same "i" help button as on Customers
 import { LoansSearch } from "./loans-search";
 import { DefaultCheckButton } from "./default-check-button";
+import { MoreViews } from "./more-views"; // L32: the "More views" dropdown
+import { Icon } from "@/components/icons"; // the arrow on the Admin actions row
+import { candidateKey, loadDefaultCandidates } from "@/lib/loans/default-candidates"; // L30: read-only preview
+import { addDaysIso } from "@/lib/loans/accrual"; // L30: due date + grace days
 
 export const metadata = { title: "Loans" };
 
@@ -39,6 +45,8 @@ const OPEN: Enums<"loan_status">[] = ["active", "extended", "reinstated"];
 // database functions (0017_improvement_pass.sql): reinstate_loan (Cashier, defaulted only, not if the item is queued
 // for auction), forfeit_loan (Admin, defaulted only), redeem_loan (Cashier, only when ₱0 is owed), run_default_detection
 // (active/renewed loans past due date + grace period; reinstated loans are skipped).
+// L32: the order of the help box below the list (all eight views). The toolbar shows five of them as tabs and the
+// other three in "More views" (see PRIMARY_VIEWS / MORE_VIEWS).
 const TABS = {
   open: {
     label: "Open",
@@ -55,25 +63,25 @@ const TABS = {
     statuses: OPEN,
     help: "Running loans that are fully paid (₱0 owed) but the item is still in the vault. A Cashier releases it with Redeem on the loan page.",
   },
-  reinstated: {
-    label: "Reinstated",
-    statuses: ["reinstated"] as Enums<"loan_status">[],
-    help: "Defaulted loans a Cashier reopened. They run like normal loans again and can still become overdue. The default stays on record.",
-  },
   defaulted: {
     label: "Defaulted", // can still be reinstated or forfeited
     statuses: ["defaulted"] as Enums<"loan_status">[],
     help: "Loans not paid by the due date plus the grace period. A Cashier can still reinstate one (unless its item is queued for auction), or an Admin can forfeit it.",
   },
-  forfeited: {
-    label: "Forfeited", // final: the item is shop property
-    statuses: ["forfeited"] as Enums<"loan_status">[],
-    help: "Defaulted loans an Admin closed for good. The item now belongs to the shop and nothing more is collected.",
+  reinstated: {
+    label: "Reinstated",
+    statuses: ["reinstated"] as Enums<"loan_status">[],
+    help: "Defaulted loans a Cashier reopened. They run like normal loans again and can still become overdue. The default stays on record.",
   },
   redeemed: {
     label: "Redeemed",
     statuses: ["redeemed"] as Enums<"loan_status">[],
     help: "Paid in full and the item was given back to the customer. These loans are closed.",
+  },
+  forfeited: {
+    label: "Forfeited", // final: the item is shop property
+    statuses: ["forfeited"] as Enums<"loan_status">[],
+    help: "Defaulted loans an Admin closed for good. The item now belongs to the shop and nothing more is collected.",
   },
   all: {
     label: "All",
@@ -81,6 +89,10 @@ const TABS = {
     help: "Every loan in any status, closed ones included. Archived loans are not shown.",
   },
 } as const;
+// L32: one row of views (no group labels). The everyday ones are tabs; the rest are in a "More views" dropdown.
+// Only one view is shown at a time, even though a loan can belong to several (e.g. Reinstated and Overdue).
+const PRIMARY_VIEWS: (keyof typeof TABS)[] = ["open", "overdue", "ready", "defaulted", "all"];
+const MORE_VIEWS: (keyof typeof TABS)[] = ["reinstated", "redeemed", "forfeited"];
 type Tab = keyof typeof TABS;
 const SORTS: Record<string, string> = { due: "maturity_date", issued: "created_at", principal: "principal_amount" };
 
@@ -169,6 +181,8 @@ export default async function LoansPage({
   const tabKeys = Object.keys(TABS) as Tab[];
   const [{ data: loans, count, error }, ...counts] = await Promise.all([query, ...tabKeys.map((t) => countOf(t))]);
   const countFor = Object.fromEntries(tabKeys.map((t, i) => [t, counts[i].count ?? 0])) as Record<Tab, number>;
+  // L30: Admin only, READ-ONLY: which loans "Check for defaults" would change, shown before anything runs
+  const defaults = role === "admin" ? await loadDefaultCandidates(today) : null;
 
   // what to keep in every link (tab, search, sort)
   const listParams = { status: tab === "open" ? undefined : tab, q, sort: params.sort, dir: params.dir };
@@ -214,7 +228,8 @@ export default async function LoansPage({
         title={
           <>
             Loans
-            <span className="ml-2 font-sans text-base font-normal tracking-normal text-slate-500">({countFor.open})</span>
+            {/* L30: the TOTAL number of loans (like Customers). Each tab shows its own count, and the pager "Showing 1–10 of N" */}
+            <span className="ml-2 font-sans text-base font-normal tracking-normal text-slate-500">({countFor.all.toLocaleString("en-PH")})</span>
           </>
         }
         // the subtitle matches what this role can do (Operator and Appraiser can only look)
@@ -224,39 +239,66 @@ export default async function LoansPage({
             : "Open a loan to see its balance, payments, renewals and item. Only a Cashier or Admin can change a loan."
         }
         breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Loans" }]}
+        // L30: only the everyday action up here. "Check for defaults" changes records, so it moved to Admin actions under the list
         actions={
-          <>
-            {/* L0: Admin only; the server checks too */}
-            {role === "admin" && <DefaultCheckButton />}
-            {canCreate && (
-              <ButtonLink href="/dashboard/loans/new" variant="primary">
-                New loan
-              </ButtonLink>
-            )}
-          </>
+          canCreate ? (
+            <ButtonLink href="/dashboard/loans/new" variant="primary">
+              New loan
+            </ButtonLink>
+          ) : undefined
         }
       />
 
       <Card padded={false}>
-        {/* search on the left, tabs on the right (they stack on small screens) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-          <LoansSearch defaultValue={q} keep={{ status: listParams.status, sort: params.sort, dir: params.dir }} />
-          {searching && (
-            <p aria-live="polite" className="mr-auto text-sm text-slate-600">
-              {count ?? 0} match{count === 1 ? "" : "es"}
-            </p>
-          )}
-          {/* L7: tabs with counts. Overdue = amber dot, Defaulted = red dot (the words and counts carry the meaning too) */}
-          <FilterTabs
+        {/* L32: the toolbar. Row 1 = the views (5 tabs + "More views"), underlined like page tabs. Row 2 = search, and on
+            the right which view is showing. Wraps on small screens; nothing is cut off. */}
+        <nav aria-label="Loan views" className="flex flex-wrap items-center gap-x-1 border-b border-slate-200 px-2">
+          {PRIMARY_VIEWS.map((t) => {
+            const active = t === tab;
+            const tone = t === "overdue" ? "bg-amber-500" : t === "defaulted" ? "bg-red-600" : null; // a small dot, the word says it too
+            return (
+              <Link
+                key={t}
+                href={href({ status: t === "open" ? undefined : t, page: undefined, sort: undefined, dir: undefined })}
+                aria-current={active ? "page" : undefined}
+                className={cx(
+                  // -mb-px = the navy line sits on the grey line under the row
+                  "-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500",
+                  active ? "border-navy-700 font-semibold text-navy-900" : "border-transparent font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900",
+                )}
+              >
+                {tone && countFor[t] > 0 && <span aria-hidden="true" className={cx("h-1.5 w-1.5 rounded-full", tone)} />}
+                {TABS[t].label}
+                <span className="text-xs font-normal tabular-nums text-slate-500">{countFor[t].toLocaleString("en-PH")}</span>
+              </Link>
+            );
+          })}
+          <MoreViews
             current={tab}
-            tabs={tabKeys.map((t) => ({
+            options={MORE_VIEWS.map((t) => ({
               value: t,
               label: TABS[t].label,
-              href: href({ status: t === "open" ? undefined : t, page: undefined, sort: undefined, dir: undefined }),
               count: countFor[t],
-              tone: t === "overdue" ? ("warning" as const) : t === "defaulted" ? ("danger" as const) : undefined,
+              href: href({ status: t, page: undefined, sort: undefined, dir: undefined }),
             }))}
           />
+        </nav>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-slate-200 px-4 py-3">
+          <div className="w-full sm:w-96">
+            <LoansSearch defaultValue={q} keep={{ status: listParams.status, sort: params.sort, dir: params.dir }} />
+          </div>
+          {/* which view is showing (and how many the search found), so it's always clear */}
+          <p aria-live="polite" className="text-sm text-slate-600">
+            {searching ? (
+              <>
+                {count ?? 0} match{count === 1 ? "" : "es"} in <span className="font-medium text-slate-800">{TABS[tab].label}</span>
+              </>
+            ) : (
+              <>
+                Viewing: <span className="font-medium text-slate-800">{TABS[tab].label}</span>
+              </>
+            )}
+          </p>
         </div>
         {rows.length > 0 ? (
           <>
@@ -390,6 +432,92 @@ export default async function LoansPage({
           </p>
         </details>
       </Card>
+
+      {/* L30: Admin actions, closed by default (same look as on the loan page and customer profile).
+          "Check for defaults" CHANGES loans, so it is kept away from everyday buttons and shows the exact list first.
+          Nothing runs when this opens: the list is read-only until the Admin presses the button and confirms. */}
+      {defaults && (
+        <section className="mt-6">
+          <SectionTitle description="Rarely needed. Changes loan records, so it shows which loans first and asks you to confirm. Each change is saved in the audit trail.">
+            Admin actions
+          </SectionTitle>
+          <Card padded={false}>
+            <details className="group">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500 [&::-webkit-details-marker]:hidden">
+                <span>
+                  <span className="block font-medium text-slate-900">Check for defaults</span>
+                  <span className="block text-sm text-slate-600">
+                    {defaults.error
+                      ? "Couldn't load the list. Reload the page."
+                      : defaults.candidates.length === 0
+                        ? "Nothing to change: no active or renewed loan is past its grace period."
+                        : `${defaults.candidates.length} active or renewed loan${defaults.candidates.length === 1 ? " is" : "s are"} past the due date plus the grace period.`}
+                  </span>
+                </span>
+                <Icon name="chevron-down" className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="space-y-3 border-t border-slate-100 px-5 py-4 text-sm">
+                {/* L31: say plainly that reinstated loans are never checked (database rule, Matt #3), so the Overdue tab and
+                    this section don't seem to disagree */}
+                {!defaults.error && defaults.skippedReinstated > 0 && (
+                  <p className="text-slate-600">
+                    {defaults.skippedReinstated} reinstated loan{defaults.skippedReinstated === 1 ? " is" : "s are"} also past the grace period,
+                    but the database never checks reinstated loans, so {defaults.skippedReinstated === 1 ? "it stays" : "they stay"} open
+                    (Matt #3). Follow up on {defaults.skippedReinstated === 1 ? "it" : "them"} in the Reinstated tab.
+                  </p>
+                )}
+                {defaults.error ? (
+                  <p className="text-slate-600">The list couldn&apos;t be loaded, so the check can&apos;t run. Reload the page and try again.</p>
+                ) : defaults.candidates.length === 0 ? (
+                  <p className="text-slate-600">
+                    Nothing would change. Only active and renewed loans are checked, and only after the due date plus the grace period.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-slate-600">
+                      These loans would move to Defaulted, and their items to the forfeit list.
+                      A Cashier can still reinstate a defaulted loan, and an Admin decides to forfeit each one.
+                    </p>
+                    {/* Matt #1: the database would also default fully paid loans, so the button stays off while any are here */}
+                    {defaults.paid.length > 0 && (
+                      <Alert tone="danger" title={`Can't run yet: ${defaults.paid.length} fully paid loan${defaults.paid.length === 1 ? " is" : "s are"} in this list`}>
+                        The check would wrongly mark {defaults.paid.length === 1 ? "it" : "them"} Defaulted (Matt #1). Redeem{" "}
+                        {defaults.paid.map((l) => l.ticket_number).join(", ")} first.
+                      </Alert>
+                    )}
+                    {/* the exact list (no inner scroll box): ticket, customer, due date, grace end, amount owed */}
+                    <Table minWidth="560px">
+                      <THead>
+                        <TH>Ticket</TH>
+                        <TH>Customer</TH>
+                        <TH>Due</TH>
+                        <TH>Grace ended</TH>
+                        <TH align="right">Owed now</TH>
+                      </THead>
+                      <TBody>
+                        {defaults.candidates.map((l) => (
+                          <TR key={l.id}>
+                            <TD mono>
+                              <Link href={`/dashboard/loans/${l.id}`} className="text-navy-700 underline-offset-2 hover:underline">
+                                {l.ticket_number}
+                              </Link>
+                            </TD>
+                            <TD>{l.customers?.full_name ?? ""}</TD>
+                            <TD>{formatDate(l.maturity_date)}</TD>
+                            <TD>{formatDate(addDaysIso(l.maturity_date, Number(l.grace_period_days ?? 0)))}</TD>
+                            <TD align="right">{formatPeso(owedDisplay(l, today) ?? 0)}</TD>
+                          </TR>
+                        ))}
+                      </TBody>
+                    </Table>
+                    <DefaultCheckButton expected={candidateKey(defaults.candidates)} count={defaults.candidates.length} disabled={defaults.paid.length > 0} />
+                  </>
+                )}
+              </div>
+            </details>
+          </Card>
+        </section>
+      )}
     </div>
   );
 }

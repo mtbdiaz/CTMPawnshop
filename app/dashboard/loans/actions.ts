@@ -8,7 +8,7 @@ import type { FieldErrors } from "@/lib/validation/errors";
 import { validationFailure } from "@/lib/validation/errors";
 import { isSuspiciousLoanVelocity } from "@/lib/compliance/suspicious";
 import { manilaToday } from "@/lib/format"; // today in Manila (business day)
-import { addDaysIso } from "@/lib/loans/accrual"; // due date + grace days
+import { candidateKey, loadDefaultCandidates } from "@/lib/loans/default-candidates"; // L30: the loans the default check would change
 
 export type ActionState = {
   error?: string;
@@ -234,37 +234,38 @@ export async function adminEditPayment(_prev: ActionState, formData: FormData): 
 // An Admin runs it on purpose with "Check for defaults now". It is the same database function (run_default_detection).
 export type DefaultCheckState = { error?: string; success?: boolean; message?: string };
 
-export async function checkDefaultsNow(_prev: DefaultCheckState, _formData: FormData): Promise<DefaultCheckState> {
+export async function checkDefaultsNow(_prev: DefaultCheckState, formData: FormData): Promise<DefaultCheckState> {
   void _prev; // not used: every check starts fresh
-  void _formData; // the button sends no fields
   await requireRole(["admin"]);
   const supabase = await createClient();
 
-  // Safety net until Matt #1 is fixed: the database function doesn't check whether a loan is paid.
-  // So if any FULLY PAID running loan is already past its due date + grace period, stop and name it,
-  // instead of letting the check mark it Defaulted. (The function only checks active and renewed loans.)
-  const { data: paidLoans, error: readError } = await supabase
-    .from("loans")
-    .select("ticket_number, maturity_date, grace_period_days")
-    .in("status", ["active", "extended"])
-    .is("archived_at", null)
-    .eq("principal_balance", 0)
-    .eq("interest_owed", 0);
+  // L30: work out the list again right now with the same rule the preview used (read-only)
+  const { error: readError, candidates, paid } = await loadDefaultCandidates(manilaToday());
   if (readError) return { error: friendlyError("check the loans", readError) };
-  const todayIso = manilaToday();
-  const atRisk = (paidLoans ?? []).filter((l) => addDaysIso(l.maturity_date, Number(l.grace_period_days ?? 0)) < todayIso);
-  if (atRisk.length) {
-    const one = atRisk.length === 1;
-    const tickets = atRisk.slice(0, 5).map((l) => l.ticket_number).join(", ");
+
+  // Safety net until Matt #1 is fixed: the database function doesn't check whether a loan is paid.
+  // If any FULLY PAID running loan is past its due date + grace period, stop and name it instead.
+  if (paid.length) {
+    const one = paid.length === 1;
+    const tickets = paid.slice(0, 5).map((l) => l.ticket_number).join(", ");
     return {
-      error: `Not run: ${atRisk.length} fully paid loan${one ? " is" : "s are"} past the grace period (${tickets}${atRisk.length > 5 ? ", and more" : ""}). The check would wrongly mark ${one ? "it" : "them"} Defaulted (Matt #1). Redeem ${one ? "it" : "them"} first.`,
+      error: `Not run: ${paid.length} fully paid loan${one ? " is" : "s are"} past the grace period (${tickets}${paid.length > 5 ? ", and more" : ""}). The check would wrongly mark ${one ? "it" : "them"} Defaulted (Matt #1). Redeem ${one ? "it" : "them"} first.`,
     };
+  }
+  // L30: nothing to do -> don't call the database at all
+  if (candidates.length === 0) return { success: true, message: "Nothing to change. No running loans are past their grace period." };
+  // L30: the Admin confirmed the list shown on the page. If it changed since (a payment, a renewal, a new day),
+  // stop, so nothing is defaulted that the Admin didn't see.
+  if (String(formData.get("expected") ?? "") !== candidateKey(candidates)) {
+    return { error: `Not run: the list changed since the page loaded (now ${candidates.length} loan${candidates.length === 1 ? "" : "s"}). Reload the page and check the list again.` };
   }
 
   const { data, error } = await supabase.rpc("run_default_detection");
   if (error) return { error: friendlyError("run the default check", error) };
   revalidateLoan();
   revalidatePath("/dashboard/inventory");
-  const n = Number(data ?? 0);
-  return { success: true, message: n ? `Default check done. ${n} loan${n === 1 ? "" : "s"} past the grace period moved to Defaulted.` : "Default check done. No loans needed to change." };
+  // L30: the function returns how many vault ITEMS it updated, not loans, so the message uses the confirmed list
+  void data;
+  const n = candidates.length;
+  return { success: true, message: `Default check done. ${n} loan${n === 1 ? "" : "s"} past the grace period moved to Defaulted. Each change is in the audit trail.` };
 }

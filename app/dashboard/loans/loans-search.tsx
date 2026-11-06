@@ -33,7 +33,7 @@ export function LoansSearch({ defaultValue, keep }: { defaultValue?: string; kee
   return (
     <form
       role="search"
-      className="relative w-full sm:w-80"
+      className="relative w-full" // L31: as wide as its column (the Loans toolbar sets 384px, or 320px beside the tabs)
       onSubmit={(e) => {
         e.preventDefault(); // no full page reload
         if (timer.current) clearTimeout(timer.current); // Enter = search now
@@ -49,7 +49,7 @@ export function LoansSearch({ defaultValue, keep }: { defaultValue?: string; kee
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Ticket, customer name or mobile"
+        placeholder="Search ticket, customer or mobile"
         autoComplete="off"
         maxLength={60}
         // pr-24 (room for "Searching" + the clear button) only while something is typed or loading; otherwise pr-3, so the hint text isn't cut off
