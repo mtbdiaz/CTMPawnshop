@@ -53,9 +53,9 @@ function loanStatus(l: { status: string; maturity_date: string }, owed: number, 
   if (OPEN.has(l.status)) {
     if (owed < 0.01) return { badge: { status: "redeemed", label: "Paid, ready to release" }, action: "Review release" }; // green
     const days = daysUntilDue(l.maturity_date, today); // days until due (negative = late)
-    if (days < 0) return { badge: { status: "defaulted", label: "Overdue" }, action: "View loan" }; // red
+    if (days < 0) return { badge: { status: "pending", label: "Overdue" }, action: "View loan" }; // L26: amber
     if (days <= 7) return { badge: { status: "pending", label: "Due soon" }, action: "View loan" }; // amber
-    if (l.status === "extended") return { badge: { status: "extended", label: "Renewed" }, action: "View loan" }; // gold
+    if (l.status === "extended") return { badge: { status: "extended", label: "Renewed" }, action: "View loan" }; // L26: blue
     if (l.status === "reinstated") return { badge: { status: "reinstated", label: "Reinstated" }, action: "View loan" };
     return { badge: { status: "active", label: "Active" }, action: "View loan" }; // blue
   }

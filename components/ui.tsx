@@ -207,8 +207,10 @@ export function Badge({ tone = "neutral", children, icon }: { tone?: BadgeTone; 
 
 const STATUS_TONES: Record<string, BadgeTone> = {
   active: "info",
-  extended: "gold",
-  reinstated: "warning",
+  // L26: running loan states are all blue (ordinary). Amber is kept for "needs attention" (Overdue, Due soon),
+  // red for Defaulted / Forfeited, green for paid. Before: Renewed was gold and Reinstated amber, which looked like warnings.
+  extended: "info",
+  reinstated: "info",
   available: "info",
   redeemed: "success",
   defaulted: "danger",
