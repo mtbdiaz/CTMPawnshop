@@ -29,7 +29,9 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
     <div>
       <PageHeader
         title="Suspicious activity"
-        description="Automatic AML pattern checks (placeholder rule: 3+ loans by one customer within 24 hours). Review each flag and decide."
+        // B3: the list can hold flags with other reasons too (each row shows its own reason), so the 3-loan rule is
+        // described as the one the system adds by itself, not as the only kind of flag
+        description="Unusual customer activity, each with its reason. The system adds a flag by itself when a customer opens 3 or more loans within 24 hours (a placeholder rule until CTM confirms its AML rules). Review each flag and decide."
         breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Suspicious activity" }]}
       />
 
