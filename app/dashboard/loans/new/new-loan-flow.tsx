@@ -80,20 +80,25 @@ export function NewLoanFlow({
 
         <Card>
           <h2 className="text-sm font-semibold text-slate-900">2. Item</h2>
-          <div className="mt-3 flex gap-1.5" role="tablist">
+          {/* D2: the same underline tab look as every page (was two solid navy buttons). They stay buttons, not links,
+              because they only switch what this card shows; nothing is saved and the page address doesn't change */}
+          <div className="mt-3 flex flex-wrap gap-x-1 border-b border-slate-200" role="tablist" aria-label="Choose the item">
             {(["pool", "new"] as const).map((m) => (
               <button
                 key={m}
                 type="button"
                 role="tab"
-                aria-selected={itemMode === m}
+                aria-selected={itemMode === m} // screen readers say which one is open
                 onClick={() => setItemMode(m)}
                 className={cx(
-                  "rounded-md border px-3 py-1.5 text-sm",
-                  itemMode === m ? "border-navy-700 bg-navy-800 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+                  // -mb-px = the navy line sits on the grey line under the row (same classes as components/view-tabs.tsx)
+                  "-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500",
+                  itemMode === m ? "border-navy-700 font-semibold text-navy-900" : "border-transparent font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900",
                 )}
               >
-                {m === "pool" ? `Available items (${items.length})` : "Appraise now"}
+                {/* the name; Available items also shows how many, small and grey like the other tab counts */}
+                {m === "pool" ? "Available items" : "Appraise now"}
+                {m === "pool" && <span className="text-xs font-normal tabular-nums text-slate-500">{items.length}</span>}
               </button>
             ))}
           </div>

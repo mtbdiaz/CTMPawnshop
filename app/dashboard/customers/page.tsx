@@ -12,7 +12,6 @@ import {
   Badge,
   Card,
   EmptyState,
-  FilterTabs,
   PageHeader,
   Pagination,
   SortTH,
@@ -30,6 +29,7 @@ import {
 } from "@/components/ui";
 // U1: search while typing (customer-search.tsx)
 import { CustomerSearch } from "./customer-search";
+import { ViewTabs, ViewToolbar } from "@/components/view-tabs"; // D1: the shared tab row and the row under it (search + "Viewing")
 // U2: the Register button + popup (register-dialog.tsx)
 import { RegisterCustomerDialog } from "./register-dialog";
 // R2: the small "i" buttons with short explanations next to column headings (info-tip.tsx)
@@ -52,6 +52,8 @@ const SORTS: Record<string, string> = { name: "full_name", registered: "created_
 // U4: the filter tabs. Only filters the database can answer quickly (no made-up statuses)
 const SHOWS = ["all", "blacklisted", "aml"] as const;
 type Show = (typeof SHOWS)[number];
+// D1: the name of each tab, for "Viewing: …" under the tabs
+const SHOW_LABELS: Record<Show, string> = { all: "All", blacklisted: "Blacklisted", aml: "AML flagged" };
 
 export default async function CustomersPage({
   searchParams,
@@ -174,18 +176,20 @@ export default async function CustomersPage({
       />
 
       <Card padded={false}>
-        {/* U1 + U4: search on the left, filter tabs on the right (they stack on small screens) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        {/* D1: the same tab row as Loans (components/view-tabs.tsx). "All" now shows its count too; amber dot on AML flagged
+            (an Admin should review those). The tabs and their addresses are the same as before (?show=blacklisted / aml) */}
+        <ViewTabs
+          label="Customer views"
+          current={show}
+          tabs={[
+            { label: "All", value: "all", href: tabHref("all"), count: totalAll ?? 0 },
+            { label: "Blacklisted", value: "blacklisted", href: tabHref("blacklisted"), count: totalBlacklisted ?? 0 },
+            { label: "AML flagged", value: "aml", href: tabHref("aml"), count: totalAml ?? 0, tone: "warning" },
+          ]}
+        />
+        {/* D1: the row under the tabs: search + Hide ID column on the left, "Viewing: All" (or "N matches in All") on the right */}
+        <ViewToolbar viewing={SHOW_LABELS[show]} matches={q ? (count ?? 0) : undefined}>
           <CustomerSearch defaultValue={q} keep={{ show: listParams.show, sort: params.sort, dir: params.dir, ids: listParams.ids }} />
-          {/* how many match, only when searching or filtering. Sits in this row so it adds no height.
-              aria-live = screen readers hear the new count */}
-          {(q || show !== "all") && (
-            <p aria-live="polite" className="mr-auto text-sm text-slate-600">
-              {count ?? 0} match{count === 1 ? "" : "es"}
-            </p>
-          )}
-          {/* right group: the Hide/Show IDs button sits next to the filter tabs */}
-          <div className="flex flex-wrap items-center gap-2">
           {/* P2: Hide/Show IDs. Hides the whole ID column (and the ID on the cards), e.g. when a customer can see the screen.
               F6: no aria-pressed (it isn't allowed on a link); the words "Hide" / "Show" already say what it does */}
           <Link
@@ -197,18 +201,7 @@ export default async function CustomersPage({
             {/* F14: says it hides the whole column. It never shows full ID numbers (only the eye does that, one at a time) */}
             {hideIds ? "Show ID column" : "Hide ID column"}
           </Link>
-          {/* U4: filter tabs with counts. "All" clears the filter */}
-          <FilterTabs
-            current={show}
-            tabs={[
-              { label: "All", value: "all", href: tabHref("all") },
-              { label: "Blacklisted", value: "blacklisted", href: tabHref("blacklisted"), count: totalBlacklisted ?? 0 },
-              { label: "AML flagged", value: "aml", href: tabHref("aml"), count: totalAml ?? 0 },
-            ]}
-          />
-          {/* end of the right group */}
-          </div>
-        </div>
+        </ViewToolbar>
         {customers && customers.length > 0 ? (
           <>
             {/* C11: CARDS on phones, tablets and big zoom (below 1100px wide). One card per customer instead of a wide table,
@@ -256,13 +249,14 @@ export default async function CustomersPage({
             {/* U3: the table is never taller than the screen allows (screen height minus the header, search and page buttons),
                 so the page buttons stay visible; if 10 rows don't fit, the rows scroll inside and the headings stay on top.
                 max(16rem, ...) = never smaller than 16rem, even at big zoom (then the page scrolls instead).
-                relative = keeps the hidden screen-reader text inside this box so it can't stretch the page */}
+                relative = keeps the hidden screen-reader text inside this box so it can't stretch the page.
+                D1: 27rem (was 24rem) because the tabs now have their own row above the search */}
             {/* T1: darker column headings for this table only: slate-700 (#334155) text on slate-100 (#F1F5F9),
                 about 9.5:1 contrast (was slate-500 on slate-50, about 4.6:1). Still 12px, semibold (600; [&_th] stops the browser making headings bold), uppercase, so customer
                 names (14px, darker) stay the most prominent text. [&_thead]: = applies to the heading row inside this table */}
             <Table
               minWidth="720px"
-              className="relative max-h-[max(16rem,calc(100dvh-24rem))] overflow-y-auto [&_thead]:bg-slate-100 [&_thead]:text-slate-700 [&_th]:font-semibold"
+              className="relative max-h-[max(16rem,calc(100dvh-27rem))] overflow-y-auto [&_thead]:bg-slate-100 [&_thead]:text-slate-700 [&_th]:font-semibold"
             >
               {/* sticky = the column headings stay visible while the rows scroll */}
               <THead sticky>
@@ -414,4 +408,4 @@ export default async function CustomersPage({
       </Card>
     </div>
   );
-}
+}

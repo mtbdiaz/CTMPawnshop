@@ -2,10 +2,16 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { ARCHIVABLE_TABLES, ARCHIVE_LABELS, type ArchivableTable } from "@/lib/archive";
 import { formatDateTime } from "@/lib/format";
-import { Card, EmptyState, FilterTabs, PageHeader, Table, TBody, TD, TH, THead, TR } from "@/components/ui";
+import { Card, EmptyState, PageHeader, Table, TBody, TD, TH, THead, TR } from "@/components/ui";
+import { ViewTabs, ViewToolbar } from "@/components/view-tabs"; // D2: the shared tab row and the row under it ("Viewing")
 import { RestoreButton } from "@/components/archive-controls";
 
 export const metadata = { title: "Archive" };
+
+// D2: the 5 most used types are tabs; the other 6 go in the "More types" dropdown, so the row fits one line
+const MAIN_TYPES: ArchivableTable[] = ["customers", "appraisal_items", "loans", "loan_payments", "inventory_items"];
+const MORE_TYPES = ARCHIVABLE_TABLES.filter((t) => !MAIN_TYPES.includes(t)); // Renewals, Cash entries, Auction batches, ...
+const LIST_LIMIT = 200; // the newest 200 archived records of the chosen type are shown
 
 type Row = { id: string; archived_at: string; archive_reason: string | null; archived_by: string | null; summary: string };
 
@@ -53,7 +59,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
       .select(`id, archived_at, archive_reason, archived_by, ${SUMMARY_COLUMNS[table]}`)
       .not("archived_at", "is", null)
       .order("archived_at", { ascending: false })
-      .limit(200),
+      .limit(LIST_LIMIT),
     supabase.from("profiles").select("id, full_name"),
   ]);
   if (error) throw error;
@@ -73,11 +79,17 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
         description="Archived records are hidden from lists and counts but never deleted. Restoring puts them back."
         breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Archive" }]}
       />
-      <FilterTabs
-        current={table}
-        tabs={ARCHIVABLE_TABLES.map((t) => ({ label: ARCHIVE_LABELS[t], value: t, href: `/dashboard/archive?type=${t}` }))}
-      />
       <Card padded={false}>
+        {/* D2: the tabs moved into the card, like Loans and Customers. 11 types didn't fit one row, so 5 are tabs
+            and the rest are in "More types" (the dropdown shows the chosen type's name with a navy outline) */}
+        <ViewTabs
+          label="Archived record types"
+          current={table}
+          tabs={MAIN_TYPES.map((t) => ({ label: ARCHIVE_LABELS[t], value: t, href: `/dashboard/archive?type=${t}` }))}
+          more={{ label: "More types", options: MORE_TYPES.map((t) => ({ label: ARCHIVE_LABELS[t], value: t, href: `/dashboard/archive?type=${t}` })) }}
+        />
+        {/* D2: "Viewing: Customers" on the right; when the list is cut at 200, it says it shows the newest 200 */}
+        <ViewToolbar viewing={`${ARCHIVE_LABELS[table]}${rows.length >= LIST_LIMIT ? ` (newest ${LIST_LIMIT})` : ""}`} />
         {rows.length ? (
           <Table minWidth="720px">
             <THead>

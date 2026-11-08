@@ -511,44 +511,8 @@ export function SearchBar({
   );
 }
 
-/** Links styled as filter tabs (e.g. loan status). */
-export function FilterTabs({
-  tabs,
-  current,
-}: {
-  // tone (optional): a small amber or red dot before the label for tabs that need attention (e.g. Awaiting review).
-  // The label still says what it is, so color is never the only signal.
-  tabs: { label: string; value: string; href: string; count?: number; tone?: "warning" | "danger" }[];
-  current: string;
-}) {
-  return (
-    <div className="flex flex-wrap gap-1 rounded-md bg-slate-100 p-1 print:hidden" role="tablist">
-      {tabs.map((tab) => {
-        const active = tab.value === current;
-        return (
-          <Link
-            key={tab.value}
-            href={tab.href}
-            role="tab"
-            aria-selected={active}
-            className={cx(
-              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              active ? "bg-white text-navy-800" : "text-slate-600 hover:text-slate-900",
-            )}
-          >
-            {/* the dot only shows when a tone is set and the count is above 0 */}
-            {tab.tone && (tab.count ?? 0) > 0 && (
-              <span aria-hidden="true" className={cx("mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle", tab.tone === "danger" ? "bg-red-600" : "bg-amber-500")} />
-            )}
-            {tab.label}
-                        {/* F3: darker grey so the count is readable on the grey tab bar */}
-            {tab.count !== undefined && <span className="ml-1 text-slate-600">{tab.count}</span>}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
+// D2: the old pill-style FilterTabs was removed. Every page now uses the underline tabs in components/view-tabs.tsx
+// (ViewTabs + ViewToolbar), so there is only one tab style in the app.
 
 /** Collapsible card for "create" forms that sit above a list. Opens via ?new=1 links. */
 export function CreatePanel({
