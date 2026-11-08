@@ -165,7 +165,8 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
         principal <= 0
           ? "Fully paid. Redeem the item instead."
           : noRenew
-            ? `The grace period ended on ${formatDate(graceEnd)}, so this loan can no longer be renewed. The customer can still pay the balance. Ask an Admin to run Check for defaults now.`
+            ? // A1: the daily check (12:05 AM, Matt #7) moves it to Defaulted, so staff no longer need to ask an Admin
+              `The grace period ended on ${formatDate(graceEnd)}, so this loan can no longer be renewed. The customer can still pay the balance. If it isn't paid, tonight's automatic check (12:05 AM) moves it to Defaulted.`
             : undefined,
       body: (
         <div className="space-y-3">

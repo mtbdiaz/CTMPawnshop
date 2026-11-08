@@ -101,8 +101,8 @@ export default async function LoansPage({
   searchParams: Promise<{ status?: string; q?: string; page?: string; sort?: string; dir?: string }>;
 }) {
   const user = await requireRole(["cashier", "operator", "appraiser", "admin"]);
-  // L0 (Phase 0): opening this list no longer runs default detection (it changed loans just by viewing,
-  // and could default a fully paid loan, Matt #1). An Admin runs it with "Check for defaults now".
+  // L0 (Phase 0): opening this list no longer runs default detection (it changed loans just by viewing).
+  // A1: the database runs it every day at 12:05 AM (Matt #7); an Admin can also run it with "Check for defaults".
 
   const params = await searchParams;
   // "defaulted" used to mean defaulted + forfeited; the two are separate tabs now
@@ -426,44 +426,65 @@ export default async function LoansPage({
                 <span>
                   <span className="block font-medium text-slate-900">Check for defaults</span>
                   <span className="block text-sm text-slate-600">
+                    {/* A1: "still owes money" is part of the rule now (Matt #1), so the summary says so */}
                     {defaults.error
                       ? "Couldn't load the list. Reload the page."
                       : defaults.candidates.length === 0
-                        ? "Nothing to change: no active or renewed loan is past its grace period."
-                        : `${defaults.candidates.length} active or renewed loan${defaults.candidates.length === 1 ? " is" : "s are"} past the due date plus the grace period.`}
+                        ? "Nothing to change today." // A1: the 12:05 AM note is inside the box, once
+                        : `${defaults.candidates.length} active or renewed loan${defaults.candidates.length === 1 ? " is" : "s are"} past the grace period and still ${defaults.candidates.length === 1 ? "owes" : "owe"} money.`}
                   </span>
                 </span>
                 <Icon name="chevron-down" className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
               </summary>
               <div className="space-y-3 border-t border-slate-100 px-5 py-4 text-sm">
+                {/* A1: Matt #7 - the database runs this check every night. The "don't wait" part only shows when there is a button */}
+                <p className="text-slate-600">
+                  The database checks for defaults by itself every day at 12:05 AM.
+                  {/* only when there are loans to change (the button shows), say what the button is for */}
+                  {!defaults.error && defaults.candidates.length > 0 && " Use the button below only if you don't want to wait until tonight."}
+                </p>
                 {/* L31: say plainly that reinstated loans are never checked (database rule, Matt #3), so the Overdue tab and
-                    this section don't seem to disagree */}
+                    this section don't seem to disagree. A1: the daily check skips them too. */}
                 {!defaults.error && defaults.skippedReinstated > 0 && (
                   <p className="text-slate-600">
                     {defaults.skippedReinstated} reinstated loan{defaults.skippedReinstated === 1 ? " is" : "s are"} also past the grace period,
-                    but the database never checks reinstated loans, so {defaults.skippedReinstated === 1 ? "it stays" : "they stay"} open
-                    (Matt #3). Follow up on {defaults.skippedReinstated === 1 ? "it" : "them"} in the Reinstated tab.
+                    but reinstated loans are never checked (not even by the daily check), so {defaults.skippedReinstated === 1 ? "it stays" : "they stay"}{" "}
+                    open. Follow up on {defaults.skippedReinstated === 1 ? "it" : "them"} in the Reinstated tab.
                   </p>
+                )}
+                {/* A1: fully paid loans past the grace period. The database skips them since Matt's fix #1, so they no longer
+                    block the check. Listed (with links) so the Admin knows the item is waiting to be released with Redeem. */}
+                {!defaults.error && defaults.paid.length > 0 && (
+                  <Alert tone="info" title={`${defaults.paid.length} fully paid loan${defaults.paid.length === 1 ? " is" : "s are"} skipped`}>
+                    {defaults.paid.length === 1 ? "It is" : "They are"} past the grace period, but nothing is owed, so the check leaves{" "}
+                    {defaults.paid.length === 1 ? "it" : "them"} alone. Release the item with Redeem:{" "}
+                    {defaults.paid.map((l, i) => (
+                      <span key={l.id}>
+                        {/* a comma between tickets, none before the first */}
+                        {i > 0 && ", "}
+                        {/* the ticket links to its loan page, where Redeem is */}
+                        <Link href={`/dashboard/loans/${l.id}`} className="font-mono underline underline-offset-2">
+                          {l.ticket_number}
+                        </Link>
+                      </span>
+                    ))}
+                    .
+                  </Alert>
                 )}
                 {defaults.error ? (
                   <p className="text-slate-600">The list couldn&apos;t be loaded, so the check can&apos;t run. Reload the page and try again.</p>
                 ) : defaults.candidates.length === 0 ? (
                   <p className="text-slate-600">
-                    Nothing would change. Only active and renewed loans are checked, and only after the due date plus the grace period.
+                    {/* A1: "that still owe money" added (Matt #1) */}
+                    Nothing would change. Only active and renewed loans that still owe money are checked, and only after the due date plus the grace period.
                   </p>
                 ) : (
                   <>
                     <p className="text-slate-600">
-                      These loans would move to Defaulted, and their items to the forfeit list.
-                      A Cashier can still reinstate a defaulted loan, and an Admin decides to forfeit each one.
+                      {/* A1: since Matt's fix #2 the items stay in the vault until an Admin forfeits each loan */}
+                      These loans would move to Defaulted. Their items stay in the vault until an Admin forfeits each loan,
+                      and a Cashier can still reinstate one.
                     </p>
-                    {/* Matt #1: the database would also default fully paid loans, so the button stays off while any are here */}
-                    {defaults.paid.length > 0 && (
-                      <Alert tone="danger" title={`Can't run yet: ${defaults.paid.length} fully paid loan${defaults.paid.length === 1 ? " is" : "s are"} in this list`}>
-                        The check would wrongly mark {defaults.paid.length === 1 ? "it" : "them"} Defaulted (Matt #1). Redeem{" "}
-                        {defaults.paid.map((l) => l.ticket_number).join(", ")} first.
-                      </Alert>
-                    )}
                     {/* the exact list (no inner scroll box): ticket, customer, due date, grace end, amount owed */}
                     <Table minWidth="560px">
                       <THead>
@@ -489,7 +510,8 @@ export default async function LoansPage({
                         ))}
                       </TBody>
                     </Table>
-                    <DefaultCheckButton expected={candidateKey(defaults.candidates)} count={defaults.candidates.length} disabled={defaults.paid.length > 0} />
+                    {/* A1: no longer turned off by paid loans: they aren't in this list anymore */}
+                    <DefaultCheckButton expected={candidateKey(defaults.candidates)} count={defaults.candidates.length} />
                   </>
                 )}
               </div>

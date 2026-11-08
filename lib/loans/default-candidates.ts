@@ -1,9 +1,8 @@
 // L30: the loans "Check for defaults" would mark Defaulted today. READ-ONLY: this never changes a loan.
 // Used twice so they always agree: the preview list the Admin sees, and the server check right before running.
 import { createClient } from "@/lib/supabase/server";
-import { wouldBeDefaulted } from "./display";
-import { isFullyPaid } from "./status";
-import { addDaysIso } from "./accrual"; // due date + grace days // the shared "owes ₱0" rule (same as Paid, ready to release)
+import { pastGracePeriod, wouldBeDefaulted } from "./display"; // A1: the date rule, and the date rule + "still owes money"
+import { addDaysIso } from "./accrual"; // due date + grace days
 
 export type DefaultCandidate = {
   id: string;
@@ -31,10 +30,12 @@ export async function loadDefaultCandidates(today: string) {
     .order("maturity_date") // longest past due first
     .order("id"); // same date -> always the same order
   if (error) return { error, candidates: [] as DefaultCandidate[], paid: [] as DefaultCandidate[], skippedReinstated: 0 };
-  // the exact database rule (due date + grace days < today), in one shared function
-  const candidates = ((data ?? []) as unknown as (DefaultCandidate & { archived_at: string | null })[]).filter((l) => wouldBeDefaulted(l, today));
-  // Matt #1: the database would ALSO default these fully paid loans. We refuse to run while any exist.
-  const paid = candidates.filter((l) => isFullyPaid(l, today));
+  const rows = (data ?? []) as unknown as (DefaultCandidate & { archived_at: string | null })[]; // the past-due running loans
+  // A1: the exact database rule (past due date + grace days AND still owes money), in one shared function
+  const candidates = rows.filter((l) => wouldBeDefaulted(l, today));
+  // A1: past the grace period but owing ₱0. Since Matt's fix #1 the database SKIPS these, so they no longer block
+  // the check. They are only listed, so the Admin knows the item is waiting to be released with Redeem.
+  const paid = rows.filter((l) => pastGracePeriod(l, today) && !wouldBeDefaulted(l, today));
   // L31: reinstated loans past their grace period. The database NEVER checks these (Matt #3), so the Admin is told,
   // instead of a message that sounds like no running loan is past its grace period. Read-only, count only.
   const { data: reinstated } = await supabase
