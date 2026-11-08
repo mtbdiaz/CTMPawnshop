@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTime, humanize } from "@/lib/format";
 import { Badge, Card, EmptyState, Pagination, Table, TBody, TD, TH, THead, TR, buttonClasses, pageParam } from "@/components/ui";
+import { changedFields } from "@/lib/audit/changes"; // C10: works out which columns changed (old -> new)
 
 
 const PAGE_SIZE = 50;
@@ -25,6 +26,7 @@ const TABLES = [
 ];
 const ACTIONS = ["INSERT", "UPDATE", "DELETE"] as const;
 const ACTION_LABEL: Record<string, string> = { INSERT: "Created", UPDATE: "Updated", DELETE: "Deleted" };
+const SHOW_CHANGES = 5; // C10: how many changed columns are listed before "+N more"
 
 export async function AuditTrail({ params }: { params: { table?: string; action?: string; page?: string } }) {
   await requireRole(["admin"]);
@@ -121,9 +123,42 @@ export async function AuditTrail({ params }: { params: { table?: string; action?
                           Admin edit. Reason: {(e.changed_data as { reason?: string }).reason}
                         </p>
                       )}
+                      {/* C10: for an update, list what changed ("Status: Defaulted → Active"). Since Matt's #12 (Nov 6, 2026)
+                          the row before the change is saved too (old_data); older entries only have the new row */}
+                      {e.action === "UPDATE" &&
+                        (() => {
+                          const changes = changedFields(e.old_data, e.changed_data, names); // null = no old row to compare with
+                          if (changes === null)
+                            return <p className="mb-1 text-xs text-slate-500">Older entry: only the new values were saved, so the change can&apos;t be shown.</p>;
+                          if (changes.length === 0) return <p className="mb-1 text-xs text-slate-500">No visible change (only the update time).</p>;
+                          return (
+                            <ul className="mb-1 max-w-md space-y-0.5 text-xs text-slate-700">
+                              {changes.slice(0, SHOW_CHANGES).map((c) => (
+                                <li key={c.key}>
+                                  {/* the column name, then old -> new. The arrow is read out as "changed to" by screen readers */}
+                                  <span className="font-medium text-slate-900">{c.label}:</span> {c.before}{" "}
+                                  <span aria-hidden="true">→</span>
+                                  <span className="sr-only">changed to</span> <span className="font-medium text-slate-900">{c.after}</span>
+                                </li>
+                              ))}
+                              {/* more than 5 changed: the rest are in View data */}
+                              {changes.length > SHOW_CHANGES && <li className="text-slate-500">+{changes.length - SHOW_CHANGES} more in View data</li>}
+                            </ul>
+                          );
+                        })()}
                       {e.changed_data ? (
                         <details>
                           <summary className="cursor-pointer text-xs font-medium text-navy-700 hover:underline">View data</summary>
+                          {/* C10: the full record. For an update with the old row saved, both are shown (before, then after) */}
+                          {e.action === "UPDATE" && e.old_data ? (
+                            <>
+                              <p className="mt-2 text-[11px] font-medium text-slate-600">Before</p>
+                              <pre className="mt-1 max-h-64 max-w-md overflow-auto rounded-md bg-slate-900 p-3 text-[11px] text-slate-100">
+                                {JSON.stringify(e.old_data, null, 2)}
+                              </pre>
+                              <p className="mt-2 text-[11px] font-medium text-slate-600">After</p>
+                            </>
+                          ) : null}
                           <pre className="mt-2 max-h-64 max-w-md overflow-auto rounded-md bg-slate-900 p-3 text-[11px] text-slate-100">
                             {JSON.stringify(e.changed_data, null, 2)}
                           </pre>
