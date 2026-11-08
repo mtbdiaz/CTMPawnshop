@@ -1,7 +1,9 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTime } from "@/lib/format";
-import { Card, EmptyState, FilterTabs, PageHeader, StatusBadge, Table, TBody, TD, TH, THead, TR } from "@/components/ui";
+import { Card, EmptyState, PageHeader, StatusBadge, Table, TBody, TD, TH, THead, TR } from "@/components/ui";
+import { ViewTabs, ViewToolbar } from "@/components/view-tabs"; // D2: the shared tab row and the row under it ("Viewing")
+import type { Enums } from "@/lib/supabase/database.types"; // D2: the flag status names, for the counts
 import { FlagRow } from "./flag-row";
 
 export const metadata = { title: "Suspicious activity" };
@@ -13,7 +15,14 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
   const supabase = await createClient();
   let query = supabase.from("suspicious_activity_flags").select("*, customers(full_name)").order("created_at", { ascending: false });
   query = view === "open" ? query.in("status", ["open", "investigating"]) : query.in("status", ["dismissed", "blacklisted"]).limit(100);
-  const { data: flags, error } = await query;
+  // D2: how many flags are in each tab (read-only counts, same status groups as the list; head = only the number)
+  const countIn = (statuses: Enums<"suspicious_flag_status">[]) =>
+    supabase.from("suspicious_activity_flags").select("id", { count: "exact", head: true }).in("status", statuses);
+  const [{ data: flags, error }, { count: nOpen }, { count: nResolved }] = await Promise.all([
+    query, // the flags in the open tab
+    countIn(["open", "investigating"]), // Needs review
+    countIn(["dismissed", "blacklisted"]), // Resolved
+  ]);
   if (error) throw error;
 
   return (
@@ -25,15 +34,17 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
       />
 
       <Card padded={false}>
-        <div className="border-b border-slate-200 p-4">
-          <FilterTabs
-            current={view}
-            tabs={[
-              { label: "Needs review", value: "open", href: "/dashboard/compliance" },
-              { label: "Resolved", value: "resolved", href: "/dashboard/compliance?view=resolved" },
-            ]}
-          />
-        </div>
+        {/* D2: the same tab row as Loans and Customers, now with counts. Amber dot on Needs review (an Admin has to decide) */}
+        <ViewTabs
+          label="Flag views"
+          current={view}
+          tabs={[
+            { label: "Needs review", value: "open", href: "/dashboard/compliance", count: nOpen ?? 0, tone: "warning" },
+            { label: "Resolved", value: "resolved", href: "/dashboard/compliance?view=resolved", count: nResolved ?? 0 },
+          ]}
+        />
+        {/* D2: "Viewing: Needs review" on the right. Resolved shows only the newest 100, so it says so */}
+        <ViewToolbar viewing={view === "open" ? "Needs review" : (nResolved ?? 0) > 100 ? "Resolved (newest 100)" : "Resolved"} />
         {flags && flags.length > 0 ? (
           <Table>
             <THead>

@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/auth/require-role";
-import { Card, FilterTabs, PageHeader, Table, TBody, TD, TH, THead, TR, ViewButton, ActionsCell } from "@/components/ui";
+import { Card, PageHeader, Table, TBody, TD, TH, THead, TR, ViewButton, ActionsCell } from "@/components/ui";
+import { ViewTabs } from "@/components/view-tabs"; // D2: the shared tab row (no "Viewing" here: each tab is a whole section, not a list)
 import { AuditTrail } from "./audit-trail";
 
 export const metadata = { title: "Reports" };
@@ -27,7 +28,9 @@ export default async function ReportsPage({
   return (
     <div className="space-y-5">
       <PageHeader title="Reports" breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Reports" }]} />
-      <FilterTabs
+      {/* D2: the same tab row as every other page (navy line under the open tab) */}
+      <ViewTabs
+        label="Reports sections"
         current={tab}
         tabs={[
           { label: "Reports", value: "reports", href: "/dashboard/reports" },

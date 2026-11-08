@@ -8,7 +8,6 @@ import {
   Alert,
   ButtonLink,
   Card,
-  cx,
   EmptyState,
   PageHeader,
   Pagination,
@@ -30,7 +29,7 @@ import { DUE_SOON_DAYS, STILL_OWES_FILTER, owedDisplay, situationBadge, stateBad
 import { InfoTip } from "../customers/info-tip"; // the same "i" help button as on Customers
 import { LoansSearch } from "./loans-search";
 import { DefaultCheckButton } from "./default-check-button";
-import { MoreViews } from "./more-views"; // L32: the "More views" dropdown
+import { ViewTabs, ViewToolbar } from "@/components/view-tabs"; // D1: the shared tab row and the row under it (search + "Viewing")
 import { Icon } from "@/components/icons"; // the arrow on the Admin actions row
 import { candidateKey, loadDefaultCandidates } from "@/lib/loans/default-candidates"; // L30: read-only preview
 import { addDaysIso } from "@/lib/loans/accrual"; // L30: due date + grace days
@@ -252,54 +251,34 @@ export default async function LoansPage({
       <Card padded={false}>
         {/* L32: the toolbar. Row 1 = the views (5 tabs + "More views"), underlined like page tabs. Row 2 = search, and on
             the right which view is showing. Wraps on small screens; nothing is cut off. */}
-        <nav aria-label="Loan views" className="flex flex-wrap items-center gap-x-1 border-b border-slate-200 px-2">
-          {PRIMARY_VIEWS.map((t) => {
-            const active = t === tab;
-            const tone = t === "overdue" ? "bg-amber-500" : t === "defaulted" ? "bg-red-600" : null; // a small dot, the word says it too
-            return (
-              <Link
-                key={t}
-                href={href({ status: t === "open" ? undefined : t, page: undefined, sort: undefined, dir: undefined })}
-                aria-current={active ? "page" : undefined}
-                className={cx(
-                  // -mb-px = the navy line sits on the grey line under the row
-                  "-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500",
-                  active ? "border-navy-700 font-semibold text-navy-900" : "border-transparent font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900",
-                )}
-              >
-                {tone && countFor[t] > 0 && <span aria-hidden="true" className={cx("h-1.5 w-1.5 rounded-full", tone)} />}
-                {TABS[t].label}
-                <span className="text-xs font-normal tabular-nums text-slate-500">{countFor[t].toLocaleString("en-PH")}</span>
-              </Link>
-            );
-          })}
-          <MoreViews
-            current={tab}
-            options={MORE_VIEWS.map((t) => ({
+        {/* D1: the same tab row as every other page (components/view-tabs.tsx). Amber dot on Overdue, red on Defaulted */}
+        <ViewTabs
+          label="Loan views"
+          current={tab}
+          tabs={PRIMARY_VIEWS.map((t) => ({
+            value: t, // the tab's id
+            label: TABS[t].label, // its name
+            count: countFor[t], // how many loans are in it
+            tone: t === "overdue" ? ("warning" as const) : t === "defaulted" ? ("danger" as const) : undefined, // the dot
+            // opening a tab goes back to page 1 and that tab's own default sort
+            href: href({ status: t === "open" ? undefined : t, page: undefined, sort: undefined, dir: undefined }),
+          }))}
+          // Reinstated, Redeemed and Forfeited in the "More views" dropdown
+          more={{
+            options: MORE_VIEWS.map((t) => ({
               value: t,
               label: TABS[t].label,
               count: countFor[t],
               href: href({ status: t, page: undefined, sort: undefined, dir: undefined }),
-            }))}
-          />
-        </nav>
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-slate-200 px-4 py-3">
+            })),
+          }}
+        />
+        {/* D1: the shared row under the tabs: search on the left, "Viewing: Open" (or "N matches in Open") on the right */}
+        <ViewToolbar viewing={TABS[tab].label} matches={searching ? (count ?? 0) : undefined}>
           <div className="w-full sm:w-96">
             <LoansSearch defaultValue={q} keep={{ status: listParams.status, sort: params.sort, dir: params.dir }} />
           </div>
-          {/* which view is showing (and how many the search found), so it's always clear */}
-          <p aria-live="polite" className="text-sm text-slate-600">
-            {searching ? (
-              <>
-                {count ?? 0} match{count === 1 ? "" : "es"} in <span className="font-medium text-slate-800">{TABS[tab].label}</span>
-              </>
-            ) : (
-              <>
-                Viewing: <span className="font-medium text-slate-800">{TABS[tab].label}</span>
-              </>
-            )}
-          </p>
-        </div>
+        </ViewToolbar>
         {rows.length > 0 ? (
           <>
             {/* L13: CARDS below 1100px (phones, tablets, big zoom): nothing scrolls sideways */}

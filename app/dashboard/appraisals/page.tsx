@@ -6,8 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatPeso } from "@/lib/format";
 import { ITEM_CATEGORIES, categoryLabel } from "@/lib/appraisal/valuation";
 import type { Enums } from "@/lib/supabase/database.types";
-import { Badge, Card, EmptyState, FilterTabs, PageHeader, Pagination, SortTH, Table, TBody, TD, TH, THead, TR, ViewButton, pageParam } from "@/components/ui";
+import { Badge, Card, EmptyState, PageHeader, Pagination, SortTH, Table, TBody, TD, TH, THead, TR, ViewButton, pageParam } from "@/components/ui";
 import { AppraisalFilters } from "./appraisal-filters";
+import { ViewTabs, ViewToolbar } from "@/components/view-tabs"; // D2: the shared tab row and the row under it (search + "Viewing")
 import { NewAppraisalDialog } from "./new-appraisal-dialog";
 import { InfoTip } from "../customers/info-tip"; // the same "i" help button as on Customers
 
@@ -19,6 +20,12 @@ const PAGE_SIZE = 10; // B1: same as Customers, so the list fits one screen
 //   review    = flagged and waiting for an Admin
 //   confirmed = an Admin confirmed the risk (never pawnable, kept for the record, not archived automatically)
 type Tab = "available" | "review" | "confirmed";
+// D2: the three tabs, in order: id, name, and the dot (amber = needs an Admin's review, red = confirmed risk)
+const APPRAISAL_TABS: { value: Tab; label: string; tone?: "warning" | "danger" }[] = [
+  { value: "available", label: "Available" },
+  { value: "review", label: "Awaiting review", tone: "warning" },
+  { value: "confirmed", label: "Confirmed risk", tone: "danger" },
+];
 const SORTS: Record<string, string> = { appraised: "created_at", value: "computed_value", weight: "weight_grams" }; // B7: sortable columns
 const AVAILABLE_OR = "is_counterfeit_risk.eq.false,counterfeit_resolution.eq.cleared"; // no flag, or the flag was cleared
 
@@ -165,25 +172,23 @@ export default async function AppraisalsPage({
       />
 
       <Card padded={false}>
-        {/* search + category on the left, tabs on the right (they stack on small screens) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        {/* B2 + D2: the three tabs with real counts, in the same tab row as Loans and Customers (components/view-tabs.tsx).
+            Amber dot on Awaiting review, red on Confirmed risk. Changing tab keeps the search and category, back to page 1 */}
+        <ViewTabs
+          label="Appraisal views"
+          current={tab}
+          tabs={APPRAISAL_TABS.map((t) => ({
+            value: t.value, // the tab's id
+            label: t.label, // its name
+            href: href({ risk: t.value === "available" ? undefined : t.value, sort: undefined, dir: undefined }), // keeps search + category
+            count: (t.value === "available" ? nAvailable : t.value === "review" ? nReview : nConfirmed) ?? 0, // how many are in it
+            tone: t.tone, // the dot
+          }))}
+        />
+        {/* D2: the row under the tabs: search + Category on the left, "Viewing: Available" (or "N matches in Available") on the right */}
+        <ViewToolbar viewing={APPRAISAL_TABS.find((t) => t.value === tab)?.label ?? "Available"} matches={searching ? (count ?? 0) : undefined}>
           <AppraisalFilters defaultQuery={q} category={category ?? ""} keep={{ risk: listParams.risk, sort: params.sort, dir: params.dir }} />
-          {/* how many match, only when searching. aria-live = screen readers hear the new count */}
-          {searching && (
-            <p aria-live="polite" className="mr-auto text-sm text-slate-600">
-              {count ?? 0} match{count === 1 ? "" : "es"}
-            </p>
-          )}
-          {/* B2: the three tabs with real counts. Changing tab keeps the search and category, back to page 1 */}
-          <FilterTabs
-            current={tab}
-            tabs={[
-              { label: "Available", value: "available", href: href({ risk: undefined, sort: undefined, dir: undefined }), count: nAvailable ?? 0 },
-              { label: "Awaiting review", value: "review", href: href({ risk: "review", sort: undefined, dir: undefined }), count: nReview ?? 0, tone: "warning" },
-              { label: "Confirmed risk", value: "confirmed", href: href({ risk: "confirmed", sort: undefined, dir: undefined }), count: nConfirmed ?? 0, tone: "danger" },
-            ]}
-          />
-        </div>
+        </ViewToolbar>
         {rows && rows.length > 0 ? (
           <>
             {/* D1: CARDS below 1100px (phones, tablets, big zoom), like Customers: nothing scrolls sideways */}
@@ -215,11 +220,12 @@ export default async function AppraisalsPage({
             </ul>
 
             {/* COMPUTERS (1100px and wider): the table. Never taller than the screen allows, so the page buttons stay
-                visible; the headings stay on top if the rows scroll (same as Customers) */}
+                visible; the headings stay on top if the rows scroll (same as Customers).
+                D2: 25rem (was 22rem) because the tabs now have their own row above the search */}
             <div className="hidden min-[1100px]:block">
               <Table
                 minWidth="900px"
-                className="relative max-h-[max(16rem,calc(100dvh-22rem))] overflow-y-auto [&_thead]:bg-slate-100 [&_thead]:text-slate-700 [&_th]:font-semibold"
+                className="relative max-h-[max(16rem,calc(100dvh-25rem))] overflow-y-auto [&_thead]:bg-slate-100 [&_thead]:text-slate-700 [&_th]:font-semibold"
               >
                 <THead sticky>
                   <TH>Item</TH>

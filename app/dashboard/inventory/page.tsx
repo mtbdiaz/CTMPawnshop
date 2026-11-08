@@ -8,7 +8,6 @@ import {
   ButtonLink,
   Card,
   EmptyState,
-  FilterTabs,
   PageHeader,
   Pagination,
   StatusBadge,
@@ -23,6 +22,8 @@ import {
   pageParam,
 } from "@/components/ui";
 import { ITEM_CATEGORIES, categoryLabel } from "@/lib/appraisal/valuation";
+import { ViewTabs, ViewToolbar } from "@/components/view-tabs"; // D2: the shared tab row and the row under it ("Viewing")
+import { NavSelect } from "@/components/nav-select"; // D2: the Category dropdown (same look as on Appraisals)
 
 export const metadata = { title: "Inventory" };
 
@@ -74,8 +75,25 @@ export default async function InventoryPage({
     const q = qs.toString();
     return q ? `/dashboard/inventory?${q}` : "/dashboard/inventory";
   };
-  const { data, count, error } = await query;
+  // D2: how many items are in each status tab (read-only counts, the same filters as the list, incl. the category).
+  // head: true = only the number comes back, not the rows
+  const countFor = async (statuses: Enums<"inventory_status">[]) => {
+    let c = supabase
+      .from("inventory_items")
+      .select(`id, appraisal_items${category ? "!inner" : ""}(category)`, { count: "exact", head: true })
+      .is("archived_at", null);
+    if (statuses.length) c = c.in("status", statuses); // "All" has no status filter
+    if (category) c = c.eq("appraisal_items.category", category); // same category as the list
+    const { count: n } = await c;
+    return n ?? 0; // a failed count shows 0 instead of breaking the page
+  };
+  // all counts and the list load at the same time
+  const [{ data, count, error }, counts] = await Promise.all([
+    query, // the items on this page
+    Promise.all(Object.values(FILTERS).map((f) => countFor(f.statuses))), // one count per tab, in tab order
+  ]);
   if (error) throw error;
+  const tabCount = Object.fromEntries(Object.keys(FILTERS).map((k, i) => [k, counts[i]])); // tab id -> count
   const items = (data ?? []) as unknown as Row[];
 
   return (
@@ -95,18 +113,29 @@ export default async function InventoryPage({
       />
 
       <Card padded={false}>
-        <div className="flex flex-wrap gap-3 border-b border-slate-200 p-3">
-          <FilterTabs
-            current={status}
-            tabs={Object.entries(FILTERS).map(([value, f]) => ({ value, label: f.label, href: href({ status: value === "vault" ? undefined : value }) }))}
-          />
-          <FilterTabs
-            current={category ?? "any"}
-            tabs={[{ label: "Any category", value: "any", href: href({ category: undefined }) }].concat(
-              ITEM_CATEGORIES.map((c) => ({ label: c.label, value: c.value, href: href({ category: c.value }) })),
+        {/* D2: the status tabs, now with counts, in the same tab row as Loans and Customers.
+            Changing tab keeps the category and goes back to page 1 */}
+        <ViewTabs
+          label="Inventory views"
+          current={status}
+          tabs={Object.entries(FILTERS).map(([value, f]) => ({
+            value, // the tab's id
+            label: f.label, // its name
+            count: tabCount[value], // how many items are in it (with the chosen category)
+            href: href({ status: value === "vault" ? undefined : value, page: undefined }),
+          }))}
+        />
+        {/* D2: the 8 category buttons became one Category dropdown (like Appraisals); "Viewing: In vault" on the right.
+            With a category picked, it says e.g. "Viewing: In vault · Ring" so the filter is never hidden */}
+        <ViewToolbar viewing={`${FILTERS[status].label}${category ? ` · ${categoryLabel(category, null)}` : ""}`}>
+          <NavSelect
+            label="Category"
+            value={category ?? ""}
+            options={[{ value: "", label: "All categories", href: href({ category: undefined, page: undefined }) }].concat(
+              ITEM_CATEGORIES.map((c) => ({ value: c.value, label: c.label, href: href({ category: c.value, page: undefined }) })),
             )}
           />
-        </div>
+        </ViewToolbar>
         {items.length > 0 ? (
           <>
             <Table minWidth="820px">
