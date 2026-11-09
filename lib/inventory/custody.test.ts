@@ -60,3 +60,22 @@ describe("parseInventorySearch (V1)", () => {
     expect(parseInventorySearch("others").category).toBeNull();
   });
 });
+
+describe("#43 sold items", () => {
+  it("a sold item is no longer in the shop and has a Sold label", () => {
+    expect(stillInShop("sold")).toBe(false);
+    expect(CUSTODY.sold.label).toBe("Sold");
+  });
+  it("days held stop on the day it was sold", () => {
+    const h = historySummary(
+      [
+        { new_status: "queued_for_auction", changed_at: "2026-10-01T02:00:00Z" },
+        { new_status: "sold", changed_at: "2026-11-02T02:00:00Z" },
+      ],
+      "sold",
+    );
+    expect(h.releasedAt).toBe("2026-11-02T02:00:00Z");
+    expect(daysHeld("2026-09-01T02:00:00Z", "2026-11-09", h.releasedAt)).toBe(62);
+  });
+});
+

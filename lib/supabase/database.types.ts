@@ -146,21 +146,39 @@ export type Database = {
       auction_batch_items: {
         Row: {
           batch_id: string
+          buyer_name: string | null
           id: string
           inventory_item_id: string
           is_demo: boolean
+          min_price: number | null
+          sale_notes: string | null
+          sale_price: number | null
+          sold_at: string | null
+          sold_by: string | null
         }
         Insert: {
           batch_id: string
+          buyer_name?: string | null
           id?: string
           inventory_item_id: string
           is_demo?: boolean
+          min_price?: number | null
+          sale_notes?: string | null
+          sale_price?: number | null
+          sold_at?: string | null
+          sold_by?: string | null
         }
         Update: {
           batch_id?: string
+          buyer_name?: string | null
           id?: string
           inventory_item_id?: string
           is_demo?: boolean
+          min_price?: number | null
+          sale_notes?: string | null
+          sale_price?: number | null
+          sold_at?: string | null
+          sold_by?: string | null
         }
         Relationships: [
           {
@@ -175,6 +193,13 @@ export type Database = {
             columns: ["inventory_item_id"]
             isOneToOne: false
             referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "auction_batch_items_sold_by_fkey"
+            columns: ["sold_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1218,7 +1243,7 @@ export type Database = {
         Returns: Json
       }
       create_auction_batch: {
-        Args: { p_item_ids: string[]; p_notes: string }
+        Args: { p_item_ids: string[]; p_min_prices?: number[]; p_notes: string }
         Returns: string
       }
       create_pawn_loan:
@@ -1342,6 +1367,20 @@ export type Database = {
           test: string
         }[]
       }
+      ctm_selftest_0031: {
+        Args: never
+        Returns: {
+          outcome: string
+          test: string
+        }[]
+      }
+      ctm_selftest_decisions: {
+        Args: never
+        Returns: {
+          outcome: string
+          test: string
+        }[]
+      }
       ctm_selftest_lifecycle: {
         Args: never
         Returns: {
@@ -1371,6 +1410,16 @@ export type Database = {
           p_outcome: Database["public"]["Enums"]["reminder_outcome"]
         }
         Returns: string
+      }
+      record_auction_sale: {
+        Args: {
+          p_buyer?: string
+          p_item_id: string
+          p_notes?: string
+          p_request_id?: string
+          p_sale_price: number
+        }
+        Returns: Json
       }
       record_payment: {
         Args: {
@@ -1431,6 +1480,7 @@ export type Database = {
         | "redeemed"
         | "forfeited"
         | "queued_for_auction"
+        | "sold"
       item_category:
         | "earrings"
         | "ring"
@@ -1606,6 +1656,7 @@ export const Constants = {
         "redeemed",
         "forfeited",
         "queued_for_auction",
+        "sold",
       ],
       item_category: [
         "earrings",

@@ -217,6 +217,7 @@ const STATUS_TONES: Record<string, BadgeTone> = {
   forfeited: "danger",
   pawned: "info",
   queued_for_auction: "warning",
+  sold: "neutral", // #43: sold at auction, out of the shop
   pending: "warning",
   cleared: "success",
   confirmed: "danger",
