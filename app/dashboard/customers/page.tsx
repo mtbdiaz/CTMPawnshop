@@ -4,7 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { hasRole } from "@/lib/auth/roles";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { formatDate, manilaToday } from "@/lib/format";
 import { loadCustomerScores } from "@/lib/customers/history";
 import { ScoreBadge } from "@/components/score-badge";
@@ -75,7 +75,7 @@ export default async function CustomersPage({
   const hideIds = params.ids === "hide";
 
   const supabase = await createClient();
-  let query = supabase
+  let query = createAdminClient() // #17: id_number is not readable with a staff login; the server reads it after requireRole
     .from("customers")
     .select("id, full_name, contact_number, id_type, id_number, aml_status, aml_checked_at, is_blacklisted, created_at", { count: "exact" })
     .is("archived_at", null)

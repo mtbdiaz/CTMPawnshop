@@ -319,3 +319,11 @@ Migrations 0020–0025, all applied live.
 - **#30:** Capitalizing starts the new term from the later of the due date and the accrued-through date, so no interest is charged twice.
 - **Data:** Pedro's wrongly defaulted loan was restored. 5 test customers were archived. Unique indexes were added on customer ID (normalized) and on open suspicious flags.
 - **#9:** Updated to next 16.4.5 and vitest 4.1.12. npm audit went from 16 issues (1 critical) to 8 moderate. Install needs `--legacy-peer-deps`.
+
+## Owner decisions on the review questions (2026-11-09, migrations 0026–0028)
+- **#17 / #19, ID numbers:** staff logins can no longer read `customers.id_number` through the API; column grants now cover every column except that one. The app reads full IDs only on the server, with the service-role client and after `requireRole`. The reveal button calls `reveal_customer_id()`, which checks the role and writes a `VIEW` row to the audit trail. ⚠ Any new column added to `customers` must be granted to `authenticated` (see 0027).
+- **#3 / #4:** reinstated loans default again when they miss their due date plus the grace period. The 6 reinstated loans already past grace will default at the next nightly run.
+- **#30:** Capitalize is refused after the grace period, both in the database and on the loan page.
+- **Data:** the PT-SEED-04 item, which was queued for auction while its loan was only defaulted, is back in the vault. Its one-item auction batch was archived, not deleted.
+- **Arch Coles duplicate:** left alone while its loan is open.
+- **#31, double submit:** already handled by `p_request_id` / `ctm_requests` in `record_payment` and `capitalize_loan`, so no change was needed.

@@ -2,7 +2,6 @@
 // Used twice so they always agree: the preview list the Admin sees, and the server check right before running.
 import { createClient } from "@/lib/supabase/server";
 import { pastGracePeriod, wouldBeDefaulted } from "./display"; // A1: the date rule, and the date rule + "still owes money"
-import { addDaysIso } from "./accrual"; // due date + grace days
 
 export type DefaultCandidate = {
   id: string;
@@ -24,7 +23,7 @@ export async function loadDefaultCandidates(today: string) {
   const { data, error } = await supabase
     .from("loans")
     .select("id, ticket_number, maturity_date, grace_period_days, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, status, loan_date, archived_at, customers(full_name)")
-    .in("status", ["active", "extended"]) // run_default_detection skips reinstated loans
+    .in("status", ["active", "extended", "reinstated"]) // reinstated loans can default again (owner decision on Matt #3)
     .is("archived_at", null)
     .lt("maturity_date", today)
     .order("maturity_date") // longest past due first
@@ -36,15 +35,8 @@ export async function loadDefaultCandidates(today: string) {
   // A1: past the grace period but owing ₱0. Since Matt's fix #1 the database SKIPS these, so they no longer block
   // the check. They are only listed, so the Admin knows the item is waiting to be released with Redeem.
   const paid = rows.filter((l) => pastGracePeriod(l, today) && !wouldBeDefaulted(l, today));
-  // L31: reinstated loans past their grace period. The database NEVER checks these (Matt #3), so the Admin is told,
-  // instead of a message that sounds like no running loan is past its grace period. Read-only, count only.
-  const { data: reinstated } = await supabase
-    .from("loans")
-    .select("maturity_date, grace_period_days")
-    .eq("status", "reinstated")
-    .is("archived_at", null)
-    .lt("maturity_date", today);
-  const skippedReinstated = (reinstated ?? []).filter((l) => today > addDaysIso(l.maturity_date, Number(l.grace_period_days ?? 0))).length;
+  // L31 retired: reinstated loans are now checked like any other loan, so none are skipped
+  const skippedReinstated = 0;
   return { error: null, candidates, paid, skippedReinstated };
 }
 

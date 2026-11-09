@@ -74,9 +74,13 @@ describe("wouldBeDefaulted (L30, same rule as run_default_detection)", () => {
     expect(wouldBeDefaulted(loan, "2026-11-06")).toBe(true);
     expect(wouldBeDefaulted({ ...loan, status: "extended" }, "2026-11-06")).toBe(true);
   });
-  it("skips reinstated, closed and archived loans", () => {
-    for (const status of ["reinstated", "defaulted", "forfeited", "redeemed"]) expect(wouldBeDefaulted({ ...loan, status }, "2027-01-01")).toBe(false);
+  it("skips closed and archived loans", () => {
+    for (const status of ["defaulted", "forfeited", "redeemed"]) expect(wouldBeDefaulted({ ...loan, status }, "2027-01-01")).toBe(false);
     expect(wouldBeDefaulted({ ...loan, archived_at: "2026-11-01" }, "2027-01-01")).toBe(false);
+  });
+  // owner decision on Matt #3/#4: a reinstated loan that misses its grace period defaults again
+  it("defaults a reinstated loan past its grace period", () => {
+    expect(wouldBeDefaulted({ ...loan, status: "reinstated" }, "2027-01-01")).toBe(true);
   });
   it("a missing grace period counts as 0 days", () => {
     expect(wouldBeDefaulted({ ...loan, grace_period_days: null }, "2026-10-30")).toBe(true);

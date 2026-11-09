@@ -262,3 +262,15 @@ Checks:
 - 180/180 unit tests pass
 - tsc and lint are clean
 - `next build` succeeds
+
+## Pass 6 — Owner decisions (2026-11-09)
+Self-tests:
+- `ctm_selftest_decisions` 6/6 PASS
+- `ctm_selftest` 10/10 PASS
+- `ctm_selftest_lifecycle` PASS (now capitalizes 5 days past due, inside the grace period)
+- `ctm_selftest_review` 7/7 PASS
+
+Checks:
+- 246 unit tests pass
+- tsc and lint are clean
+- `next build` succeeds

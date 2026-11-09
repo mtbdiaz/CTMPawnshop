@@ -443,15 +443,6 @@ export default async function LoansPage({
                   {/* only when there are loans to change (the button shows), say what the button is for */}
                   {!defaults.error && defaults.candidates.length > 0 && " Use the button below only if you don't want to wait until tonight."}
                 </p>
-                {/* L31: say plainly that reinstated loans are never checked (database rule, Matt #3), so the Overdue tab and
-                    this section don't seem to disagree. A1: the daily check skips them too. */}
-                {!defaults.error && defaults.skippedReinstated > 0 && (
-                  <p className="text-slate-600">
-                    {defaults.skippedReinstated} reinstated loan{defaults.skippedReinstated === 1 ? " is" : "s are"} also past the grace period,
-                    but reinstated loans are never checked (not even by the daily check), so {defaults.skippedReinstated === 1 ? "it stays" : "they stay"}{" "}
-                    open. Follow up on {defaults.skippedReinstated === 1 ? "it" : "them"} in the Reinstated tab.
-                  </p>
-                )}
                 {/* A1: fully paid loans past the grace period. The database skips them since Matt's fix #1, so they no longer
                     block the check. Listed (with links) so the Admin knows the item is waiting to be released with Redeem. */}
                 {!defaults.error && defaults.paid.length > 0 && (
