@@ -220,6 +220,8 @@ export function AdminIdentityForm({ customer }: { customer: Tables<"customers"> 
     // the Admin correction form
     <ActionForm action={adminEditCustomer} className="grid grid-cols-1 gap-3 sm:grid-cols-2" successMessage="Identity corrected. The change is in the audit trail.">
       <input type="hidden" name="customer_id" value={customer.id} />
+      {/* #21: when this page loaded the customer; the database refuses the correction if it changed since */}
+      <input type="hidden" name="loaded_at" value={customer.updated_at} />
       {/* PR4: what is saved now. customer.id_number is already masked by the page; the eye asks the server for the full number */}
       <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600 sm:col-span-2">
         Current ID: {customer.id_type}{" "}

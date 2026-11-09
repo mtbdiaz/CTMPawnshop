@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 import type { FieldErrors } from "@/lib/validation/errors";
 import { validationFailure } from "@/lib/validation/errors";
-import { isSuspiciousLoanVelocity } from "@/lib/compliance/suspicious";
 import { manilaToday } from "@/lib/format"; // today in Manila (business day)
 import { candidateKey, loadDefaultCandidates } from "@/lib/loans/default-candidates"; // L30: the loans the default check would change
 
@@ -66,18 +65,8 @@ export async function createLoan(_prev: ActionState, formData: FormData): Promis
   });
   if (error || !loanId) return { error: friendlyError("create the loan", error) }; // L20
 
-  // PB-32: placeholder AML velocity rule.
-  const { data: recent } = await supabase.from("loans").select("created_at").eq("customer_id", parsed.data.customer_id);
-  if (isSuspiciousLoanVelocity((recent ?? []).map((l) => new Date(l.created_at)))) {
-    // At most one open flag per customer (unique index): a second one is simply skipped.
-    // The loan is already saved, so a flag problem must not undo it; it is logged instead.
-    const { error: flagError } = await supabase.from("suspicious_activity_flags").insert({
-      customer_id: parsed.data.customer_id,
-      loan_id: loanId,
-      reason: "Unusually high number of loans opened by this customer in a short window",
-    });
-    if (flagError && flagError.code !== "23505") console.error("Suspicious-activity flag not saved:", flagError.message);
-  }
+  // PB-32: the placeholder AML rule (3+ loans within 24 hours) is checked by create_pawn_loan itself since migration
+  // 0032 (#6), so the flag is saved together with the loan. The app no longer saves it in a second step.
 
   revalidatePath("/dashboard/appraisals");
   revalidateLoan(loanId);

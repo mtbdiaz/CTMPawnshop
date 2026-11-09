@@ -1208,6 +1208,7 @@ export type Database = {
         Args: {
           p_address: string
           p_contact_number: string
+          p_expected_updated_at?: string
           p_full_name: string
           p_id: string
           p_id_number: string
@@ -1368,6 +1369,13 @@ export type Database = {
         }[]
       }
       ctm_selftest_0031: {
+        Args: never
+        Returns: {
+          outcome: string
+          test: string
+        }[]
+      }
+      ctm_selftest_0032: {
         Args: never
         Returns: {
           outcome: string

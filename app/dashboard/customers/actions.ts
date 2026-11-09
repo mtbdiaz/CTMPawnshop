@@ -197,6 +197,7 @@ const identitySchema = z.object({
   id_type: z.string().trim().min(1, "ID type is required"),
   id_number: z.string().trim().max(MAX.id_number, `ID number can be at most ${MAX.id_number} characters`), // PR4: may be empty = keep the current number; F4: length limit
   reason: z.string().trim().min(5, "Write a reason of at least 5 characters"),
+  loaded_at: z.string().optional(), // #21: when the page loaded this customer (its updated_at); empty = no check
 });
 
 // Item 5: Admin-only identity correction, reason required, before/after audited.
@@ -248,8 +249,10 @@ export async function adminEditCustomer(_prev: ActionState, formData: FormData):
     p_contact_number: "",
     p_address: "",
     p_reason: parsed.data.reason,
+    // #21: the database refuses if someone changed this customer after the page was opened
+    p_expected_updated_at: parsed.data.loaded_at || undefined,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: error.message }; // plain words, e.g. "Someone changed this customer after you opened the page…"
   revalidatePath(`/dashboard/customers/${parsed.data.customer_id}`);
   revalidatePath("/dashboard/customers");
   return { success: true, customerId: parsed.data.customer_id };
