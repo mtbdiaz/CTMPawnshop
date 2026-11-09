@@ -6,7 +6,7 @@
 import { daysUntilDue } from "@/lib/compliance/reminders"; // whole calendar days between two dates
 import { ITEM_CATEGORIES, KARATS } from "@/lib/appraisal/valuation"; // the item types and karats the shop uses
 
-export type InventoryStatus = "pawned" | "extended" | "redeemed" | "forfeited" | "queued_for_auction";
+export type InventoryStatus = "pawned" | "extended" | "redeemed" | "forfeited" | "queued_for_auction" | "sold"; // "sold" since migration 0030 (UC16)
 
 // what each database status means for the PHYSICAL item. "where" = where the item is now
 export const CUSTODY: Record<InventoryStatus, { label: string; where: string; tone: "success" | "danger" | "warning" | "neutral" }> = {
@@ -15,6 +15,7 @@ export const CUSTODY: Record<InventoryStatus, { label: string; where: string; to
   forfeited: { label: "Forfeited", where: "Still in the vault; now shop property", tone: "danger" },
   queued_for_auction: { label: "Queued for auction", where: "Still in the vault until it is sold", tone: "warning" },
   redeemed: { label: "Released", where: "Given back to the customer", tone: "neutral" },
+  sold: { label: "Sold", where: "Sold at auction; no longer in the shop", tone: "neutral" }, // #43 / UC16
 };
 
 // the words for a status change in the history ("Renewed Oct 12")
@@ -24,6 +25,7 @@ export const CHANGE_WORDS: Record<InventoryStatus, string> = {
   redeemed: "Released",
   forfeited: "Forfeited",
   queued_for_auction: "Queued for auction",
+  sold: "Sold",
 };
 
 /** The Manila calendar day (YYYY-MM-DD) of a saved time, e.g. 2026-11-07T16:30:00Z is Nov 8 in Manila. */
@@ -31,9 +33,9 @@ export function manilaDateOf(timestamp: string): string {
   return new Date(timestamp).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }); // en-CA = YYYY-MM-DD
 }
 
-/** True while the physical item is still in the shop (everything except Released). */
+/** True while the physical item is still in the shop (everything except Released and Sold). */
 export function stillInShop(status: string): boolean {
-  return status !== "redeemed";
+  return status !== "redeemed" && status !== "sold";
 }
 
 /**
@@ -56,7 +58,8 @@ export function historySummary(rows: { new_status: string; changed_at: string }[
   const sorted = [...rows].sort((a, b) => b.changed_at.localeCompare(a.changed_at)); // newest first (ISO times sort as text)
   return {
     since: sorted.find((r) => r.new_status === currentStatus) ?? null, // when it got the status it has now
-    releasedAt: sorted.find((r) => r.new_status === "redeemed")?.changed_at ?? null, // when it was released, if it was
+    // when it left the shop: released to the customer, or sold at auction (#43)
+    releasedAt: sorted.find((r) => r.new_status === "redeemed" || r.new_status === "sold")?.changed_at ?? null,
   };
 }
 

@@ -144,6 +144,7 @@ function custody(invStatus: string | undefined, loan: LoanHistoryRow | undefined
   if (invStatus === "redeemed") return { badge: "redeemed", label: "Released" }; // green: given back to the customer
   if (invStatus === "forfeited") return { badge: "forfeited", label: "Forfeited" }; // the shop kept it
   if (invStatus === "queued_for_auction") return { badge: "forfeited", label: "Queued for auction" };
+  if (invStatus === "sold") return { badge: "neutral", label: "Sold at auction" }; // #43: the shop sold it
   if (appraisalStatus === "available") return { badge: "neutral", label: "Not pawned" }; // appraised only, no loan
   return { badge: "neutral", label: "No vault record" }; // shouldn't happen; shown instead of guessing
 }

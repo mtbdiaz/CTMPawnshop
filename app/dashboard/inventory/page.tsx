@@ -40,6 +40,8 @@ const FILTERS: Record<string, { label: string; statuses: Enums<"inventory_status
   forfeited: { label: "Forfeited", statuses: ["forfeited"], help: "An Admin forfeited the loan. The item is now shop property but is still physically in the vault." },
   auction: { label: "Queued for auction", statuses: ["queued_for_auction"], help: "Forfeited items put in an auction batch (Auction prep). Still in the vault until they are sold." },
   released: { label: "Released", statuses: ["redeemed"], help: "The loan was redeemed and the item was given back to the customer. It is no longer in the shop." },
+  // #43 / UC16: sold at auction (recorded on Auction prep). No longer in the shop
+  sold: { label: "Sold", statuses: ["sold"], help: "Forfeited items sold at auction (recorded on Auction prep, with the price and buyer). No longer in the shop." },
   all: { label: "All", statuses: [], help: "Every item ever pledged, in or out of the shop." },
 };
 const SORTS: Record<string, string> = { location: "vault_location", received: "created_at" }; // the sortable columns
@@ -271,13 +273,14 @@ export default async function InventoryPage({
   };
   const received = (i: Row) => formatDate(manilaDateOf(i.created_at)); // the Manila day the item came in
   const held = (i: Row) => {
-    const releasedAt = i.status === "redeemed" ? historyById.get(i.id)?.releasedAt : null;
+    // released or sold items stop counting on the day they left the shop (#43)
+    const releasedAt = i.status === "redeemed" || i.status === "sold" ? historyById.get(i.id)?.releasedAt : null;
     const days = daysHeld(i.created_at, today, releasedAt);
     return (
       <>
         <span className="font-medium tabular-nums">{days}</span>
         {/* a released item stops counting on the day it went out */}
-        {releasedAt && <span className="block whitespace-nowrap text-xs text-slate-500">until released</span>}
+        {releasedAt && <span className="block whitespace-nowrap text-xs text-slate-500">until {i.status === "sold" ? "sold" : "released"}</span>}
       </>
     );
   };

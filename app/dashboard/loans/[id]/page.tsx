@@ -206,7 +206,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
             title: "Reinstate",
             hint: "Reopen the loan. The default stays on record.",
             // reinstate_loan: "The item is already queued for auction and cannot be reinstated."
-            reason: vault?.status === "queued_for_auction" ? "The item is already queued for auction, so the loan can't be reinstated." : undefined,
+            reason: vault?.status === "queued_for_auction" ? "The item is already queued for auction, so the loan can't be reinstated." : vault?.status === "sold" ? "The item was sold at auction, so the loan can't be reinstated." : undefined,
             body: <ReinstateForm loanId={loan.id} interestOwed={interest} />,
           },
         ]
