@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { rankCustomers } from "@/lib/customers/search";
 import { loadCustomerScores } from "@/lib/customers/history";
@@ -31,7 +31,7 @@ export async function searchCustomers(query: string): Promise<CustomerHit[]> {
   const compact = safe.replace(/[\s-]/g, "");
 
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data } = await createAdminClient() // #17: id_number is not readable with a staff login; the server reads it after requireRole
     .from("customers")
     .select("id, full_name, contact_number, id_type, id_number, is_blacklisted, blacklist_reason, aml_status")
     .is("archived_at", null)

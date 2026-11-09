@@ -2,7 +2,7 @@
 "use server";
 
 // the Supabase client that uses the logged-in user's session (database rules still apply)
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 // checks the user is logged in and has one of the allowed roles
 import { requireRole } from "@/lib/auth/require-role";
 // the SAME customer ranking the New loan search uses (already unit-tested), so results are consistent
@@ -93,7 +93,7 @@ export async function quickSearch(query: string): Promise<SearchResults> {
   // ---------- 1. Customers + loans by ticket + payments by receipt (all at the same time) ----------
   const [{ data: customerRows }, { data: ticketLoans }, { data: paymentRows }] = await Promise.all([
     // customers whose name, phone or ID number contains the text
-    supabase
+    createAdminClient() // #17: id_number is not readable with a staff login; the server reads it after requireRole
       .from("customers")
       .select("id, full_name, contact_number, id_number")
       .is("archived_at", null)

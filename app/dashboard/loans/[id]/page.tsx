@@ -5,7 +5,7 @@ import { hasRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { accruedInterest, capitalizePreview, renewPreview, TERM_DAYS } from "@/lib/loans/accrual";
 import { isOverdueUnpaid } from "@/lib/loans/status"; // F3: shared overdue rule
-import { renewBlocked, renewGraceEnd, situationBadge, stateBadge } from "@/lib/loans/display"; // L3/L4: the same badges as the Loans list; L24: renew grace rule
+import { pastGracePeriod, renewBlocked, renewGraceEnd, situationBadge, stateBadge } from "@/lib/loans/display"; // L3/L4: the same badges as the Loans list; L24: renew grace rule
 import { Icon } from "@/components/icons";
 import { categoryLabel } from "@/lib/appraisal/valuation";
 import { formatDate, formatDateTime, formatPeso, manilaToday } from "@/lib/format";
@@ -180,7 +180,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
       title: "Capitalize and extend",
       hint: `Add ${formatPeso(cap.capitalized)} unpaid interest to the principal. No cash today.`,
       // capitalize_loan: "There is no unpaid interest to capitalize. Use Renew instead."
-      reason: principal <= 0 ? "Fully paid. Redeem the item instead." : interest <= 0 ? "No unpaid interest to capitalize. Use Renew instead." : undefined,
+      reason: principal <= 0 ? "Fully paid. Redeem the item instead." : interest <= 0 ? "No unpaid interest to capitalize. Use Renew instead." : pastGracePeriod(loan, today) ? "The grace period is over, so this loan can no longer be capitalized." : undefined, // owner decision on Matt #30
       body: (
         <div className="space-y-3">
           <p className="text-sm text-slate-600">For a customer who cannot pay the interest today.</p>

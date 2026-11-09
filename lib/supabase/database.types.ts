@@ -1335,6 +1335,13 @@ export type Database = {
           test: string
         }[]
       }
+      ctm_selftest_0029: {
+        Args: never
+        Returns: {
+          outcome: string
+          test: string
+        }[]
+      }
       ctm_selftest_lifecycle: {
         Args: never
         Returns: {
@@ -1396,6 +1403,7 @@ export type Database = {
         Args: { p_id: string; p_table: string }
         Returns: undefined
       }
+      reveal_customer_id: { Args: { p_customer_id: string }; Returns: string }
       run_default_detection: { Args: never; Returns: number }
       run_default_detection_job: { Args: never; Returns: number }
       submit_inventory_audit: {

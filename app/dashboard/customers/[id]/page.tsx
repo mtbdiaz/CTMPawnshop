@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { hasRole } from "@/lib/auth/roles";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { formatDate, formatPeso, manilaToday } from "@/lib/format";
 import { categoryLabel } from "@/lib/appraisal/valuation";
 import { computeCustomerScore, weightsFromRows } from "@/lib/customers/score";
@@ -170,7 +170,7 @@ export default async function CustomerDetailPage({
   const { id } = await params;
 
   const supabase = await createClient();
-  const { data: customer } = await supabase.from("customers").select("*").eq("id", id).maybeSingle();
+  const { data: customer } = await createAdminClient().from("customers").select("*").eq("id", id).maybeSingle();
   if (!customer) notFound();
 
   const sp = await searchParams; // F1: ?lp= and ?ip= page numbers

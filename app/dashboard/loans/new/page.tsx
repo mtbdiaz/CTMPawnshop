@@ -1,5 +1,5 @@
 import { requireRole } from "@/lib/auth/require-role";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { categoryLabel } from "@/lib/appraisal/valuation";
 import { isPawnable } from "@/lib/appraisal/pool";
 import { manilaToday } from "@/lib/format";
@@ -61,7 +61,7 @@ export default async function NewLoanPage({ searchParams }: { searchParams: Prom
 
 async function loadCustomer(supabase: Awaited<ReturnType<typeof createClient>>, id: string): Promise<CustomerHit | null> {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
-  const { data } = await supabase
+  const { data } = await createAdminClient() // #17: id_number is not readable with a staff login; the server reads it after requireRole
     .from("customers")
     .select("id, full_name, contact_number, id_type, id_number, is_blacklisted, blacklist_reason, aml_status")
     .eq("id", id)

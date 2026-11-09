@@ -4,7 +4,7 @@ import { validationFailure, type FieldErrors } from "@/lib/validation/errors";
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 // also import the shared phone rule we just exported
 import { customerSchema, requiredDateOfBirthSchema, idNumberError, phPhoneSchema, MAX } from "@/lib/validation/customer"; // F4: MAX = length limits
@@ -61,7 +61,7 @@ export async function createCustomer(
   // C6: stop double registration of the same person
   const idClean = onlyLettersDigits(parsed.data.id_number); // the typed ID with no dashes or spaces
   if (idClean) { // only check if the ID has letters or numbers in it
-    const { data: sameId } = await supabase // look in the customers table
+    const { data: sameId } = await createAdminClient() // #17: id_number is only readable on the server
       .from("customers") // the customers table
       .select("id, full_name, id_number, archived_at") // only the columns we need
       .eq("id_type", parsed.data.id_type) // same ID type (UMID, Passport, ...)
@@ -208,7 +208,7 @@ export async function adminEditCustomer(_prev: ActionState, formData: FormData):
 
   // F10: if the Admin changes the ID type or number, the new one must fit the format for its type.
   // If only the name is being fixed, the saved ID is left alone even if it's an old one that doesn't fit.
-  const { data: current } = await supabase.from("customers").select("full_name, id_type, id_number").eq("id", parsed.data.customer_id).maybeSingle(); // the name and ID saved now, before this correction
+  const { data: current } = await createAdminClient().from("customers").select("full_name, id_type, id_number").eq("id", parsed.data.customer_id).maybeSingle(); // the name and ID saved now, before this correction
   if (!current) return { error: "Customer not found." }; // PR4: wrong or deleted customer id
   // PR4: an empty "New ID number" means keep the current number
   parsed.data.id_number = parsed.data.id_number || current.id_number;
@@ -226,7 +226,7 @@ export async function adminEditCustomer(_prev: ActionState, formData: FormData):
   // C6b: the same duplicate-ID check as Register, so an Admin correction can't copy another customer's ID
   const idClean = onlyLettersDigits(parsed.data.id_number); // the new ID with no dashes or spaces
   if (idClean) { // only check if the ID has letters or numbers in it
-    const { data: sameId } = await supabase // look in the customers table
+    const { data: sameId } = await createAdminClient() // #17: id_number is only readable on the server
       .from("customers") // the customers table
       .select("id, full_name, id_number") // only the columns we need
       .eq("id_type", parsed.data.id_type) // same ID type
@@ -261,9 +261,10 @@ export async function revealCustomerId(customerId: string): Promise<{ idNumber?:
   await requireRole(ID_REVEAL_ROLES); // not allowed -> sent back to the Dashboard with "You don't have access"
   if (!z.string().uuid().safeParse(customerId).success) return { error: "Customer not found." }; // must look like a real customer id
   const supabase = await createClient();
-  const { data } = await supabase.from("customers").select("id_number").eq("id", customerId).maybeSingle(); // just the one field
-  if (!data) return { error: "Customer not found." };
-  return { idNumber: data.id_number }; // the full number, for this one customer only
+  // #19: the database checks the role again and writes a VIEW row to the audit trail for every reveal
+  const { data, error } = await supabase.rpc("reveal_customer_id", { p_customer_id: customerId });
+  if (error || !data) return { error: "Customer not found." };
+  return { idNumber: data }; // the full number, for this one customer only
 }
 
 // PB-11 support: Admin can set/clear the blacklist flag (used by the

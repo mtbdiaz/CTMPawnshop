@@ -85,7 +85,7 @@ type DefaultCheckLoan = {
  * Reinstated, closed and archived loans are never checked by the database (Matt #3), so they are false here too.
  */
 export function pastGracePeriod(loan: DefaultCheckLoan, today: string): boolean {
-  if (loan.status !== "active" && loan.status !== "extended") return false; // reinstated / closed loans are skipped
+  if (!["active", "extended", "reinstated"].includes(loan.status)) return false; // closed loans are skipped (reinstated loans default again: owner decision on Matt #3)
   if (loan.archived_at) return false; // archived loans are skipped
   return today > addDaysIso(loan.maturity_date, Number(loan.grace_period_days ?? 0)); // ISO dates compare as text
 }
