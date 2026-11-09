@@ -4,6 +4,7 @@ import { categoryLabel } from "@/lib/appraisal/valuation";
 import { isPawnable } from "@/lib/appraisal/pool";
 import { manilaToday } from "@/lib/format";
 import { loadCustomerScores } from "@/lib/customers/history";
+import { maskId } from "@/lib/customers/id-privacy"; // #19 only the last 4 reach the browser
 import { PageHeader } from "@/components/ui";
 import type { CustomerHit } from "./actions";
 import { NewLoanFlow, type PoolItem } from "./new-loan-flow";
@@ -68,5 +69,5 @@ async function loadCustomer(supabase: Awaited<ReturnType<typeof createClient>>, 
     .maybeSingle();
   if (!data) return null;
   const scores = await loadCustomerScores(supabase, [data.id], manilaToday());
-  return { ...data, history: scores.get(data.id)! };
+  return { ...data, id_number: maskId(data.id_number), history: scores.get(data.id)! }; // #19 masked, same as the search
 }

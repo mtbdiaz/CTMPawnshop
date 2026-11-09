@@ -171,7 +171,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
       body: (
         <div className="space-y-3">
           <p className="text-sm text-slate-600">Collect the interest owed and extend by {TERM_DAYS} days.</p>
-          <ExtensionForm loanId={loan.id} collectNow={renew.collectNow} newInterest={renew.newInterestOwed} newMaturity={renew.newMaturity} />
+          <ExtensionForm loanId={loan.id} currentMaturity={loan.maturity_date} collectNow={renew.collectNow} newInterest={renew.newInterestOwed} newMaturity={renew.newMaturity} />
         </div>
       ),
     },
@@ -184,7 +184,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
       body: (
         <div className="space-y-3">
           <p className="text-sm text-slate-600">For a customer who cannot pay the interest today.</p>
-          <CapitalizeForm loanId={loan.id} capitalized={cap.capitalized} newPrincipal={cap.newPrincipal} newMaturity={cap.newMaturity} newInterest={cap.newInterestOwed} />
+          <CapitalizeForm loanId={loan.id} currentMaturity={loan.maturity_date} capitalized={cap.capitalized} newPrincipal={cap.newPrincipal} newMaturity={cap.newMaturity} newInterest={cap.newInterestOwed} />
         </div>
       ),
     },

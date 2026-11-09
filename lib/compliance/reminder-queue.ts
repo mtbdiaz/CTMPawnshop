@@ -4,14 +4,40 @@
 import { daysUntilDue, dueRange, logsThisCycle, type DueFilter } from "./reminders";
 
 export type QueueLoan = { id: string; customer_id: string; maturity_date: string }; // the light columns the page loads first
-export type QueueLog = { loan_id: string; sent_at: string; created_by: string | null }; // one reminder_log row
-export type ReminderView = "todo" | "logged" | "all"; // the 3 tabs: To contact, Contact logged, All
+// one reminder_log row. contact_method / outcome / notes exist since migration 0027 (empty on older logs)
+export type QueueLog = {
+  loan_id: string;
+  sent_at: string;
+  created_by: string | null;
+  contact_method?: string | null;
+  outcome?: string | null;
+  notes?: string | null;
+};
+export type ReminderView = "todo" | "followup" | "logged" | "all"; // the 4 tabs: To contact, Needs follow-up, Contact made, All
+
+/**
+ * R3: where a loan stands for THIS due date, from its newest log:
+ * - none: nobody logged anything yet
+ * - no_answer: tried, nobody picked up (still To contact)
+ * - follow_up: wrong number or follow-up needed (Needs follow-up)
+ * - done: reached, message sent, or an older log with no result saved (before 0027, counted as done like before)
+ */
+export type ContactState = "none" | "no_answer" | "follow_up" | "done";
+export function contactState(cycleLogs: QueueLog[]): ContactState {
+  const last = cycleLogs[0]; // newest first
+  if (!last) return "none";
+  if (last.outcome === "no_answer") return "no_answer";
+  if (last.outcome === "wrong_number" || last.outcome === "follow_up") return "follow_up";
+  return "done";
+}
+const STATE_ORDER: Record<ContactState, number> = { none: 0, no_answer: 1, follow_up: 2, done: 3 }; // to do first, done last
 
 export type QueueItem = QueueLoan & {
   daysLeft: number; // 0 = due today
   cycleLogs: QueueLog[]; // logs for THIS due date, newest first
   allLogs: QueueLog[]; // every log for this loan (older due dates too), newest first
-  contacted: boolean; // true when at least one log counts for this due date
+  state: ContactState; // R3: where it stands for this due date
+  contacted: boolean; // true when contact was made (state "done")
   loansDue: number; // how many loans on the list belong to the same customer (1 = just this one)
 };
 
@@ -41,12 +67,14 @@ export function buildQueue(
   const items: QueueItem[] = loans.map((l) => {
     const allLogs = byLoan.get(l.id) ?? [];
     const cycleLogs = logsThisCycle(allLogs, l.maturity_date);
+    const state = contactState(cycleLogs);
     return {
       ...l,
       daysLeft: daysUntilDue(l.maturity_date, opts.today),
       cycleLogs,
       allLogs,
-      contacted: cycleLogs.length > 0,
+      state,
+      contacted: state === "done",
       loansDue: perCustomer.get(l.customer_id) ?? 1,
     };
   });
@@ -55,7 +83,8 @@ export function buildQueue(
   const summary = {
     dueToday: items.filter((i) => i.daysLeft === 0).length,
     dueSoon: items.filter((i) => i.daysLeft >= 1).length, // due in 1 to 3 days
-    contacted: items.filter((i) => i.contacted).length,
+    contacted: items.filter((i) => i.contacted).length, // contact made
+    followUp: items.filter((i) => i.state === "follow_up").length, // wrong number / follow-up needed
     total: items.length,
     customers: perCustomer.size, // different customers on the list
   };
@@ -65,19 +94,22 @@ export function buildQueue(
   const inDue = items.filter((i) => i.maturity_date >= from && i.maturity_date <= to); // YYYY-MM-DD compares as text
 
   // tab counts follow the Due dropdown but not the search (same as the other pages' tabs)
+  const inView = (i: QueueItem, v: ReminderView) =>
+    v === "todo" ? i.state === "none" || i.state === "no_answer" : v === "followup" ? i.state === "follow_up" : v === "logged" ? i.state === "done" : true;
   const counts = {
-    todo: inDue.filter((i) => !i.contacted).length,
-    logged: inDue.filter((i) => i.contacted).length,
+    todo: inDue.filter((i) => inView(i, "todo")).length,
+    followup: inDue.filter((i) => inView(i, "followup")).length,
+    logged: inDue.filter((i) => inView(i, "logged")).length,
     all: inDue.length,
   };
 
   // the list: this tab + Due + search
   const list = inDue
-    .filter((i) => (opts.view === "todo" ? !i.contacted : opts.view === "logged" ? i.contacted : true))
+    .filter((i) => inView(i, opts.view))
     .filter((i) => !opts.matchIds || opts.matchIds.has(i.id))
     .filter((i) => !opts.customerId || i.customer_id === opts.customerId) // R2: one customer's loans
-    // nearest due date first; on the same day, the ones still to contact first; then always the same order
-    .sort((a, b) => a.maturity_date.localeCompare(b.maturity_date) || Number(a.contacted) - Number(b.contacted) || a.id.localeCompare(b.id));
+    // nearest due date first; on the same day: not contacted, no answer, follow-up, done; then always the same order
+    .sort((a, b) => a.maturity_date.localeCompare(b.maturity_date) || STATE_ORDER[a.state] - STATE_ORDER[b.state] || a.id.localeCompare(b.id));
 
   return { summary, counts, list };
 }

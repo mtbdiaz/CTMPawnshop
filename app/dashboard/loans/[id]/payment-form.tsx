@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ActionForm, CheckboxField, Field, SubmitButton, TextareaField } from "@/components/form";
 import { buttonClasses } from "@/components/ui";
 import { formatDate, formatPeso } from "@/lib/format";
+import { RequestIdInput } from "@/components/request-id"; // #31 one-time id so a retry never saves twice
 import { recordPayment, processExtension, redeemLoan, capitalizeLoan, reinstateLoan, forfeitLoan, adminEditLoan, adminEditPayment } from "../actions";
 
 function LostTicketFields() {
@@ -41,6 +42,7 @@ export function PaymentForm({
   principalBalance: number;
 }) {
   const [amount, setAmount] = useState("");
+  const [round, setRound] = useState(0); // #31: +1 after each saved payment, so the next payment gets a new id
   const total = Math.round((interestDue + principalBalance) * 100) / 100;
   // L17: what this payment does, with the database's own rule (record_payment): interest is paid first, the rest
   // goes to principal. interestDue already includes interest added after the due date, as the database does first.
@@ -56,9 +58,13 @@ export function PaymentForm({
       className="space-y-3"
       resetOnSuccess
       successMessage="Payment recorded. The receipt is in the payment history."
-      onSuccess={() => setAmount("")}
+      onSuccess={() => {
+        setAmount("");
+        setRound((r) => r + 1);
+      }}
     >
       <input type="hidden" name="loan_id" value={loanId} />
+      <RequestIdInput key={round} />
       <Field
         label="Payment amount (₱)"
         name="amount"
@@ -112,11 +118,13 @@ export function PaymentForm({
 
 export function ExtensionForm({
   loanId,
+  currentMaturity,
   collectNow,
   newInterest,
   newMaturity,
 }: {
   loanId: string;
+  currentMaturity: string; // #31 the due date on this page; the database refuses if it changed (renewed in another tab)
   collectNow: number;
   newInterest: number;
   newMaturity: string;
@@ -124,6 +132,9 @@ export function ExtensionForm({
   return (
     <ActionForm action={processExtension} className="space-y-3" successMessage="Loan renewed for another term.">
       <input type="hidden" name="loan_id" value={loanId} />
+      <input type="hidden" name="expected_maturity" value={currentMaturity} />
+      {/* a new id for each due date: after a renewal the page shows the new date, so the next renewal is a new request */}
+      <RequestIdInput key={currentMaturity} />
       <dl className="space-y-1.5 text-sm">
         <div className="flex justify-between gap-2">
           <dt className="text-slate-600">Collect now (interest owed)</dt>
@@ -197,12 +208,14 @@ function Summary({ rows }: { rows: [string, string][] }) {
 /** Item 8: add unpaid interest to principal and extend one term. No cash changes hands. */
 export function CapitalizeForm({
   loanId,
+  currentMaturity,
   capitalized,
   newPrincipal,
   newMaturity,
   newInterest,
 }: {
   loanId: string;
+  currentMaturity: string; // #31 same as Renew
   capitalized: number;
   newPrincipal: number;
   newMaturity: string;
@@ -217,6 +230,8 @@ export function CapitalizeForm({
   return (
     <ActionForm action={capitalizeLoan} className="space-y-3" successMessage="Interest capitalized and loan extended.">
       <input type="hidden" name="loan_id" value={loanId} />
+      <input type="hidden" name="expected_maturity" value={currentMaturity} />
+      <RequestIdInput key={currentMaturity} />
       <Summary rows={rows} />
       <SubmitButton
         variant="secondary"
