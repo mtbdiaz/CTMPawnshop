@@ -1,5 +1,6 @@
 "use client";
 
+import { appraisalNo, customerNo, parseRefNo } from "@/lib/ref-numbers"; // #18 + #29: short numbers
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ActionForm, Field, SubmitButton } from "@/components/form";
@@ -44,8 +45,11 @@ export function NewLoanFlow({
   const interest = principal > 0 ? termInterest(principal, interestRatePercent) : 0;
   const blocked = customer?.is_blacklisted ?? false;
 
+  const itemRef = parseRefNo(itemQuery); // #29: "a45" / "A-0045" finds that one item
   const filteredItems = itemQuery.trim()
-    ? items.filter((i) => i.label.toLowerCase().includes(itemQuery.trim().toLowerCase()))
+    ? items.filter((i) =>
+        itemRef?.kind === "A" ? i.label.endsWith(appraisalNo(itemRef.n)) : i.label.toLowerCase().includes(itemQuery.trim().toLowerCase()),
+      )
     : items;
 
   function onAppraised(saved: SavedAppraisal) {
@@ -63,7 +67,9 @@ export function NewLoanFlow({
           {customer ? (
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="font-medium text-slate-900">{customer.full_name}</p>
+                <p className="font-medium text-slate-900">
+                  {customer.full_name} <span className="font-mono text-xs font-normal text-slate-500">{customerNo(customer.customer_no)}</span>
+                </p>
                 <p className="text-sm text-slate-600">
                   {customer.contact_number} · {customer.id_type} {customer.id_number}
                 </p>
@@ -112,7 +118,7 @@ export function NewLoanFlow({
                 type="search"
                 value={itemQuery}
                 onChange={(e) => setItemQuery(e.target.value)}
-                placeholder="Search by category, karat or weight"
+                placeholder="Search by category, karat, weight or A-number"
                 className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
               <ul className="mt-2 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
@@ -309,6 +315,8 @@ function CustomerSearch({ onPick }: { onPick: (c: CustomerHit) => void }) {
           >
             <span>
               <span className="font-medium text-slate-900">{c.full_name}</span>
+              {/* #18: the short customer number */}
+              <span className="ml-1.5 font-mono text-xs text-slate-500">{customerNo(c.customer_no)}</span>
               <span className="ml-2 text-slate-600">
                 {c.contact_number} · {c.id_number}
               </span>

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { hasRole } from "@/lib/auth/roles";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { customerNo, parseRefNo } from "@/lib/ref-numbers"; // #18: short customer numbers (C-0012)
 import { formatDate, manilaToday } from "@/lib/format";
 import { loadCustomerScores } from "@/lib/customers/history";
 import { ScoreBadge } from "@/components/score-badge";
@@ -77,7 +78,7 @@ export default async function CustomersPage({
   const supabase = await createClient();
   let query = createAdminClient() // #17: id_number is not readable with a staff login; the server reads it after requireRole
     .from("customers")
-    .select("id, full_name, contact_number, id_type, id_number, aml_status, aml_checked_at, is_blacklisted, created_at", { count: "exact" })
+    .select("id, customer_no, full_name, contact_number, id_type, id_number, aml_status, aml_checked_at, is_blacklisted, created_at", { count: "exact" })
     .is("archived_at", null)
     .order(SORTS[sort], { ascending: dir === "asc" })
     .order("id") // U3: same date or name -> always the same order, so nobody shows on two pages
@@ -85,7 +86,9 @@ export default async function CustomersPage({
   // U4: the filter tab
   if (show === "blacklisted") query = query.eq("is_blacklisted", true);
   if (show === "aml") query = query.eq("aml_status", "flagged");
-  if (q) {
+  const ref = parseRefNo(q); // #18: "C-0012" / "c12" = find that one customer by number
+  if (ref?.kind === "C") query = query.eq("customer_no", ref.n);
+  else if (q) {
     const safe = q.replace(/[%,()]/g, " ");
     // the same searches as before: name, phone, ID number (partial, any capitals)
     const ors = [`full_name.ilike.%${safe}%`, `contact_number.ilike.%${safe}%`, `id_number.ilike.%${safe}%`];
@@ -216,7 +219,11 @@ export default async function CustomersPage({
                     <Link href={`/dashboard/customers/${c.id}`} className={cx("block px-4 py-3 hover:bg-slate-50", c.is_blacklisted && "bg-red-50/70")}>
                       {/* line 1: name on the left, score on the right */}
                       <span className="flex items-start justify-between gap-3">
-                        <span className="font-medium text-slate-900">{c.full_name}</span>
+                        <span className="font-medium text-slate-900">
+                          {c.full_name}
+                          {/* #18: the short number staff can say ("C-0012") */}
+                          <span className="ml-1.5 font-mono text-xs font-normal text-slate-500">{customerNo(c.customer_no)}</span>
+                        </span>
                         <ScoreBadge score={score?.score ?? null} tier={score?.tier ?? null} />
                       </span>
                       {/* line 2: phone, and ID type + masked ID (U5) unless IDs are hidden (P2). break-all only matters for a junk long number.
@@ -302,6 +309,8 @@ export default async function CustomersPage({
                       >
                         {c.full_name}
                       </Link>
+                      {/* #18: the short customer number */}
+                      <span className="block font-mono text-xs font-normal text-slate-500">{customerNo(c.customer_no)}</span>
                     </TD>
                     {/* U6: the phone number stays on one line; a junk extra-long number ends with "..." (hover shows it all) */}
                     <TD className="text-slate-600">

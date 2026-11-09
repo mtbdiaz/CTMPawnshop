@@ -1,5 +1,6 @@
 "use server";
 
+import { parseRefNo } from "@/lib/ref-numbers"; // #18: "C-0012" finds that customer
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { rankCustomers } from "@/lib/customers/search";
@@ -10,6 +11,7 @@ import { maskId } from "@/lib/customers/id-privacy"; // #19: only the last 4 of 
 
 export type CustomerHit = {
   id: string;
+  customer_no: number; // #18: shown as C-0012
   full_name: string;
   contact_number: string;
   id_type: string;
@@ -31,18 +33,23 @@ export async function searchCustomers(query: string): Promise<CustomerHit[]> {
   const compact = safe.replace(/[\s-]/g, "");
 
   const supabase = await createClient();
-  const { data } = await createAdminClient() // #17: id_number is not readable with a staff login; the server reads it after requireRole
+  const ref = parseRefNo(q); // #18: a typed customer number finds exactly that customer
+  let find = createAdminClient() // #17: id_number is not readable with a staff login; the server reads it after requireRole
     .from("customers")
-    .select("id, full_name, contact_number, id_type, id_number, is_blacklisted, blacklist_reason, aml_status")
-    .is("archived_at", null)
-    .or(
-      [`full_name.ilike.%${safe}%`, `contact_number.ilike.%${safe}%`, `id_number.ilike.%${safe}%`]
-        .concat(compact && compact !== safe ? [`contact_number.ilike.%${compact}%`, `id_number.ilike.%${compact}%`] : [])
-        .join(","),
-    )
-    .limit(60);
+    .select("id, customer_no, full_name, contact_number, id_type, id_number, is_blacklisted, blacklist_reason, aml_status")
+    .is("archived_at", null);
+  find =
+    ref?.kind === "C"
+      ? find.eq("customer_no", ref.n)
+      : find.or(
+          [`full_name.ilike.%${safe}%`, `contact_number.ilike.%${safe}%`, `id_number.ilike.%${safe}%`]
+            .concat(compact && compact !== safe ? [`contact_number.ilike.%${compact}%`, `id_number.ilike.%${compact}%`] : [])
+            .join(","),
+        );
+  const { data } = await find.limit(60);
 
-  const ranked = rankCustomers(data ?? [], q, 8);
+  // a C-number already found the exact customer; the ranking only matches name/phone/ID, so it would throw that row away
+  const ranked = ref?.kind === "C" ? (data ?? []) : rankCustomers(data ?? [], q, 8);
   const scores = await loadCustomerScores(supabase, ranked.map((c) => c.id), manilaToday());
   // #19: search by the full ID still works (above, on the server), but the browser only gets the last 4
   return ranked.map((c) => ({ ...c, id_number: maskId(c.id_number), history: scores.get(c.id)! }));

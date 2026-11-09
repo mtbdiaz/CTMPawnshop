@@ -1,3 +1,4 @@
+import { appraisalNo } from "@/lib/ref-numbers"; // #29: the short appraisal number (A-0045)
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { hasRole } from "@/lib/auth/roles";
@@ -67,7 +68,8 @@ export default async function AppraisalDetailPage({ params }: { params: Promise<
             <StatusBadge status={state.badge} label={state.label} />
           </span>
         }
-        description={`Appraised ${formatDateTime(appraisal.created_at)} by ${who(appraisal.appraised_by)}`}
+        // #29: the short number first, so staff can read it out or write it on the item's tag
+        description={`${appraisalNo(appraisal.appraisal_no)} · Appraised ${formatDateTime(appraisal.created_at)} by ${who(appraisal.appraised_by)}`}
         breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Appraisals", href: "/dashboard/appraisals" }, { label: title }]}
         actions={
           <>

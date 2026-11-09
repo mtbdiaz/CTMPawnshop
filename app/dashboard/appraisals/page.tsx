@@ -1,3 +1,4 @@
+import { appraisalNo, parseRefNo } from "@/lib/ref-numbers"; // #29: short appraisal numbers (A-0045)
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
@@ -51,6 +52,8 @@ export default async function AppraisalsPage({
   // B4: what the search box matches: notes, the "Others" description, a category name, or a karat ("18" / "18K")
   const searchOr = (() => {
     if (!q) return null;
+    const ref = parseRefNo(q); // #29: "A-0045" / "a45" = that one appraisal
+    if (ref?.kind === "A") return `appraisal_no.eq.${ref.n}`;
     const safe = q.replace(/[%,()*"\\]/g, " ").trim(); // characters that would break the database filter
     if (!safe) return null;
     // notes and the "Others" description: a word that starts with the search ("ring" finds "ring" and "ring size", not "earring").
@@ -84,7 +87,7 @@ export default async function AppraisalsPage({
   let query = forTab(
     supabase
       .from("appraisal_items")
-      .select("id, category, category_other, karat, weight_grams, computed_value, suggested_loan_max, is_counterfeit_risk, counterfeit_resolution, appraised_by, created_at", { count: "exact" })
+      .select("id, appraisal_no, category, category_other, karat, weight_grams, computed_value, suggested_loan_max, is_counterfeit_risk, counterfeit_resolution, appraised_by, created_at", { count: "exact" })
       .eq("status", "available") // not pawned
       .is("archived_at", null), // not archived
     tab,
@@ -147,6 +150,13 @@ export default async function AppraisalsPage({
     );
 
   const searching = Boolean(q || category);
+  // #29: an A-number that isn't in this tab (e.g. already pawned, or in another tab) still gets a link to its page,
+  // because this list only shows items that aren't pawned yet
+  const refSearch = parseRefNo(q);
+  const { data: refItem } =
+    refSearch?.kind === "A" && !(rows ?? []).length
+      ? await supabase.from("appraisal_items").select("id, appraisal_no, status, archived_at").eq("appraisal_no", refSearch.n).maybeSingle()
+      : { data: null };
   const emptyTitle = searching
     ? "No appraisals match your search."
     : tab === "review"
@@ -200,6 +210,8 @@ export default async function AppraisalsPage({
                     <span className="flex items-start justify-between gap-3">
                       <span className="font-medium text-slate-900">
                         {categoryLabel(a.category, a.category_other)}, {a.karat}K
+                        {/* #29: the short appraisal number */}
+                        <span className="ml-1.5 font-mono text-xs font-normal text-slate-500">{appraisalNo(a.appraisal_no)}</span>
                       </span>
                       <span className="shrink-0 text-right text-sm tabular-nums">
                         <span className="block text-xs text-slate-500">Maximum loan</span>
@@ -260,6 +272,8 @@ export default async function AppraisalsPage({
                         >
                           {categoryLabel(a.category, a.category_other)}, {a.karat}K
                         </Link>
+                        {/* #29: the short appraisal number */}
+                        <span className="block font-mono text-xs font-normal text-slate-500">{appraisalNo(a.appraisal_no)}</span>
                       </TD>
                       <TD align="right" className="tabular-nums">
                         {a.weight_grams} g
@@ -290,8 +304,22 @@ export default async function AppraisalsPage({
           </>
         ) : (
           <EmptyState
-            title={emptyTitle}
-            description={searching ? "Try another word, or choose All categories." : canAppraise && tab === "available" ? "Use New appraisal to add one." : undefined}
+            title={refItem ? `${appraisalNo(refItem.appraisal_no)} isn't in this list` : emptyTitle}
+            description={
+              refItem ? (
+                // #29: say why and link straight to it
+                <>
+                  It is {refItem.archived_at ? "archived" : refItem.status === "pawned" ? "already pawned" : "in another tab"}.{" "}
+                  <Link href={`/dashboard/appraisals/${refItem.id}`} className="font-medium text-navy-700 underline">
+                    Open {appraisalNo(refItem.appraisal_no)}
+                  </Link>
+                </>
+              ) : searching ? (
+                "Try another word, or choose All categories."
+              ) : canAppraise && tab === "available" ? (
+                "Use New appraisal to add one."
+              ) : undefined
+            }
           />
         )}
       </Card>

@@ -1,3 +1,4 @@
+import { appraisalNo } from "@/lib/ref-numbers"; // #29: the item's short number in the picker
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { categoryLabel } from "@/lib/appraisal/valuation";
@@ -20,7 +21,7 @@ export default async function NewLoanPage({ searchParams }: { searchParams: Prom
   const [{ data: items }, { data: settings }] = await Promise.all([
     supabase
       .from("appraisal_items")
-      .select("id, status, archived_at, category, category_other, karat, weight_grams, computed_value, suggested_loan_max, is_counterfeit_risk, counterfeit_resolution, created_at")
+      .select("id, appraisal_no, status, archived_at, category, category_other, karat, weight_grams, computed_value, suggested_loan_max, is_counterfeit_risk, counterfeit_resolution, created_at")
       .eq("status", "available")
       .is("archived_at", null)
       .order("created_at", { ascending: false })
@@ -32,7 +33,8 @@ export default async function NewLoanPage({ searchParams }: { searchParams: Prom
     .filter(isPawnable)
     .map((a) => ({
       id: a.id,
-      label: `${categoryLabel(a.category, a.category_other)}, ${a.karat}K, ${a.weight_grams} g`,
+      // #29: the A-number at the end, so staff can match the item to its tag ("Ring, 18K, 2 g · A-0045")
+      label: `${categoryLabel(a.category, a.category_other)}, ${a.karat}K, ${a.weight_grams} g · ${appraisalNo(a.appraisal_no)}`,
       value: Number(a.computed_value),
       max: Number(a.suggested_loan_max),
     }));
@@ -63,7 +65,7 @@ async function loadCustomer(supabase: Awaited<ReturnType<typeof createClient>>, 
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
   const { data } = await createAdminClient() // #17: id_number is not readable with a staff login; the server reads it after requireRole
     .from("customers")
-    .select("id, full_name, contact_number, id_type, id_number, is_blacklisted, blacklist_reason, aml_status")
+    .select("id, customer_no, full_name, contact_number, id_type, id_number, is_blacklisted, blacklist_reason, aml_status")
     .eq("id", id)
     .is("archived_at", null)
     .maybeSingle();
