@@ -5,8 +5,8 @@ import type { FieldErrors } from "@/lib/validation/errors";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
-import { isDueForReminder } from "@/lib/compliance/reminders"; // R1: due today up to 3 days from now
-import { manilaToday } from "@/lib/format"; // R1: today's date in Manila
+// R3: the allowed contact methods and results (same lists as the database enums)
+import { isMethod, isOutcome, type ReminderMethod, type ReminderOutcome } from "@/lib/compliance/reminder-outcomes";
 
 export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean };
 
@@ -47,53 +47,37 @@ export async function resolveSuspiciousFlag(
   return { success: true };
 }
 
-// PB-33 + R1: "Log contact" on the Reminders page. It only RECORDS that staff called, texted or talked to the
-// customer. PawnTrack has no SMS/email service, so nothing is sent from here (see DECISIONS_LOG.md).
-// The database also checks the role (reminder_log RLS: Cashier or Admin only).
-const LOG_AGAIN_WAIT_MS = 2 * 60 * 1000; // a second log for the same loan within 2 minutes = a double click or a retry
-
+// PB-33 + R1 + R3: "Log contact" on the Reminders page. It only RECORDS that staff called, texted or talked to the
+// customer, how, and what happened. PawnTrack has no SMS/email service, so nothing is sent from here (see DECISIONS_LOG.md).
+// Since migration 0027 the database function log_reminder does every check (role, loan still open and due within
+// 3 days, double clicks) and saves the log, so a direct insert isn't needed any more.
 export async function logContact(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const user = await requireRole(["cashier", "admin"]); // the staff member who logs it
+  await requireRole(["cashier", "admin"]); // Cashier or Admin (the database checks again)
   const loanId = String(formData.get("loan_id") ?? "");
+  const method = String(formData.get("contact_method") ?? "");
+  const outcome = String(formData.get("outcome") ?? "");
+  const notes = String(formData.get("notes") ?? "").trim();
   // a loan id is a UUID; anything else is a broken or edited form
   if (!/^[0-9a-f-]{36}$/i.test(loanId)) return { error: "Missing loan. Reload the page and try again." };
 
-  const supabase = await createClient();
-  // check the loan AGAIN on the server: it may have been paid, renewed or closed since the page loaded
-  const { data: loan, error: loanError } = await supabase
-    .from("loans")
-    .select("status, archived_at, maturity_date, principal_balance, interest_owed")
-    .eq("id", loanId)
-    .maybeSingle();
-  if (loanError) return { error: loanError.message };
-  if (!loan) return { error: "Loan not found. Reload the page." };
-  if (!["active", "extended", "reinstated"].includes(loan.status) || loan.archived_at) {
-    return { error: "This loan is no longer open (redeemed, defaulted or archived). Reload the page." };
-  }
-  if (Number(loan.principal_balance) <= 0 && Number(loan.interest_owed) <= 0) {
-    return { error: "This loan is fully paid, so it doesn't need a payment reminder. Release the item with Redeem." };
-  }
-  if (!isDueForReminder(loan.maturity_date, manilaToday())) {
-    return { error: "This loan isn't due within 3 days any more (its due date changed). Reload the page." };
-  }
+  // R3: the two choices are required, the note is optional (500 characters at most, same as the database)
+  const fieldErrors: FieldErrors = {};
+  if (!isMethod(method)) fieldErrors.contact_method = "Pick how you contacted the customer.";
+  if (!isOutcome(outcome)) fieldErrors.outcome = "Pick what happened.";
+  if (notes.length > 500) fieldErrors.notes = "Keep the note to 500 characters or less.";
+  if (Object.keys(fieldErrors).length) return { fieldErrors };
 
-  // double click or network retry: a log for this loan in the last 2 minutes means it's already saved, so don't add another
-  const since = new Date(Date.now() - LOG_AGAIN_WAIT_MS).toISOString();
-  const { data: recent } = await supabase
-    .from("reminder_log")
-    .select("id")
-    .eq("loan_id", loanId)
-    .is("archived_at", null)
-    .gte("sent_at", since)
-    .limit(1);
-  if (!recent?.length) {
-    // the log itself: loan, staff and time (sent_at is set by the database)
-    const { error } = await supabase.from("reminder_log").insert({ loan_id: loanId, created_by: user.id });
-    if (error) return { error: error.message };
-  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("log_reminder", {
+    p_loan_id: loanId,
+    p_method: method as ReminderMethod,
+    p_outcome: outcome as ReminderOutcome,
+    p_notes: notes, // an empty note is saved as no note
+  });
+  if (error) return { error: error.message }; // the database's message is already plain (e.g. "isn't due within 3 days any more")
 
   revalidatePath("/dashboard/compliance/reminders"); // the list shows the new status
   revalidatePath("/dashboard"); // the Dashboard's reminder count

@@ -6,13 +6,14 @@ import { rankCustomers } from "@/lib/customers/search";
 import { loadCustomerScores } from "@/lib/customers/history";
 import type { CustomerScore } from "@/lib/customers/score";
 import { manilaToday } from "@/lib/format";
+import { maskId } from "@/lib/customers/id-privacy"; // #19: only the last 4 of an ID number reach the browser
 
 export type CustomerHit = {
   id: string;
   full_name: string;
   contact_number: string;
   id_type: string;
-  id_number: string;
+  id_number: string; // #19: MASKED ("•••• 0418"). The full number never leaves the server on this page
   is_blacklisted: boolean;
   blacklist_reason: string | null;
   aml_status: string;
@@ -43,5 +44,6 @@ export async function searchCustomers(query: string): Promise<CustomerHit[]> {
 
   const ranked = rankCustomers(data ?? [], q, 8);
   const scores = await loadCustomerScores(supabase, ranked.map((c) => c.id), manilaToday());
-  return ranked.map((c) => ({ ...c, history: scores.get(c.id)! }));
+  // #19: search by the full ID still works (above, on the server), but the browser only gets the last 4
+  return ranked.map((c) => ({ ...c, id_number: maskId(c.id_number), history: scores.get(c.id)! }));
 }

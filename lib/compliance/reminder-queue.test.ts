@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildQueue, type QueueLoan, type QueueLog } from "./reminder-queue";
+import { buildQueue, contactState, type QueueLoan, type QueueLog } from "./reminder-queue";
 
 const today = "2026-11-08";
 // 4 loans: Ana has 2, due today and in 3 days; Ben due tomorrow; Cora due in 2 days
@@ -17,7 +17,7 @@ const run = (o: Partial<Parameters<typeof buildQueue>[2]> = {}) => buildQueue(lo
 
 describe("buildQueue (R1)", () => {
   it("summary counts loans and customers, whatever the filters", () => {
-    expect(run({ view: "logged", due: "today" }).summary).toEqual({ dueToday: 1, dueSoon: 3, contacted: 1, total: 4, customers: 3 });
+    expect(run({ view: "logged", due: "today" }).summary).toEqual({ dueToday: 1, dueSoon: 3, contacted: 1, followUp: 0, total: 4, customers: 3 });
   });
   it("an old log from before a renewal doesn't count as contacted", () => {
     const cora = run().list.find((i) => i.id === "c1")!;
@@ -27,11 +27,11 @@ describe("buildQueue (R1)", () => {
   it("tabs: To contact and Contact logged split the list", () => {
     expect(run({ view: "todo" }).list.map((i) => i.id)).toEqual(["a1", "c1", "a2"]);
     expect(run({ view: "logged" }).list.map((i) => i.id)).toEqual(["b1"]);
-    expect(run().counts).toEqual({ todo: 3, logged: 1, all: 4 });
+    expect(run().counts).toEqual({ todo: 3, followup: 0, logged: 1, all: 4 });
   });
   it("Due dropdown narrows the list and the tab counts", () => {
     expect(run({ due: "tomorrow" }).list.map((i) => i.id)).toEqual(["b1"]);
-    expect(run({ due: "later" }).counts).toEqual({ todo: 2, logged: 0, all: 2 });
+    expect(run({ due: "later" }).counts).toEqual({ todo: 2, followup: 0, logged: 0, all: 2 });
   });
   it("nearest due first, then not contacted first on the same day", () => {
     const sameDay = [...loans, { id: "b2", customer_id: "ben", maturity_date: "2026-11-09" }];
@@ -59,10 +59,28 @@ describe("buildQueue (R1)", () => {
     const q = buildQueue(twins, logs, { today, view: "all", due: "all", customerId: "ana" });
     expect(q.list.map((i) => i.id)).toEqual(["a1", "a2"]);
   });
+  it("R3: no answer stays in To contact; wrong number and follow-up go to Needs follow-up; reached is done", () => {
+    const withResults: QueueLog[] = [
+      { loan_id: "a1", sent_at: "2026-11-08T01:00:00Z", created_by: "s", outcome: "no_answer" },
+      { loan_id: "a2", sent_at: "2026-11-08T01:00:00Z", created_by: "s", outcome: "wrong_number" },
+      { loan_id: "c1", sent_at: "2026-11-08T02:00:00Z", created_by: "s", outcome: "follow_up" },
+      { loan_id: "b1", sent_at: "2026-11-08T03:00:00Z", created_by: "s", outcome: "reached" },
+    ];
+    const q = buildQueue(loans, withResults, { today, view: "all", due: "all" });
+    expect(q.counts).toEqual({ todo: 1, followup: 2, logged: 1, all: 4 });
+    expect(q.summary.followUp).toBe(2);
+    expect(q.list.find((i) => i.id === "a1")!.state).toBe("no_answer");
+    expect(buildQueue(loans, withResults, { today, view: "todo", due: "all" }).list.map((i) => i.id)).toEqual(["a1"]);
+  });
+  it("R3: the newest log decides (no answer, then reached = done)", () => {
+    expect(contactState([{ loan_id: "x", sent_at: "2026-11-08T05:00:00Z", created_by: "s", outcome: "reached" }, { loan_id: "x", sent_at: "2026-11-08T01:00:00Z", created_by: "s", outcome: "no_answer" }])).toBe("done");
+    expect(contactState([])).toBe("none");
+    expect(contactState([{ loan_id: "x", sent_at: "2026-11-08T05:00:00Z", created_by: "s" }])).toBe("done"); // older log, no result saved
+  });
   it("empty list", () => {
     const q = buildQueue([], [], { today, view: "todo", due: "all" });
     expect(q.list).toEqual([]);
-    expect(q.summary).toEqual({ dueToday: 0, dueSoon: 0, contacted: 0, total: 0, customers: 0 });
+    expect(q.summary).toEqual({ dueToday: 0, dueSoon: 0, contacted: 0, followUp: 0, total: 0, customers: 0 });
   });
   it("hundreds of loans stay in a stable order", () => {
     const many: QueueLoan[] = Array.from({ length: 600 }, (_, i) => ({ id: `l${String(i).padStart(3, "0")}`, customer_id: `c${i % 250}`, maturity_date: `2026-11-${String(8 + (i % 4)).padStart(2, "0")}` }));

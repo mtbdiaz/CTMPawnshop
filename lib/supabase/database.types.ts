@@ -333,6 +333,41 @@ export type Database = {
           },
         ]
       }
+      ctm_requests: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          loan_id: string
+          result: Json | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id: string
+          kind: string
+          loan_id: string
+          result?: Json | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          loan_id?: string
+          result?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ctm_requests_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address: string
@@ -913,30 +948,39 @@ export type Database = {
           archive_reason: string | null
           archived_at: string | null
           archived_by: string | null
+          contact_method: Database["public"]["Enums"]["reminder_method"] | null
           created_by: string | null
           id: string
           is_demo: boolean
           loan_id: string
+          notes: string | null
+          outcome: Database["public"]["Enums"]["reminder_outcome"] | null
           sent_at: string
         }
         Insert: {
           archive_reason?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          contact_method?: Database["public"]["Enums"]["reminder_method"] | null
           created_by?: string | null
           id?: string
           is_demo?: boolean
           loan_id: string
+          notes?: string | null
+          outcome?: Database["public"]["Enums"]["reminder_outcome"] | null
           sent_at?: string
         }
         Update: {
           archive_reason?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          contact_method?: Database["public"]["Enums"]["reminder_method"] | null
           created_by?: string | null
           id?: string
           is_demo?: boolean
           loan_id?: string
+          notes?: string | null
+          outcome?: Database["public"]["Enums"]["reminder_outcome"] | null
           sent_at?: string
         }
         Relationships: [
@@ -1165,7 +1209,14 @@ export type Database = {
         Args: { p_id: string; p_reason: string; p_table: string }
         Returns: undefined
       }
-      capitalize_loan: { Args: { p_loan_id: string }; Returns: Json }
+      capitalize_loan: {
+        Args: {
+          p_expected_maturity?: string
+          p_loan_id: string
+          p_request_id?: string
+        }
+        Returns: Json
+      }
       create_auction_batch: {
         Args: { p_item_ids: string[]; p_notes: string }
         Returns: string
@@ -1252,7 +1303,32 @@ export type Database = {
       }
       ctm_norm_id: { Args: { v: string }; Returns: string }
       ctm_receipt_number: { Args: never; Returns: string }
+      ctm_request_seen: {
+        Args: { p_kind: string; p_loan_id: string; p_request_id: string }
+        Returns: Json
+      }
       ctm_selftest: {
+        Args: never
+        Returns: {
+          outcome: string
+          test: string
+        }[]
+      }
+      ctm_selftest_0026: {
+        Args: never
+        Returns: {
+          outcome: string
+          test: string
+        }[]
+      }
+      ctm_selftest_0027: {
+        Args: never
+        Returns: {
+          outcome: string
+          test: string
+        }[]
+      }
+      ctm_selftest_0028: {
         Args: never
         Returns: {
           outcome: string
@@ -1280,12 +1356,22 @@ export type Database = {
         Returns: Database["public"]["Enums"]["staff_role"]
       }
       is_admin: { Args: never; Returns: boolean }
+      log_reminder: {
+        Args: {
+          p_loan_id: string
+          p_method: Database["public"]["Enums"]["reminder_method"]
+          p_notes: string
+          p_outcome: Database["public"]["Enums"]["reminder_outcome"]
+        }
+        Returns: string
+      }
       record_payment: {
         Args: {
           p_amount: number
           p_id_confirm?: string
           p_loan_id: string
           p_lost_ticket?: boolean
+          p_request_id?: string
         }
         Returns: Json
       }
@@ -1298,7 +1384,14 @@ export type Database = {
         Returns: undefined
       }
       reinstate_loan: { Args: { p_loan_id: string }; Returns: undefined }
-      renew_loan: { Args: { p_loan_id: string }; Returns: Json }
+      renew_loan: {
+        Args: {
+          p_expected_maturity?: string
+          p_loan_id: string
+          p_request_id?: string
+        }
+        Returns: Json
+      }
       restore_record: {
         Args: { p_id: string; p_table: string }
         Returns: undefined
@@ -1345,6 +1438,13 @@ export type Database = {
         | "defaulted"
         | "forfeited"
         | "reinstated"
+      reminder_method: "call" | "sms" | "in_person" | "other"
+      reminder_outcome:
+        | "reached"
+        | "message_sent"
+        | "no_answer"
+        | "wrong_number"
+        | "follow_up"
       staff_role: "admin" | "operator" | "cashier" | "appraiser"
       suspicious_flag_status:
         | "open"
@@ -1515,6 +1615,14 @@ export const Constants = {
         "defaulted",
         "forfeited",
         "reinstated",
+      ],
+      reminder_method: ["call", "sms", "in_person", "other"],
+      reminder_outcome: [
+        "reached",
+        "message_sent",
+        "no_answer",
+        "wrong_number",
+        "follow_up",
       ],
       staff_role: ["admin", "operator", "cashier", "appraiser"],
       suspicious_flag_status: [

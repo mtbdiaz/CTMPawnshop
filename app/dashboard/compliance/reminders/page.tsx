@@ -11,6 +11,7 @@ import {
   type DueFilter,
 } from "@/lib/compliance/reminders"; // R1: the Manila-date rules for the list
 import { buildQueue, type QueueLoan, type QueueLog, type ReminderView } from "@/lib/compliance/reminder-queue"; // R1: summary, tabs, order
+import { methodLabel, outcomeBadge } from "@/lib/compliance/reminder-outcomes"; // R3: words for how and what happened
 import { STILL_OWES_FILTER } from "@/lib/loans/display"; // "still owes money" as a database filter (same rule as Loans)
 import { owedNow } from "@/lib/loans/status"; // what the customer owes today (same amount as Loans and the Dashboard)
 import { formatDate, formatDateTime, formatPeso, manilaToday } from "@/lib/format";
@@ -27,7 +28,9 @@ export const metadata = { title: "Reminders" };
 
 const PAGE_SIZE = 10; // same as Customers, Appraisals and Loans, so the list fits one screen
 const BASE = "/dashboard/compliance/reminders";
-const TABS: Record<ReminderView, string> = { todo: "To contact", logged: "Contact logged", all: "All" }; // the 3 tabs
+// R3: 4 tabs. To contact = not contacted yet or no answer; Needs follow-up = wrong number or follow-up needed;
+// Contact made = reached or message sent
+const TABS: Record<ReminderView, string> = { todo: "To contact", followup: "Needs follow-up", logged: "Contact made", all: "All" };
 const ID_CHUNK = 150; // ask for reminder logs in groups, so the web address never gets too long
 
 // "Nov 9" (no year), for the short date ranges in the Due dropdown and summary
@@ -53,7 +56,7 @@ export default async function RemindersPage({
   // R1: opening this page only READS loans. It never runs default detection or changes a loan.
 
   const params = await searchParams;
-  const view: ReminderView = params.view === "logged" || params.view === "all" ? params.view : "todo"; // default tab: To contact
+  const view: ReminderView = params.view === "followup" || params.view === "logged" || params.view === "all" ? params.view : "todo"; // default tab: To contact
   const due: DueFilter = DUE_FILTERS.includes(params.due as DueFilter) ? (params.due as DueFilter) : "all";
   const q = params.q?.trim().slice(0, 60) || undefined;
   const page = pageParam(params.page);
@@ -111,7 +114,7 @@ export default async function RemindersPage({
     const ids = loans.slice(i, i + ID_CHUNK).map((l) => l.id);
     const { data, error: logError } = await supabase
       .from("reminder_log")
-      .select("loan_id, sent_at, created_by")
+      .select("loan_id, sent_at, created_by, contact_method, outcome, notes") // R3: how, what happened, note
       .in("loan_id", ids)
       .is("archived_at", null);
     if (logError) throw logError;
@@ -218,19 +221,23 @@ export default async function RemindersPage({
       {r.d.ticket_number}
     </Link>
   );
+  // R3: "Call · Nov 9, 2:15 PM · Ana" (the method is empty on logs from before 0027)
+  const logLine = (l: QueueLog) => [methodLabel(l.contact_method), formatDateTime(l.sent_at), staffName(l.created_by)].filter(Boolean).join(" · ");
   const contactStatus = (r: Row) => {
     const last = r.cycleLogs[0]; // newest log for this due date
-    const tries = r.cycleLogs.length; // how many attempts for this due date
+    const badge = last ? outcomeBadge(last.outcome) : null; // e.g. "No answer" (grey), "Wrong number" (red), "Reached" (green)
+    const tries = r.cycleLogs.length; // how many logs for this due date
     return (
-      <div className="text-xs">
-        {last ? (
+      <div className="max-w-xs text-xs">
+        {last && badge ? (
           <>
-            {/* R2: "Attempt logged", in navy (not green): a log means staff tried, not that the customer was reached.
-                The database can't save the result yet (Matt #34), so nothing here claims one */}
-            <Badge tone="info">{tries > 1 ? `${tries} attempts logged` : "Attempt logged"}</Badge>
-            <span className="mt-0.5 block text-slate-600">
-              {formatDateTime(last.sent_at)} · {staffName(last.created_by)}
+            <span className="flex flex-wrap items-center gap-1.5">
+              <Badge tone={badge.tone}>{badge.label}</Badge>
+              {tries > 1 && <span className="text-slate-500">{tries} tries</span>}
             </span>
+            <span className="mt-0.5 block text-slate-600">{logLine(last)}</span>
+            {/* the note, so the Admin sees it without opening anything */}
+            {last.notes && <span className="mt-0.5 block break-words italic text-slate-700">&ldquo;{last.notes}&rdquo;</span>}
           </>
         ) : (
           <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
@@ -245,12 +252,13 @@ export default async function RemindersPage({
             <summary className="cursor-pointer rounded text-navy-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500">
               Contact history ({r.allLogs.length})
             </summary>
-            <ul className="mt-1 space-y-0.5 text-slate-600">
+            <ul className="mt-1 space-y-1 text-slate-600">
               {r.allLogs.map((l, i) => (
                 <li key={`${l.sent_at}-${i}`}>
-                  {formatDateTime(l.sent_at)} · {staffName(l.created_by)}
+                  <span className="font-medium text-slate-700">{outcomeBadge(l.outcome).label}</span> · {logLine(l)}
                   {/* a log from before the loan's current due date (before a renewal) */}
                   {!r.cycleLogs.includes(l) && <span className="text-slate-500"> (earlier due date)</span>}
+                  {l.notes && <span className="block break-words italic">&ldquo;{l.notes}&rdquo;</span>}
                 </li>
               ))}
             </ul>
@@ -266,7 +274,7 @@ export default async function RemindersPage({
       customerName={r.d.customers?.full_name ?? "this customer"}
       contactNumber={r.d.customers?.contact_number ?? ""}
       dueText={`${formatDate(r.d.maturity_date)} (${dueLabel(r.daysLeft)})`}
-      again={r.contacted}
+      again={r.state !== "none"} // R3: anything logged for this due date = "Log again"
     />
   );
 
@@ -286,8 +294,9 @@ export default async function RemindersPage({
       return { title: "No reminders due", description: `No running loan that still owes money is due between today and ${formatDate(windowEnd)}.` };
     if (customerId) return { title: "No loans of this customer in this view", description: "Try the All tab, or clear the customer to see everyone." };
     if (q) return { title: "No reminders match your search", description: "Try the customer's full name, their mobile number or the full ticket number. The search looks only at loans on this list." };
-    if (view === "todo") return { title: "No one left to contact", description: "Contact has been logged for every loan in this view. They are under Contact logged." };
-    if (view === "logged") return { title: "No contact logged yet", description: "Loans show here after you log a call, text or visit." };
+    if (view === "todo") return { title: "No one left to contact", description: "Every loan in this view was reached or needs a follow-up. See Contact made and Needs follow-up." };
+    if (view === "followup") return { title: "Nothing needs a follow-up", description: "Loans show here when a log says Wrong number or Follow-up needed." };
+    if (view === "logged") return { title: "No contact made yet", description: "Loans show here after you log Reached or Message sent." };
     return { title: "No loans in this view", description: "Try another Due choice." };
   })();
 
@@ -309,8 +318,8 @@ export default async function RemindersPage({
             { label: "Due today", value: summary.dueToday, hint: `loan${summary.dueToday === 1 ? "" : "s"} · ${shortDate(today)}`, href: href({ view: "all", due: "today", q: undefined, page: undefined }), warn: summary.dueToday > 0 },
             { label: "Due in 1–3 days", value: summary.dueSoon, hint: `loan${summary.dueSoon === 1 ? "" : "s"} · ${shortRange(dueRange("tomorrow", today)[0], windowEnd)}`, href: href({ view: "all", due: undefined, q: undefined, page: undefined }), warn: false },
             // R2: "of 51 loan reminders · 45 unique customers" = the counts are LOANS (each ticket has its own reminder),
-            // and how many different people that is
-            { label: "Contact logged", value: summary.contacted, hint: `of ${summary.total} loan reminder${summary.total === 1 ? "" : "s"} · ${summary.customers} unique customer${summary.customers === 1 ? "" : "s"}`, href: href({ view: "logged", due: undefined, q: undefined, page: undefined }), warn: false },
+            // and how many different people that is. R3: only reached / message sent count as contact made
+            { label: "Contact made", value: summary.contacted, hint: `of ${summary.total} loan reminder${summary.total === 1 ? "" : "s"} · ${summary.customers} unique customer${summary.customers === 1 ? "" : "s"}`, href: href({ view: "logged", due: undefined, q: undefined, page: undefined }), warn: false },
           ].map((s) => (
             <div key={s.label}>
               {/* label on top, then the number and its words (the same in all 3 boxes, at every width) */}
@@ -343,7 +352,7 @@ export default async function RemindersPage({
             value: t,
             label: TABS[t],
             count: counts[t],
-            tone: t === "todo" ? ("warning" as const) : undefined, // amber dot while someone is still to contact
+            tone: t === "todo" || t === "followup" ? ("warning" as const) : undefined, // amber dot while there's work left
             href: href({ view: t === "todo" ? undefined : t, page: undefined }),
           }))}
         />
@@ -418,9 +427,9 @@ export default async function RemindersPage({
                     <span className="inline-flex items-center gap-1">
                       Contact
                       <InfoTip label="Contact">
-                        Shows when staff logged a call, text or visit for this loan, and who did it. PawnTrack can&apos;t save the result
-                        yet (reached, no answer, wrong number), so a logged attempt doesn&apos;t mean the customer got the message. Each
-                        loan has its own status, even for a customer with several loans.
+                        The newest log for this loan: what happened (Reached, No answer, Wrong number...), how, when and who logged it,
+                        plus any note. &quot;Attempt logged&quot; = an older log saved before results could be recorded. Each loan has its
+                        own status, even for a customer with several loans.
                       </InfoTip>
                     </span>
                   </TH>
@@ -489,13 +498,15 @@ export default async function RemindersPage({
               .
             </li>
             <li>
-              <strong>Log contact</strong> records an attempt: that you called, texted or talked to the customer, with your name and the time. Log
-              every try, even when nobody answers. It does not send anything.
+              <strong>Log contact</strong> records how you contacted the customer (call, SMS sent by hand, in person), what happened, and an optional
+              note, with your name and the time. Log every try, even when nobody answers. It does not send anything.
             </li>
             <li>
-              PawnTrack can&apos;t save the result of a call yet (reached, no answer, wrong number, follow-up needed). That needs a database change,
-              so &quot;Attempt logged&quot; never means the customer was reached.
+              <strong>No answer</strong> keeps the loan in To contact. <strong>Wrong number</strong> and <strong>Follow-up needed</strong> move it to
+              Needs follow-up, so an Admin can check the number or the problem. <strong>Reached</strong> and <strong>Message sent</strong> move it to
+              Contact made.
             </li>
+            <li>&quot;Attempt logged&quot; is an older log, saved before PawnTrack could record what happened.</li>
             <li>A renewed loan starts fresh: logs from its earlier due date stay in the contact history but don&apos;t count as contacted now.</li>
             <li>
               A customer with several loans shows &quot;N loans due&quot;; click it to see only that customer&apos;s loans. Each ticket has its own

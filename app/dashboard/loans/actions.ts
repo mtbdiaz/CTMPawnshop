@@ -108,6 +108,7 @@ export async function recordPayment(_prev: ActionState, formData: FormData): Pro
     p_amount: parsed.data.amount,
     p_lost_ticket: parsed.data.lost_ticket,
     p_id_confirm: parsed.data.id_number_confirm ?? undefined,
+    p_request_id: requestIdFrom(formData), // #31 the same submit twice = one payment, same receipt
   });
   if (error) return { error: friendlyError("record the payment", error) }; // L20
   revalidateLoan(parsed.data.loan_id);
@@ -118,6 +119,16 @@ function loanIdFrom(formData: FormData): string | null {
   const id = String(formData.get("loan_id") ?? "");
   return z.string().uuid().safeParse(id).success ? id : null;
 }
+// #31: the form's one-time id (components/request-id.tsx); missing or broken = none, and the database saves normally
+function requestIdFrom(formData: FormData): string | undefined {
+  const id = String(formData.get("request_id") ?? "");
+  return z.string().uuid().safeParse(id).success ? id : undefined;
+}
+// #31: the due date the page showed (YYYY-MM-DD); the database refuses if the loan changed since
+function expectedMaturityFrom(formData: FormData): string | undefined {
+  const d = String(formData.get("expected_maturity") ?? "");
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : undefined;
+}
 
 // PB-19: pay-and-renew.
 export async function processExtension(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -125,7 +136,8 @@ export async function processExtension(_prev: ActionState, formData: FormData): 
   const id = loanIdFrom(formData);
   if (!id) return { error: "Loan not found. Reload the page." };
   const supabase = await createClient();
-  const { error } = await supabase.rpc("renew_loan", { p_loan_id: id });
+  // #31: one-time id (a retry renews once) + the due date the page showed (another tab already renewed = refused)
+  const { error } = await supabase.rpc("renew_loan", { p_loan_id: id, p_request_id: requestIdFrom(formData), p_expected_maturity: expectedMaturityFrom(formData) });
   if (error) return { error: friendlyError("renew the loan", error) }; // L20
   revalidateLoan(id);
   return { success: true, id };
@@ -137,7 +149,8 @@ export async function capitalizeLoan(_prev: ActionState, formData: FormData): Pr
   const id = loanIdFrom(formData);
   if (!id) return { error: "Loan not found. Reload the page." };
   const supabase = await createClient();
-  const { error } = await supabase.rpc("capitalize_loan", { p_loan_id: id });
+  // #31: same protection as Renew
+  const { error } = await supabase.rpc("capitalize_loan", { p_loan_id: id, p_request_id: requestIdFrom(formData), p_expected_maturity: expectedMaturityFrom(formData) });
   if (error) return { error: friendlyError("capitalize the loan", error) }; // L20
   revalidateLoan(id);
   return { success: true, id };
