@@ -172,13 +172,17 @@ export async function resolveCounterfeitFlag(_prev: ActionState, formData: FormD
   const appraisalId = String(formData.get("appraisal_id") ?? "");
   const decision = String(formData.get("decision") ?? "");
   if (!appraisalId || (decision !== "cleared" && decision !== "confirmed")) return { error: "Choose Clear flag or Confirm risk." }; // A5
+  // #28: why the Admin decided (required, 5 to 500 characters), saved with the decision and shown on the appraisal page
+  const notes = String(formData.get("resolution_notes") ?? "").trim();
+  if (notes.length < 5) return { error: "Write why you decided (at least 5 characters).", fieldErrors: { resolution_notes: "Write why you decided (at least 5 characters)." } };
+  if (notes.length > 500) return { fieldErrors: { resolution_notes: "Keep the reason to 500 characters or less." } };
 
   const loadedAt = String(formData.get("updated_at") ?? ""); // the version the Admin looked at
 
   const supabase = await createClient();
   let query = supabase
     .from("appraisal_items")
-    .update({ counterfeit_resolution: decision, counterfeit_resolved_by: user.id, counterfeit_resolved_at: new Date().toISOString() })
+    .update({ counterfeit_resolution: decision, counterfeit_resolved_by: user.id, counterfeit_resolved_at: new Date().toISOString(), counterfeit_resolution_notes: notes })
     .eq("id", appraisalId)
     .eq("counterfeit_resolution", "pending"); // only a flag that is still waiting
   if (loadedAt) query = query.eq("updated_at", loadedAt); // not if the item was edited after the Admin opened it

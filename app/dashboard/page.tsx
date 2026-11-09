@@ -199,17 +199,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     (pendingFlags ?? 0) > 0
       ? await supabase
           .from("appraisal_items")
-          .select("id, category, category_other, karat, weight_grams, created_at")
+          .select("id, category, category_other, karat, weight_grams, created_at, counterfeit_flagged_at") // #13: when it went into review
           .eq("is_counterfeit_risk", true)
           .eq("counterfeit_resolution", "pending")
           .is("archived_at", null)
-          .order("created_at")
+          .order("counterfeit_flagged_at", { ascending: true, nullsFirst: false })
           .limit(1)
       : { data: [] };
   // Compact alert: the OLDEST flagged appraisal, and how many days it has waited.
-  // The flag is set when the item is appraised, so created_at is the date it was flagged.
+  // #13: counterfeit_flagged_at = when it went into review (since migration 0033; can be after the appraisal, e.g. a karat change)
   const oldestFlag = (flaggedRows ?? [])[0];
-  const flagDays = oldestFlag ? Math.max(0, -daysUntilDue(manilaToday(new Date(oldestFlag.created_at)), today)) : 0;
+  const flaggedOn = oldestFlag ? (oldestFlag.counterfeit_flagged_at ?? oldestFlag.created_at) : null; // older rows: the appraisal time
+  const flagDays = flaggedOn ? Math.max(0, -daysUntilDue(manilaToday(new Date(flaggedOn)), today)) : 0;
  
   // Review 2 #4: a paid item waiting longer than this many days gets an amber warning.
   // TODO: confirm the number of days with CTM Pawnshop (30 is a placeholder).
@@ -345,7 +346,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 {pendingFlags === 1 ? (
                   <>
                     · {categoryLabel(oldestFlag.category, oldestFlag.category_other)}, {oldestFlag.karat}K, {oldestFlag.weight_grams} g · Flagged{" "}
-                    {formatDate(oldestFlag.created_at)} ·{" "}
+                    {formatDate(flaggedOn)} ·{" "}
                   </>
                 ) : (
                   // several flagged items: only say how long the oldest has waited

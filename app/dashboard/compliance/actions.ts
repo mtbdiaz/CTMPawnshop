@@ -21,6 +21,9 @@ export async function resolveSuspiciousFlag(
   if (!flagId || !["dismissed", "investigating", "blacklisted"].includes(decision)) {
     return { error: "Invalid decision" };
   }
+  // #14: an optional note saying why (shown in the Resolved tab), 500 characters at most like the database
+  const notes = String(formData.get("resolution_notes") ?? "").trim();
+  if (notes.length > 500) return { fieldErrors: { resolution_notes: "Keep the note to 500 characters or less." } };
 
   const supabase = await createClient();
   // Blacklist first: if that fails, the flag stays as it was and the Admin sees the error.
@@ -38,7 +41,7 @@ export async function resolveSuspiciousFlag(
 
   const { error } = await supabase
     .from("suspicious_activity_flags")
-    .update({ status: decision as never, resolved_by: user.id, resolved_at: new Date().toISOString() })
+    .update({ status: decision as never, resolved_by: user.id, resolved_at: new Date().toISOString(), resolution_notes: notes || null })
     .eq("id", flagId);
   if (error) return { error: error.message };
   revalidatePath("/dashboard/customers");

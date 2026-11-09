@@ -115,3 +115,25 @@ export async function recordSale(
   revalidatePath("/dashboard/finance"); // the sale shows in the cash ledger
   return { success: true };
 }
+
+// #14: an item marked missing in a physical audit was found later. The database (resolve_audit_item, migration 0033)
+// checks the role (Operator or Admin), that the line was really marked missing and isn't resolved yet, and saves who,
+// when and the note. The audit itself is never changed, so the record of what was missing that day stays.
+export async function markAuditItemFound(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireRole(["operator", "admin"]);
+  const lineId = String(formData.get("line_id") ?? "");
+  const notes = String(formData.get("resolution_notes") ?? "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(lineId)) return { error: "Missing audit line. Reload the page and try again." };
+  if (notes.length < 5) return { fieldErrors: { resolution_notes: "Write where it was found (at least 5 characters)." } };
+  if (notes.length > 500) return { fieldErrors: { resolution_notes: "Keep the note to 500 characters or less." } };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("resolve_audit_item", { p_line_id: lineId, p_notes: notes });
+  if (error) return { error: error.message }; // plain words from the database, e.g. "already marked found"
+
+  revalidatePath("/dashboard/inventory/audit");
+  return { success: true };
+}
