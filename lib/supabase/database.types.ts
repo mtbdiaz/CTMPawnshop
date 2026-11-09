@@ -24,9 +24,11 @@ export type Database = {
           category_other: string | null
           computed_value: number
           condition_notes: string | null
+          counterfeit_flagged_at: string | null
           counterfeit_resolution:
             | Database["public"]["Enums"]["counterfeit_resolution"]
             | null
+          counterfeit_resolution_notes: string | null
           counterfeit_resolved_at: string | null
           counterfeit_resolved_by: string | null
           created_at: string
@@ -54,9 +56,11 @@ export type Database = {
           category_other?: string | null
           computed_value: number
           condition_notes?: string | null
+          counterfeit_flagged_at?: string | null
           counterfeit_resolution?:
             | Database["public"]["Enums"]["counterfeit_resolution"]
             | null
+          counterfeit_resolution_notes?: string | null
           counterfeit_resolved_at?: string | null
           counterfeit_resolved_by?: string | null
           created_at?: string
@@ -84,9 +88,11 @@ export type Database = {
           category_other?: string | null
           computed_value?: number
           condition_notes?: string | null
+          counterfeit_flagged_at?: string | null
           counterfeit_resolution?:
             | Database["public"]["Enums"]["counterfeit_resolution"]
             | null
+          counterfeit_resolution_notes?: string | null
           counterfeit_resolved_at?: string | null
           counterfeit_resolved_by?: string | null
           created_at?: string
@@ -851,6 +857,9 @@ export type Database = {
           inventory_item_id: string
           is_demo: boolean
           notes: string | null
+          resolution_notes: string | null
+          resolved_at: string | null
+          resolved_by: string | null
         }
         Insert: {
           audit_id: string
@@ -860,6 +869,9 @@ export type Database = {
           inventory_item_id: string
           is_demo?: boolean
           notes?: string | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
         }
         Update: {
           audit_id?: string
@@ -869,6 +881,9 @@ export type Database = {
           inventory_item_id?: string
           is_demo?: boolean
           notes?: string | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
         }
         Relationships: [
           {
@@ -883,6 +898,13 @@ export type Database = {
             columns: ["inventory_item_id"]
             isOneToOne: false
             referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "physical_inventory_audit_items_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1061,6 +1083,7 @@ export type Database = {
           is_demo: boolean
           loan_id: string | null
           reason: string
+          resolution_notes: string | null
           resolved_at: string | null
           resolved_by: string | null
           status: Database["public"]["Enums"]["suspicious_flag_status"]
@@ -1075,6 +1098,7 @@ export type Database = {
           is_demo?: boolean
           loan_id?: string | null
           reason: string
+          resolution_notes?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
           status?: Database["public"]["Enums"]["suspicious_flag_status"]
@@ -1089,6 +1113,7 @@ export type Database = {
           is_demo?: boolean
           loan_id?: string | null
           reason?: string
+          resolution_notes?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
           status?: Database["public"]["Enums"]["suspicious_flag_status"]
@@ -1382,6 +1407,13 @@ export type Database = {
           test: string
         }[]
       }
+      ctm_selftest_0033: {
+        Args: never
+        Returns: {
+          outcome: string
+          test: string
+        }[]
+      }
       ctm_selftest_decisions: {
         Args: never
         Returns: {
@@ -1455,6 +1487,10 @@ export type Database = {
           p_request_id?: string
         }
         Returns: Json
+      }
+      resolve_audit_item: {
+        Args: { p_line_id: string; p_notes: string }
+        Returns: undefined
       }
       restore_record: {
         Args: { p_id: string; p_table: string }

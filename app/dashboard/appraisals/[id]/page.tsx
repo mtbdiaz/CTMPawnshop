@@ -93,11 +93,15 @@ export default async function AppraisalDetailPage({ params }: { params: Promise<
           }
         >
           {flaggedPending && (role === "admin" ? "Inspect the item and photos, then clear or confirm the flag." : "Waiting on an Admin to review.")}
+          {/* #13: when it went into review (it can be later than the appraisal, e.g. after a karat change) */}
+          {flaggedPending && appraisal.counterfeit_flagged_at && <span className="block text-xs">Flagged {formatDateTime(appraisal.counterfeit_flagged_at)}.</span>}
           {/* C6: who decided and when (only once someone has) */}
           {!flaggedPending && (
             <>
               Reviewed by {who(appraisal.counterfeit_resolved_by)}
               {appraisal.counterfeit_resolved_at ? `, ${formatDateTime(appraisal.counterfeit_resolved_at)}` : ""}.
+              {/* #28: the reason the Admin wrote (older decisions have none) */}
+              {appraisal.counterfeit_resolution_notes && <span className="mt-1 block break-words italic">Reason: &ldquo;{appraisal.counterfeit_resolution_notes}&rdquo;</span>}
             </>
           )}
           {role === "admin" && flaggedPending && <ResolveForm appraisalId={appraisal.id} updatedAt={appraisal.updated_at} />}

@@ -74,6 +74,8 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
                     <TD>
                       <StatusBadge status={flag.status} />
                       <span className="mt-0.5 block text-xs text-slate-500">{formatDateTime(flag.resolved_at)}</span>
+                      {/* #14: the Admin's note, if one was written */}
+                      {flag.resolution_notes && <span className="mt-0.5 block max-w-xs break-words text-xs italic text-slate-700">&ldquo;{flag.resolution_notes}&rdquo;</span>}
                     </TD>
                   </TR>
                 );
