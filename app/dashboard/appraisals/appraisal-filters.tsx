@@ -48,7 +48,7 @@ export function AppraisalFilters({
       {/* role="search" tells screen readers this is a search area */}
       <form
         role="search"
-        className="relative w-full sm:w-80"
+        className="relative w-full sm:w-96" // same width as the Customers search, so the hint text fits
         onSubmit={(e) => {
           e.preventDefault(); // stop the normal page reload
           if (timer.current) clearTimeout(timer.current); // Enter = search now, no waiting
@@ -56,7 +56,7 @@ export function AppraisalFilters({
         }}
       >
         <label htmlFor="appraisal-search" className="sr-only">
-          Search appraisals by item, karat or notes
+          Search appraisals by item, karat, notes or appraisal number (A-0045)
         </label>
         {/* magnifying glass inside the box */}
         <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -65,7 +65,7 @@ export function AppraisalFilters({
           type="search"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Search item, karat or notes"
+          placeholder="Search item, karat or A-number"
           autoComplete="off"
           maxLength={60}
           className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-24 text-sm placeholder:text-slate-500 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20 [&::-webkit-search-cancel-button]:hidden"

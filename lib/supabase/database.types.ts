@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       appraisal_items: {
         Row: {
+          appraisal_no: number
           appraised_by: string | null
           archive_reason: string | null
           archived_at: string | null
@@ -48,6 +49,7 @@ export type Database = {
           weight_grams: number
         }
         Insert: {
+          appraisal_no?: number
           appraised_by?: string | null
           archive_reason?: string | null
           archived_at?: string | null
@@ -80,6 +82,7 @@ export type Database = {
           weight_grams: number
         }
         Update: {
+          appraisal_no?: number
           appraised_by?: string | null
           archive_reason?: string | null
           archived_at?: string | null
@@ -412,6 +415,7 @@ export type Database = {
           contact_number: string
           created_at: string
           created_by: string | null
+          customer_no: number
           date_of_birth: string | null
           email: string | null
           full_name: string
@@ -434,6 +438,7 @@ export type Database = {
           contact_number: string
           created_at?: string
           created_by?: string | null
+          customer_no?: number
           date_of_birth?: string | null
           email?: string | null
           full_name: string
@@ -456,6 +461,7 @@ export type Database = {
           contact_number?: string
           created_at?: string
           created_by?: string | null
+          customer_no?: number
           date_of_birth?: string | null
           email?: string | null
           full_name?: string
@@ -1408,6 +1414,13 @@ export type Database = {
         }[]
       }
       ctm_selftest_0033: {
+        Args: never
+        Returns: {
+          outcome: string
+          test: string
+        }[]
+      }
+      ctm_selftest_0034: {
         Args: never
         Returns: {
           outcome: string

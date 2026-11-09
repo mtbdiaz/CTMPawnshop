@@ -2,6 +2,7 @@
 "use server";
 
 // the Supabase client that uses the logged-in user's session (database rules still apply)
+import { appraisalNo, customerNo, parseRefNo } from "@/lib/ref-numbers"; // #18 + #29: short numbers
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 // checks the user is logged in and has one of the allowed roles
 import { requireRole } from "@/lib/auth/require-role";
@@ -86,6 +87,8 @@ export async function quickSearch(query: string): Promise<SearchResults> {
   const phone = /^\+?63(9\d{9})$/.test(compact) ? `0${compact.replace(/^\+?63/, "")}` : compact;
   // ticket and receipt numbers keep their dashes (PT-SEED-04, RC-2026...), only spaces are removed
   const ref = safe.replace(/\s/g, "");
+  // #18 + #29: "C-0012" or "A-0045" = exactly that customer or appraisal
+  const shortNo = parseRefNo(q);
 
   const supabase = await createClient(); // database, as the logged-in user
   const today = manilaToday(); // today's date in Manila
@@ -93,16 +96,18 @@ export async function quickSearch(query: string): Promise<SearchResults> {
   // ---------- 1. Customers + loans by ticket + payments by receipt (all at the same time) ----------
   const [{ data: customerRows }, { data: ticketLoans }, { data: paymentRows }] = await Promise.all([
     // customers whose name, phone or ID number contains the text
-    createAdminClient() // #17: id_number is not readable with a staff login; the server reads it after requireRole
-      .from("customers")
-      .select("id, full_name, contact_number, id_number")
-      .is("archived_at", null)
-      .or(
-        [`full_name.ilike.%${safe}%`, `contact_number.ilike.%${phone}%`, `id_number.ilike.%${safe}%`]
-          .concat(compact !== safe ? [`id_number.ilike.%${compact}%`] : [])
-          .join(","),
-      )
-      .limit(40),
+    shortNo?.kind === "C"
+      ? createAdminClient().from("customers").select("id, customer_no, full_name, contact_number, id_number").is("archived_at", null).eq("customer_no", shortNo.n).limit(1)
+      : createAdminClient() // #17: id_number is not readable with a staff login; the server reads it after requireRole
+          .from("customers")
+          .select("id, customer_no, full_name, contact_number, id_number")
+          .is("archived_at", null)
+          .or(
+            [`full_name.ilike.%${safe}%`, `contact_number.ilike.%${phone}%`, `id_number.ilike.%${safe}%`]
+              .concat(compact !== safe ? [`id_number.ilike.%${compact}%`] : [])
+              .join(","),
+          )
+          .limit(40),
     // loans whose ticket number contains the text
     supabase
       .from("loans")
@@ -123,7 +128,8 @@ export async function quickSearch(query: string): Promise<SearchResults> {
 
   // best customer matches first (name starts with it > a word starts with it > phone/ID > contains)
   // (a +63 phone number is ranked using its 09... form, the way it is saved)
-  const customers = rankCustomers(customerRows ?? [], phone !== compact ? phone : q, 4);
+  // (a customer number already found exactly one customer, so it isn't ranked)
+  const customers = shortNo?.kind === "C" ? (customerRows ?? []) : rankCustomers(customerRows ?? [], phone !== compact ? phone : q, 4);
   const customerIds = customers.map((c) => c.id);
 
   // ---------- 2. Loans of those customers + how many open loans each has ----------
@@ -192,7 +198,7 @@ export async function quickSearch(query: string): Promise<SearchResults> {
     return {
       id: c.id,
       title: c.full_name,
-      subtitle: `${c.contact_number} · ${n} open loan${n === 1 ? "" : "s"}`,
+      subtitle: `${customerNo(c.customer_no)} · ${c.contact_number} · ${n} open loan${n === 1 ? "" : "s"}`, // #18
       href: `/dashboard/customers/${c.id}`,
       action: "View profile",
     };
@@ -210,23 +216,26 @@ export async function quickSearch(query: string): Promise<SearchResults> {
   const otherText = safe.replace(/\b(18|21|24)\s*k\b/i, "").trim();
 
   let appraisals: SearchHit[] = [];
-  if (categories.length || karat || otherText.length >= 3) {
+  if (shortNo?.kind === "A" || categories.length || karat || otherText.length >= 3) {
     let aq = supabase
       .from("appraisal_items")
-      .select("id, category, category_other, karat, weight_grams, computed_value, status, customers(full_name)")
+      .select("id, appraisal_no, category, category_other, karat, weight_grams, computed_value, status, customers(full_name)")
       .is("archived_at", null);
-    if (karat) aq = aq.eq("karat", karat); // only that karat
-    const ors = [
-      ...(categories.length ? [`category.in.(${categories.join(",")})`] : []),
-      ...(otherText.length >= 3 ? [`category_other.ilike.%${otherText}%`] : []),
-    ];
-    if (ors.length) aq = aq.or(ors.join(",")); // category OR custom name (if only a karat was typed, karat alone filters)
+    if (shortNo?.kind === "A") aq = aq.eq("appraisal_no", shortNo.n); // #29: exactly that appraisal
+    else {
+      if (karat) aq = aq.eq("karat", karat); // only that karat
+      const ors = [
+        ...(categories.length ? [`category.in.(${categories.join(",")})`] : []),
+        ...(otherText.length >= 3 ? [`category_other.ilike.%${otherText}%`] : []),
+      ];
+      if (ors.length) aq = aq.or(ors.join(",")); // category OR custom name (if only a karat was typed, karat alone filters)
+    }
     const { data: apprRows } = await aq.order("created_at", { ascending: false }).limit(4);
-    type ApprRow = { id: string; category: string; category_other: string | null; karat: number; weight_grams: number; computed_value: number; status: string; customers: { full_name: string } | null };
+    type ApprRow = { id: string; appraisal_no: number; category: string; category_other: string | null; karat: number; weight_grams: number; computed_value: number; status: string; customers: { full_name: string } | null };
     appraisals = ((apprRows ?? []) as unknown as ApprRow[]).map((a) => ({
       id: a.id,
       title: `${categoryLabel(a.category, a.category_other)}, ${a.karat}K, ${a.weight_grams} g`,
-      subtitle: `${formatPeso(a.computed_value)} value${a.customers?.full_name ? ` · ${a.customers.full_name}` : ""}`,
+      subtitle: `${appraisalNo(a.appraisal_no)} · ${formatPeso(a.computed_value)} value${a.customers?.full_name ? ` · ${a.customers.full_name}` : ""}`,
       href: `/dashboard/appraisals/${a.id}`,
       action: "View appraisal",
       badge: { status: a.status, label: a.status === "pawned" ? "Pawned" : "Available" },

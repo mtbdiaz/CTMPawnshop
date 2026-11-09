@@ -51,7 +51,7 @@ export function CustomerSearch({
     >
       {/* label for screen readers (hidden on screen) */}
       <label htmlFor="customer-search" className="sr-only">
-        Search customers by name, mobile number or ID number
+        Search customers by name, mobile number, ID number or customer number (C-0009)
       </label>
       {/* magnifying glass icon inside the box, on the left */}
       <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -61,7 +61,7 @@ export function CustomerSearch({
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search by name, mobile or ID number"
+        placeholder="Search name, mobile, ID or C-number"
         autoComplete="off"
         className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-24 text-sm placeholder:text-slate-500 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20 [&::-webkit-search-cancel-button]:hidden"
       />

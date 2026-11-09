@@ -1,3 +1,4 @@
+import { customerNo } from "@/lib/ref-numbers"; // #18: the short customer number (C-0012)
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { hasRole } from "@/lib/auth/roles";
@@ -270,7 +271,8 @@ export default async function CustomerDetailPage({
             </span>
           </span>
         }
-        description={`Customer since ${formatDate(customer.created_at)}. ${openLoans.length} open loan${openLoans.length === 1 ? "" : "s"}.`}
+        // #18: the short number first, so staff can read it out or write it on a form
+        description={`${customerNo(customer.customer_no)} · Customer since ${formatDate(customer.created_at)}. ${openLoans.length} open loan${openLoans.length === 1 ? "" : "s"}.`}
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Customers", href: "/dashboard/customers" },
