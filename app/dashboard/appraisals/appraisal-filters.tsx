@@ -56,7 +56,7 @@ export function AppraisalFilters({
         }}
       >
         <label htmlFor="appraisal-search" className="sr-only">
-          Search appraisals by item, karat, notes or appraisal number (A-0045)
+          Search appraisals by item, karat, notes, customer name or number (C-0012), or appraisal number (A-0045)
         </label>
         {/* magnifying glass inside the box */}
         <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -65,7 +65,7 @@ export function AppraisalFilters({
           type="search"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Search item, karat or A-number"
+          placeholder="Search item, karat, customer or A-number"
           autoComplete="off"
           maxLength={60}
           className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-24 text-sm placeholder:text-slate-500 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20 [&::-webkit-search-cancel-button]:hidden"
