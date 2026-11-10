@@ -448,8 +448,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 <EmptyState title="Nothing overdue or due in the next 7 days." />
               ) : (
                 <>
-                  {/* D4: PHONE ONLY (sm:hidden). One compact block per loan instead of a wide table. */}
-                  <ul className="divide-y divide-slate-100 sm:hidden">
+                  {/* D4: PHONES AND SMALL TABLETS (below 768px, md:hidden). One compact block per loan instead of a wide table,
+                      so nothing scrolls sideways */}
+                  <ul className="divide-y divide-slate-100 md:hidden">
                     {attention.map((loan) => {
                       const paid = isPaid(loan);
                       const late = paid ? 0 : -dueIn(loan);
@@ -482,8 +483,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     })}
                   </ul>
  
-                  {/* COMPUTER ONLY (hidden sm:block): the table */}
-                  <div className="hidden sm:block">
+                  {/* 768px AND WIDER (hidden md:block): the table */}
+                  <div className="hidden md:block">
                     {/* Pagination: max-h-60 = never taller than 240px (room for 3 rows); max-h-80 = 320px when it shows 5 rows.
                         Extra rows only scroll inside it
                         when text wraps a lot (big zoom).
@@ -520,16 +521,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                                 {loan.customers?.full_name ?? ""}
                                 {/* Viewport fit: ticket under the name on screens narrower than 1536px (the Ticket column is hidden there);
                                     one line, ends with "..." if too long, full number on hover */}
-                                <span className="block max-w-[9rem] truncate font-mono text-xs text-slate-500 2xl:hidden" title={loan.ticket_number}>{loan.ticket_number}</span>
+                                <span className="block max-w-[8rem] truncate font-mono text-xs text-slate-500 2xl:hidden" title={loan.ticket_number}>{loan.ticket_number}</span>
                               </TD>
-                              {/* Viewport fit: the date stays on one line */}
+                              {/* Viewport fit: the date stays on one line; the small note ("7d late", "56d waiting, unclaimed") sits
+                                  UNDER it, so the table fits the screen without scrolling sideways on a computer */}
                               <TD className="whitespace-nowrap">
                                 {paid && paidOn.get(loan.id) ? (
                                   // Review #4: paid loan = payment date + how long the item has waited
                                   <>
                                     Paid {formatDate(paidOn.get(loan.id))}
                                     {/* Review 2 #4: amber and bold when the item has waited too long */}
-                                    <span className={cx("ml-1 text-xs", waitingDays(loan.id) > UNCLAIMED_WARN_DAYS ? "font-semibold text-amber-700" : "text-slate-500")}>
+                                    <span className={cx("block text-xs", waitingDays(loan.id) > UNCLAIMED_WARN_DAYS ? "font-semibold text-amber-700" : "text-slate-500")}>
                                       ({waitingDays(loan.id)}d waiting{waitingDays(loan.id) > UNCLAIMED_WARN_DAYS ? ", unclaimed" : ""})
                                     </span>
                                   </>
@@ -538,15 +540,24 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                                   <>Due {formatDate(loan.maturity_date)}</>
                                 )}
                                 {/* small note: how late (amber like the Overdue badge, L26), or how many days left */}
-                                {late > 0 && <span className="ml-1 text-xs font-semibold text-amber-800">({late}d late)</span>}
-                                {!paid && late <= 0 && <span className="ml-1 text-xs text-slate-500">({dueIn(loan) === 0 ? "today" : `in ${dueIn(loan)}d`})</span>}
+                                {late > 0 && <span className="block text-xs font-semibold text-amber-800">({late}d late)</span>}
+                                {!paid && late <= 0 && <span className="block text-xs text-slate-500">({dueIn(loan) === 0 ? "today" : `in ${dueIn(loan)}d`})</span>}
                               </TD>
                               <TD align="right">{formatPeso(owedNow(loan))}</TD>
                               <TD>
                                 {/* Redesign: one clear status per row.
                                     Paid = green, Overdue and Due soon = amber (L26). Words, not just colour. */}
                                 {paid ? (
-                                  <StatusBadge status="redeemed" label="Paid, ready to release" />
+                                  // Viewport fit: the full words need a wide screen (1536px and up). On smaller ones the badge
+                                  // says "Ready to release": the Date column already says "Paid" and Owed now shows ₱0.00
+                                  <>
+                                    <span className="2xl:hidden">
+                                      <StatusBadge status="redeemed" label="Ready to release" />
+                                    </span>
+                                    <span className="hidden 2xl:inline">
+                                      <StatusBadge status="redeemed" label="Paid, ready to release" />
+                                    </span>
+                                  </>
                                 ) : late > 0 ? (
                                   <StatusBadge status="pending" label="Overdue" />
                                 ) : (
@@ -596,8 +607,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 Waiting for forfeit <span className="ml-1 font-normal text-slate-500">({waitingForfeit.length})</span>
               </SectionTitle>
               <Card padded={false}>
-                {/* PHONE ONLY (sm:hidden): one tappable block per loan, same as Needs attention */}
-                <ul className="divide-y divide-slate-100 sm:hidden">
+                {/* PHONES AND SMALL TABLETS (md:hidden): one tappable block per loan, same as Needs attention */}
+                <ul className="divide-y divide-slate-100 md:hidden">
                   {forfeitPage.map((loan) => (
                     <li key={loan.id}>
                       {/* the whole block opens the loan, where the Admin reviews the forfeit */}
@@ -620,8 +631,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 {/* end of the phone list */}
                 </ul>
  
-                {/* COMPUTER ONLY (hidden sm:block). Pagination: same bounded, scrollable box as Needs attention, with its own page (wfPage) */}
-                <div className="hidden sm:block">
+                {/* 768px AND WIDER (hidden md:block). Pagination: same bounded, scrollable box as Needs attention, with its own page (wfPage) */}
+                <div className="hidden md:block">
                 <Table minWidth="640px" className="max-h-60 overflow-y-auto" key={wfPage}>
                   <THead sticky>
                     {/* Viewport fit: own Ticket column only on wide screens (2xl = 1536px and up); on smaller ones it shows under the name */}
@@ -650,7 +661,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                                 {loan.customers?.full_name ?? ""}
                                 {/* Viewport fit: ticket under the name on screens narrower than 1536px (the Ticket column is hidden there);
                                     one line, ends with "..." if too long, full number on hover */}
-                                <span className="block max-w-[9rem] truncate font-mono text-xs text-slate-500 2xl:hidden" title={loan.ticket_number}>{loan.ticket_number}</span>
+                                <span className="block max-w-[8rem] truncate font-mono text-xs text-slate-500 2xl:hidden" title={loan.ticket_number}>{loan.ticket_number}</span>
                               </TD>
                         <TD className="whitespace-nowrap">{formatDate(loan.defaulted_at)}</TD>
                         <TD align="right">{formatPeso(owedNow(loan))}</TD>
@@ -740,4 +751,4 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </div>
     </div>
   );
-}
+}
