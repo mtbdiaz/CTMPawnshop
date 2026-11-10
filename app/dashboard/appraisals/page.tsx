@@ -1,4 +1,4 @@
-import { appraisalNo, parseRefNo } from "@/lib/ref-numbers"; // #29: short appraisal numbers (A-0045)
+import { appraisalNo, customerNo, parseRefNo } from "@/lib/ref-numbers"; // #29: short appraisal numbers (A-0045); AC1: C-0012
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
@@ -49,11 +49,18 @@ export default async function AppraisalsPage({
   const dir = params.dir === "asc" || params.dir === "desc" ? params.dir : tab === "review" && sort === "appraised" ? "asc" : "desc";
   const canAppraise = hasRole(user.profile.role, ["appraiser"]);
 
-  // B4: what the search box matches: notes, the "Others" description, a category name, or a karat ("18" / "18K")
-  const searchOr = (() => {
+  const supabase = await createClient();
+  // B4: what the search box matches: notes, the "Others" description, a category name, or a karat ("18" / "18K").
+  // AC2: also the customer the item was appraised for, by name or C-number
+  const searchOr = await (async () => {
     if (!q) return null;
     const ref = parseRefNo(q); // #29: "A-0045" / "a45" = that one appraisal
     if (ref?.kind === "A") return `appraisal_no.eq.${ref.n}`;
+    if (ref?.kind === "C") {
+      // AC2: "C-0012" / "c12" = the items of that one customer (an id that matches nothing if there is no such customer)
+      const { data: one } = await supabase.from("customers").select("id").eq("customer_no", ref.n).maybeSingle();
+      return `customer_id.eq.${one?.id ?? "00000000-0000-0000-0000-000000000000"}`;
+    }
     const safe = q.replace(/[%,()*"\\]/g, " ").trim(); // characters that would break the database filter
     if (!safe) return null;
     // notes and the "Others" description: a word that starts with the search ("ring" finds "ring" and "ring size", not "earring").
@@ -65,10 +72,14 @@ export default async function AppraisalsPage({
     if (cats.length) ors.push(`category.in.(${cats.join(",")})`);
     const karat = safe.match(/^(24|21|18)\s*k?$/i); // "18k" -> 18K items
     if (karat) ors.push(`karat.eq.${karat[1]}`);
+    // AC2: customers whose name has the search text -> their items too (at least 2 letters, so "a" doesn't match everyone)
+    if (/[a-z]{2}/i.test(safe)) {
+      const { data: found } = await supabase.from("customers").select("id").ilike("full_name", `%${safe}%`).limit(50);
+      if (found?.length) ors.push(`customer_id.in.(${found.map((c) => c.id).join(",")})`);
+    }
     return ors.join(",");
   })();
 
-  const supabase = await createClient();
   // B2: one tab's rule, used by the list and by the tab counts
   type Filterable<T> = { eq(column: "is_counterfeit_risk" | "counterfeit_resolution", value: boolean | "pending" | "confirmed"): T; or(filters: string): T };
   const forTab = <T extends Filterable<T>>(query: T, t: Tab, withSearch: boolean): T => {
@@ -87,7 +98,8 @@ export default async function AppraisalsPage({
   let query = forTab(
     supabase
       .from("appraisal_items")
-      .select("id, appraisal_no, category, category_other, karat, weight_grams, computed_value, suggested_loan_max, is_counterfeit_risk, counterfeit_resolution, appraised_by, created_at", { count: "exact" })
+      // AC1: + the customer the item was appraised for (older appraisals have none)
+      .select("id, appraisal_no, category, category_other, karat, weight_grams, computed_value, suggested_loan_max, is_counterfeit_risk, counterfeit_resolution, appraised_by, created_at, customers(id, full_name, customer_no)", { count: "exact" })
       .eq("status", "available") // not pawned
       .is("archived_at", null), // not archived
     tab,
@@ -222,6 +234,11 @@ export default async function AppraisalsPage({
                     <span className="mt-0.5 block text-sm text-slate-600">
                       {a.weight_grams} g · Value {formatPeso(a.computed_value)} · {formatDate(a.created_at)} · {appraisedBy(a.appraised_by)}
                     </span>
+                    {/* AC1: who the item belongs to */}
+                    <span className="mt-0.5 block text-sm text-slate-600">
+                      <span className="text-slate-500">Customer:</span>{" "}
+                      {a.customers ? `${a.customers.full_name} (${customerNo(a.customers.customer_no)})` : "Not recorded"}
+                    </span>
                     {/* line 3: the counterfeit check, always shown */}
                     <span className="mt-1.5 flex items-center gap-1.5 text-sm">
                       <span className="text-slate-500">Counterfeit check:</span> {check(a)}
@@ -236,11 +253,12 @@ export default async function AppraisalsPage({
                 D2: 25rem (was 22rem) because the tabs now have their own row above the search */}
             <div className="hidden min-[1100px]:block">
               <Table
-                minWidth="900px"
+                minWidth="1020px"
                 className="relative max-h-[max(16rem,calc(100dvh-25rem))] overflow-y-auto [&_thead]:bg-slate-100 [&_thead]:text-slate-700 [&_th]:font-semibold"
               >
                 <THead sticky>
                   <TH>Item</TH>
+                  <TH>Customer</TH>
                   <SortTH label="Weight" column="weight" current={sort} dir={dir} basePath="/dashboard/appraisals" params={listParams} align="right" />
                   <SortTH label="Appraised value" column="value" current={sort} dir={dir} basePath="/dashboard/appraisals" params={listParams} align="right" />
                   {/* R1: "i" button that explains the two amounts, using the LTV set in Settings */}
@@ -274,6 +292,24 @@ export default async function AppraisalsPage({
                         </Link>
                         {/* #29: the short appraisal number */}
                         <span className="block font-mono text-xs font-normal text-slate-500">{appraisalNo(a.appraisal_no)}</span>
+                      </TD>
+                      {/* AC1: who the item belongs to, as a link to the profile (every role that sees this list can open it).
+                          Long names end with "..."; hover shows the full name */}
+                      <TD>
+                        {a.customers ? (
+                          <>
+                            <Link
+                              href={`/dashboard/customers/${a.customers.id}`}
+                              title={a.customers.full_name}
+                              className="block max-w-[11rem] truncate rounded-sm underline-offset-2 hover:text-navy-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500"
+                            >
+                              {a.customers.full_name}
+                            </Link>
+                            <span className="block font-mono text-xs text-slate-500">{customerNo(a.customers.customer_no)}</span>
+                          </>
+                        ) : (
+                          <span className="text-slate-500">Not recorded</span>
+                        )}
                       </TD>
                       <TD align="right" className="tabular-nums">
                         {a.weight_grams} g
