@@ -32,6 +32,7 @@ export function QuickSearch() {
   const [searched, setSearched] = useState(""); // which text that answer belongs to
   const [loading, setLoading] = useState(false); // waiting for the server?
   const [failed, setFailed] = useState(false); // did the last search fail?
+  const [limited, setLimited] = useState(false); // #22: too many searches this minute
   const [active, setActive] = useState(-1); // highlighted row (-1 = none)
   const [open, setOpen] = useState(false); // is the preview showing?
   const router = useRouter(); // opens pages from code
@@ -66,6 +67,7 @@ export function QuickSearch() {
         setResults(res); // show the answer
         setSearched(term); // remember which text it belongs to
         setFailed(false); // no error
+        setLimited(Boolean(res.limited)); // #22: the server says "slow down" instead of searching
         setActive(-1); // nothing highlighted yet
       } catch {
         if (mine !== seq.current) return;
@@ -196,7 +198,9 @@ export function QuickSearch() {
             {/* the search failed: friendly message, no technical details */}
             {failed && !loading && <p className="px-3 py-3 text-sm text-red-700">Unable to load search results. Please try again.</p>}
             {/* nothing found */}
-            {!loading && !failed && searched === term && !groups.length && (
+            {/* #22: over the limit. Not "No matching records", because the search didn't run */}
+            {limited && !loading && !failed && searched === term && <p className="px-3 py-3 text-sm text-amber-800">Too many searches. Wait a minute, then try again.</p>}
+            {!loading && !failed && !limited && searched === term && !groups.length && (
               <div className="px-3 py-3 text-sm">
                 <p className="text-slate-700">No matching records found.</p>
                 <p className="mt-0.5 text-slate-500">Try a ticket number, a name, a phone number or an item like &quot;ring 18k&quot;.</p>

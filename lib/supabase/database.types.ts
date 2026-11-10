@@ -1449,7 +1449,13 @@ export type Database = {
         }[]
       }
       ctm_customer_score: { Args: { p_customer: string }; Returns: number }
+      ctm_photo_in_use: { Args: { p_name: string }; Returns: boolean }
+      ctm_rate_check: { Args: { p_kind: string }; Returns: boolean }
       ctm_today: { Args: never; Returns: string }
+      ctm_unused_photos: {
+        Args: { p_older_than?: string }
+        Returns: { name: string }[]
+      }
       forfeit_loan: { Args: { p_loan_id: string }; Returns: undefined }
       get_my_role: {
         Args: never

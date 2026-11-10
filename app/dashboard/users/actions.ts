@@ -5,6 +5,7 @@ import { validationFailure, type FieldErrors } from "@/lib/validation/errors";
 import { revalidatePath } from "next/cache";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
+import { allowRequest, TOO_MANY } from "@/lib/rate-limit"; // #22: rate limiting
 import { createAccountSchema, editAccountSchema } from "@/lib/validation/account";
 
 export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; tempPassword?: string };
@@ -19,6 +20,7 @@ export async function createAccount(
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
 
   const parsed = createAccountSchema.safeParse({
     full_name: formData.get("full_name"),
@@ -59,6 +61,7 @@ export async function editAccount(
   formData: FormData,
 ): Promise<ActionState> {
   const currentUser = await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
 
   const userId = String(formData.get("user_id") ?? "");
   const parsed = editAccountSchema.safeParse({
@@ -101,6 +104,7 @@ export async function resetPassword(
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
 
   const userId = String(formData.get("user_id") ?? "");
   if (!userId) return { error: "Missing account id" };

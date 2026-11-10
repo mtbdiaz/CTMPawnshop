@@ -5,6 +5,7 @@ import type { FieldErrors } from "@/lib/validation/errors";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
+import { allowRequest, TOO_MANY } from "@/lib/rate-limit"; // #22: rate limiting
 
 export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; id?: string };
 
@@ -14,6 +15,7 @@ export async function submitAudit(
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["operator", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
 
   const itemIds = formData.getAll("item_id").map(String);
   const expectedStatuses = formData.getAll("expected_status").map(String);
@@ -43,6 +45,7 @@ export async function createAuctionBatch(
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["operator", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const itemIds = formData.getAll("item_id").map(String);
   const notes = String(formData.get("notes") ?? "");
   if (itemIds.length === 0) return { error: "Select at least one forfeited item" };
@@ -85,6 +88,7 @@ export async function recordSale(
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["operator", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const itemId = String(formData.get("item_id") ?? "");
   const raw = String(formData.get("sale_price") ?? "").replace(/,/g, "").trim();
   const buyer = String(formData.get("buyer_name") ?? "").trim();
@@ -124,6 +128,7 @@ export async function markAuditItemFound(
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["operator", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const lineId = String(formData.get("line_id") ?? "");
   const notes = String(formData.get("resolution_notes") ?? "").trim();
   if (!/^[0-9a-f-]{36}$/i.test(lineId)) return { error: "Missing audit line. Reload the page and try again." };

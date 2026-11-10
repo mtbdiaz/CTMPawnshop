@@ -5,6 +5,7 @@ import { validationFailure, type FieldErrors } from "@/lib/validation/errors";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
+import { allowRequest, TOO_MANY } from "@/lib/rate-limit"; // #22: rate limiting
 import { cashEntrySchema } from "@/lib/validation/cashflow";
 
 export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean };
@@ -15,6 +16,7 @@ export async function recordCashEntry(
   formData: FormData,
 ): Promise<ActionState> {
   const user = await requireRole(["operator", "cashier", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const parsed = cashEntrySchema.safeParse({
     entry_type: formData.get("entry_type"),
     amount: formData.get("amount"),
@@ -39,6 +41,7 @@ export async function recordCashEntry(
 // Item 5: Admin correction of a manual entry. Reason required; audited.
 export async function adminEditCashEntry(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const id = String(formData.get("entry_id") ?? "");
   const amount = Number(formData.get("amount"));
   const description = String(formData.get("description") ?? "").trim();

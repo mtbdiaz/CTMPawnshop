@@ -5,6 +5,7 @@ import { validationFailure, type FieldErrors } from "@/lib/validation/errors";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
+import { allowRequest, TOO_MANY } from "@/lib/rate-limit"; // #22: rate limiting
 import { businessRulesSchema } from "@/lib/validation/settings";
 
 export type SettingsFormState = { error?: string; fieldErrors?: FieldErrors; success?: boolean };
@@ -14,6 +15,7 @@ export async function updateBusinessRules(
   formData: FormData,
 ): Promise<SettingsFormState> {
   const user = await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
 
   const parsed = businessRulesSchema.safeParse({
     interest_rate_percent: formData.get("interest_rate_percent"),
