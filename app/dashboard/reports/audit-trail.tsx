@@ -2,7 +2,8 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTime, humanize } from "@/lib/format";
 import { Badge, Card, EmptyState, Pagination, Table, TBody, TD, TH, THead, TR, buttonClasses, pageParam } from "@/components/ui";
-import { changedFields } from "@/lib/audit/changes"; // C10: works out which columns changed (old -> new)
+import { allFields, changedFields } from "@/lib/audit/changes"; // C10: works out which columns changed (old -> new); AT2: every field for the popup
+import { AuditDataButton } from "./audit-data-dialog"; // AT2: View data opens a popup instead of opening inside the row
 
 
 const PAGE_SIZE = 50;
@@ -105,19 +106,20 @@ export async function AuditTrail({ params }: { params: { table?: string; action?
               <TBody>
                 {entries.map((e) => (
                   <TR key={e.id}>
-                    <TD className="whitespace-nowrap text-slate-600">{formatDateTime(e.created_at)}</TD>
-                    <TD>
+                    <TD className="whitespace-nowrap align-top text-slate-600">{formatDateTime(e.created_at)}</TD>
+                    {/* AT2: align-top on every cell, so a long Details cell never pushes the other columns down */}
+                    <TD className="align-top">
                       {humanize(e.table_name)}
                                            {/* F3: slate-500 so the record ID is readable */}
                       <span className="block font-mono text-[11px] text-slate-500">{e.record_id}</span>
                     </TD>
-                    <TD>
+                    <TD className="align-top">
                       <Badge tone={e.action === "DELETE" ? "danger" : e.action === "INSERT" ? "success" : "info"}>
                         {ACTION_LABEL[e.action] ?? e.action}
                       </Badge>
                     </TD>
-                    <TD>{e.actor ? (names.get(e.actor) ?? "Unknown user") : <span className="text-slate-500">System / service</span>}</TD>
-                    <TD>
+                    <TD className="align-top">{e.actor ? (names.get(e.actor) ?? "Unknown user") : <span className="text-slate-500">System / service</span>}</TD>
+                    <TD className="align-top">
                       {(e.changed_data as { admin_edit?: boolean; reason?: string } | null)?.admin_edit && (
                         <p className="mb-1 text-xs font-medium text-amber-900">
                           Admin edit. Reason: {(e.changed_data as { reason?: string }).reason}
@@ -147,22 +149,14 @@ export async function AuditTrail({ params }: { params: { table?: string; action?
                           );
                         })()}
                       {e.changed_data ? (
-                        <details>
-                          <summary className="cursor-pointer text-xs font-medium text-navy-700 hover:underline">View data</summary>
-                          {/* C10: the full record. For an update with the old row saved, both are shown (before, then after) */}
-                          {e.action === "UPDATE" && e.old_data ? (
-                            <>
-                              <p className="mt-2 text-[11px] font-medium text-slate-600">Before</p>
-                              <pre className="mt-1 max-h-64 max-w-md overflow-auto rounded-md bg-slate-900 p-3 text-[11px] text-slate-100">
-                                {JSON.stringify(e.old_data, null, 2)}
-                              </pre>
-                              <p className="mt-2 text-[11px] font-medium text-slate-600">After</p>
-                            </>
-                          ) : null}
-                          <pre className="mt-2 max-h-64 max-w-md overflow-auto rounded-md bg-slate-900 p-3 text-[11px] text-slate-100">
-                            {JSON.stringify(e.changed_data, null, 2)}
-                          </pre>
-                        </details>
+                        // AT2: a popup with one line per field (Before / After), changed ones marked and first
+                        <AuditDataButton
+                          title={`${humanize(e.table_name)} · ${ACTION_LABEL[e.action] ?? e.action}`}
+                          subtitle={`${formatDateTime(e.created_at)} · ${e.actor ? (names.get(e.actor) ?? "Unknown user") : "System / service"} · ID …${String(e.record_id).slice(-6)}`}
+                          reason={(e.changed_data as { admin_edit?: boolean; reason?: string } | null)?.admin_edit ? (e.changed_data as { reason?: string }).reason : undefined}
+                          rows={allFields(e.action === "UPDATE" ? e.old_data : null, e.changed_data, names)}
+                          raw={{ before: e.action === "UPDATE" ? (e.old_data ?? null) : null, after: e.changed_data }}
+                        />
                       ) : (
                         ""
                       )}

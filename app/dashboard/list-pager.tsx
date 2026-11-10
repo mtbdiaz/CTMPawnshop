@@ -31,7 +31,7 @@ export function ListPager({
   // the look of a small secondary button
   const btn = buttonClasses("secondary", "sm");
   // the look of a greyed-out button that can't be clicked
-  const off = cx(btn, "pointer-events-none opacity-50");
+  const off = cx(btn, "pointer-events-none opacity-60"); // CT1: a little easier to read (was opacity-50)
 
   return (
     // the footer bar: wraps onto two lines on narrow screens; py-2 keeps it slim
@@ -84,4 +84,4 @@ export function ListPager({
     {/* end of the footer bar */}
     </div>
   );
-}
+}

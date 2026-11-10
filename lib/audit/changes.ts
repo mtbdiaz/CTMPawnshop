@@ -57,3 +57,32 @@ export function changedFields(oldRow: unknown, newRow: unknown, names?: Map<stri
     .filter((k) => JSON.stringify(oldRow[k] ?? null) !== JSON.stringify(newRow[k] ?? null)) // only the ones that changed
     .map((k) => ({ key: k, label: humanize(k), before: showValue(k, oldRow[k], names), after: showValue(k, newRow[k], names) }));
 }
+
+// AT2 (Matt, Nov 11): one line per column for the "View data" popup, so the Admin reads a table instead of raw data.
+export type FieldRow = {
+  key: string; // the column name
+  label: string; // "Principal balance"
+  before: string | null; // the old value, ready to show (null = no old row: a "Created" entry or an older entry)
+  after: string; // the new value, ready to show
+  changed: boolean; // true = different before and after
+};
+
+/** Every column of the entry, in the order of the new row. Changed columns are marked, "updated at" is left out. */
+export function allFields(oldRow: unknown, newRow: unknown, names?: Map<string, string>): FieldRow[] {
+  const isRow = (r: unknown): r is Record<string, unknown> => !!r && typeof r === "object" && !Array.isArray(r);
+  if (!isRow(newRow)) return []; // nothing saved
+  const old = isRow(oldRow) ? oldRow : null; // the row before, when it was saved
+  const keys = [...new Set([...Object.keys(newRow), ...(old ? Object.keys(old) : [])])]; // every column in either row
+  // AT3: short words in capitals ("ID number", "AML status")
+  const label = (k: string) => humanize(k).replace(/\bId\b/g, "ID").replace(/\bid\b/g, "ID").replace(/\bAml\b/g, "AML").replace(/\baml\b/g, "AML");
+  return keys
+    .filter((k) => !SKIP.has(k)) // leave out "updated at"
+    .sort((a, b) => label(a).localeCompare(label(b))) // AT3: A to Z, so a field is easy to find (the database keeps no useful order)
+    .map((k) => ({
+      key: k,
+      label: label(k),
+      before: old ? showValue(k, old[k], names) : null,
+      after: showValue(k, newRow[k], names),
+      changed: !!old && JSON.stringify(old[k] ?? null) !== JSON.stringify(newRow[k] ?? null),
+    }));
+}

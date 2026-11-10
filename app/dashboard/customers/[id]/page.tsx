@@ -116,7 +116,7 @@ function HistoryPager({ base, param, page, pages, total, size, other }: { base: 
     return qs ? `${base}?${qs}` : base; // the address for that page
   };
   const btn = buttonClasses("secondary", "sm"); // small white buttons, same as elsewhere
-  const off = `${btn} pointer-events-none opacity-40`; // greyed-out look for a button that can't be used
+  const off = `${btn} pointer-events-none opacity-60`; // CT1: was opacity-40, too faint to read // greyed-out look for a button that can't be used
   const from = (page - 1) * size + 1; // first record on this page
   const to = Math.min(total, page * size); // last record on this page
   return (
@@ -630,4 +630,4 @@ export default async function CustomerDetailPage({
       )}
     </div>
   );
-}
+}

@@ -195,7 +195,7 @@ export function Badge({ tone = "neutral", children, icon }: { tone?: BadgeTone; 
         tone === "info" && "bg-navy-50 text-navy-700 ring-navy-200",
         tone === "success" && "bg-emerald-50 text-emerald-800 ring-emerald-300",
         tone === "warning" && "bg-amber-50 text-amber-900 ring-amber-400",
-        tone === "danger" && "bg-red-600 text-white ring-red-700",
+        tone === "danger" && "bg-red-700 text-white ring-red-800", // CT1: darker red, so the small white words read better (was red-600)
         tone === "gold" && "bg-gold-100 text-gold-700 ring-gold-400",
       )}
     >
@@ -458,7 +458,7 @@ export function Pagination({
               Previous
             </Link>
           ) : (
-            <span className={cx(buttonClasses("secondary", "sm"), "pointer-events-none opacity-40")}>Previous</span>
+            <span aria-disabled="true" className={cx(buttonClasses("secondary", "sm"), "pointer-events-none opacity-60")}>Previous</span>
           )}
           <span className="text-xs">
             Page {page} of {pages}
@@ -468,7 +468,7 @@ export function Pagination({
               Next
             </Link>
           ) : (
-            <span className={cx(buttonClasses("secondary", "sm"), "pointer-events-none opacity-40")}>Next</span>
+            <span aria-disabled="true" className={cx(buttonClasses("secondary", "sm"), "pointer-events-none opacity-60")}>Next</span>
           )}
         </div>
       )}

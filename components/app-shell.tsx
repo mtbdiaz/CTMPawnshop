@@ -165,7 +165,7 @@ export function AppShell({
             {/* opens the name part. hidden sm:inline = hidden on phones, shown on screens 640px and wider */}
             <span className="hidden sm:inline">
               {/* the staff member's name, a grey dot, then a space. {" "} is a space JSX won't remove */}
-              {userName} <span className="text-slate-400">·</span>{" "}
+              {userName} <span className="text-slate-500">·</span>{" "}
             {/* closes the name part */}
             </span>
             {/* the role (for example "Cashier"), always shown */}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changedFields, showValue } from "./changes";
+import { allFields, changedFields, showValue } from "./changes";
 
 // C10: the audit trail's "what changed" list
 describe("changedFields (C10)", () => {
@@ -49,5 +49,24 @@ describe("showValue (C10)", () => {
   it("long text is cut, and free text keeps its words", () => {
     expect(showValue("notes", "x".repeat(100))).toHaveLength(81);
     expect(showValue("blacklist_reason", "Used a fake ID")).toBe("Used a fake ID");
+  });
+});
+
+// AT2: the rows for the View data popup
+describe("allFields (AT2)", () => {
+  it("lists every field, marks the changed ones and leaves out updated_at", () => {
+    const rows = allFields({ status: "extended", interest_owed: 70, updated_at: "a" }, { status: "defaulted", interest_owed: 70, updated_at: "b" });
+    expect(rows.map((r) => [r.label, r.before, r.after, r.changed])).toEqual([
+      ["Interest owed", "₱70.00", "₱70.00", false], // A to Z (AT3)
+      ["Status", "Renewed", "Defaulted", true],
+    ]);
+    expect(allFields(null, { aml_status: "clear", id_number: "X" }).map((r) => r.label)).toEqual(["AML status", "ID number"]); // AT3
+  });
+  it("a Created entry (no row before) has no Before and nothing marked", () => {
+    const rows = allFields(null, { status: "active" });
+    expect(rows).toEqual([{ key: "status", label: "Status", before: null, after: "Active", changed: false }]);
+  });
+  it("nothing saved: no rows", () => {
+    expect(allFields(null, null)).toEqual([]);
   });
 });
