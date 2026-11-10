@@ -2,12 +2,13 @@
 
 import { appraisalNo, customerNo, parseRefNo } from "@/lib/ref-numbers"; // #18 + #29: short numbers
 import { useEffect, useId, useRef, useState, useTransition } from "react";
+import Link from "next/link"; // NL5: Cancel goes back to the Loans list
 import { useRouter } from "next/navigation";
 import { ActionForm, Field, SelectField, SubmitButton } from "@/components/form";
 import { RequestIdInput } from "@/components/request-id"; // #40: one-time id, so the same form can't make two loans
-import { Alert, Badge, Card, cx } from "@/components/ui";
+import { Alert, Badge, Card, buttonClasses, cx } from "@/components/ui";
 import { ScoreBadge } from "@/components/score-badge";
-import { formatPeso, manilaToday } from "@/lib/format";
+import { formatDate, formatPeso, manilaToday } from "@/lib/format";
 import { addDaysIso, TERM_DAYS, termInterest } from "@/lib/loans/accrual";
 import type { KaratPrices } from "@/lib/appraisal/valuation";
 import { AppraisalCalculator, type SavedAppraisal } from "../../appraisals/appraisal-calculator";
@@ -15,7 +16,8 @@ import { createLoan, type ActionState } from "../actions";
 import { previewLoan, searchCustomers, type CustomerHit, type LoanPreview } from "./actions";
 
 // customerId / owner: #38, the customer the item was appraised for (null = an older appraisal, anyone can pawn it)
-export type PoolItem = { id: string; label: string; value: number; max: number; customerId: string | null; owner: string | null };
+// meta: NL8, when it was appraised and by whom (not set on an item appraised a moment ago on this page)
+export type PoolItem = { id: string; label: string; value: number; max: number; customerId: string | null; owner: string | null; meta?: string };
 
 export function NewLoanFlow({
   pool,
@@ -50,7 +52,38 @@ export function NewLoanFlow({
   const wrongOwner = Boolean(item?.customerId && customer && item.customerId !== customer.id);
 
   const principal = Number(amount);
-  const amountOk = item !== null && !wrongOwner && principal > 0 && principal <= item.max;
+  // NL7: checked while typing. Pesos have at most 2 decimals (centavos)
+  const tooManyDecimals = /\.\d{3,}$/.test(amount.trim());
+  const amountOk = item !== null && !wrongOwner && principal > 0 && principal <= item.max && !tooManyDecimals;
+  const amountHint = !amount.trim()
+    ? undefined
+    : !(principal > 0)
+      ? "Enter an amount above 0"
+      : tooManyDecimals
+        ? "Use at most 2 decimals (centavos)"
+        : item && principal > item.max
+          ? `Above the maximum of ${formatPeso(item.max)}`
+          : undefined;
+
+  // NL2 + NL10: what the Cashier should know about this customer before lending. Shown, not blocked:
+  // the database only blocks blacklisted customers, and CTM gave no rule that stops a loan for an AML flag.
+  const amlFlagged = customer?.aml_status === "flagged";
+  const warnings: string[] = [];
+  if (amlFlagged) warnings.push("AML flagged");
+  if (customer?.history.hasWarnings) {
+    const c = customer.history.counts;
+    warnings.push([c.delinquent && `${c.delinquent} late`, c.reinstated && `${c.reinstated} reinstated`, c.defaulted && `${c.defaulted} defaulted`].filter(Boolean).join(", "));
+  }
+
+  // NL5: something was picked or typed, so leaving would lose it
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const dirty = Boolean(customer || item || amount.trim());
+  // NL6: which steps are done
+  const steps: [string, boolean][] = [
+    ["Customer", Boolean(customer) && !blockedCustomer(customer)],
+    ["Item", item !== null && !wrongOwner],
+    ["Terms", amountOk && Boolean(vault)],
+  ];
   const today = manilaToday();
 
   // #39: ask the database for the terms a moment after the cashier stops typing (or picks another item)
@@ -88,6 +121,9 @@ export function NewLoanFlow({
     : offered;
 
   function onAppraised(saved: SavedAppraisal) {
+    // NL3: an item flagged for counterfeit review can't be pawned until an Admin clears it, so it isn't picked
+    // and isn't added to Available items. It is on the Appraisals page under Awaiting review.
+    if (saved.flagged) return;
     // #38: "Appraise now" saves the item for the customer picked in step 1
     const next = { id: saved.id, label: saved.label, value: saved.value, max: saved.max, customerId: customer?.id ?? null, owner: customer?.full_name ?? null };
     setItems((prev) => [next, ...prev]);
@@ -96,177 +132,246 @@ export function NewLoanFlow({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-      <div className="space-y-5 xl:col-span-2">
-        <Card>
-          <h2 className="text-sm font-semibold text-slate-900">1. Customer</h2>
-          {customer ? (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="font-medium text-slate-900">
-                  {customer.full_name} <span className="font-mono text-xs font-normal text-slate-500">{customerNo(customer.customer_no)}</span>
-                </p>
-                <p className="text-sm text-slate-600">
-                  {customer.contact_number} · {customer.id_type} {customer.id_number}
-                </p>
+    <div className="space-y-4">
+      {/* NL6: a small progress line: which of the 3 steps are done */}
+      <ol aria-label="Steps" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+        {steps.map(([name, done], i) => (
+          <li key={name} className={cx("flex items-center gap-1.5", done ? "font-medium text-emerald-800" : "text-slate-600")}>
+            <span
+              aria-hidden="true"
+              className={cx("flex h-5 w-5 items-center justify-center rounded-full text-xs font-semibold", done ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600")}
+            >
+              {done ? "✓" : i + 1}
+            </span>
+            {name}
+            <span className="sr-only">{done ? "(done)" : "(not done)"}</span>
+          </li>
+        ))}
+      </ol>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <div className="space-y-5 xl:col-span-2">
+          <Card>
+            <h2 className="text-sm font-semibold text-slate-900">1. Customer</h2>
+            {customer ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-medium text-slate-900">
+                    {customer.full_name} <span className="font-mono text-xs font-normal text-slate-500">{customerNo(customer.customer_no)}</span>
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    {customer.contact_number} · {customer.id_type} {customer.id_number}
+                  </p>
+                </div>
+                <button type="button" className="text-sm font-medium text-navy-700 underline" onClick={() => setCustomer(null)}>
+                  Change customer
+                </button>
               </div>
-              <button type="button" className="text-sm font-medium text-navy-700 underline" onClick={() => setCustomer(null)}>
-                Change customer
-              </button>
-            </div>
-          ) : (
-            <CustomerSearch onPick={setCustomer} />
-          )}
-          {customer && <HistoryPanel customer={customer} />}
-        </Card>
+            ) : (
+              <CustomerSearch onPick={setCustomer} />
+            )}
+            {customer && <HistoryPanel customer={customer} />}
+          </Card>
 
-        <Card>
-          <h2 className="text-sm font-semibold text-slate-900">2. Item</h2>
-          {/* D2: the same underline tab look as every page (was two solid navy buttons). They stay buttons, not links,
-              because they only switch what this card shows; nothing is saved and the page address doesn't change */}
-          <div className="mt-3 flex flex-wrap gap-x-1 border-b border-slate-200" role="tablist" aria-label="Choose the item">
-            {(["pool", "new"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                role="tab"
-                aria-selected={itemMode === m} // screen readers say which one is open
-                onClick={() => setItemMode(m)}
-                className={cx(
-                  // -mb-px = the navy line sits on the grey line under the row (same classes as components/view-tabs.tsx)
-                  "-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500",
-                  itemMode === m ? "border-navy-700 font-semibold text-navy-900" : "border-transparent font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900",
-                )}
-              >
-                {/* the name; Available items also shows how many, small and grey like the other tab counts */}
-                {m === "pool" ? "Available items" : "Appraise now"}
-                {m === "pool" && <span className="text-xs font-normal tabular-nums text-slate-500">{offered.length}</span>}
+          <Card>
+            <h2 className="text-sm font-semibold text-slate-900">2. Item</h2>
+            {/* D2: the same underline tab look as every page (was two solid navy buttons). They stay buttons, not links,
+                because they only switch what this card shows; nothing is saved and the page address doesn't change */}
+            <div className="mt-3 flex flex-wrap gap-x-1 border-b border-slate-200" role="tablist" aria-label="Choose the item">
+              {(["pool", "new"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="tab"
+                  aria-selected={itemMode === m} // screen readers say which one is open
+                  onClick={() => setItemMode(m)}
+                  className={cx(
+                    // -mb-px = the navy line sits on the grey line under the row (same classes as components/view-tabs.tsx)
+                    "-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500",
+                    itemMode === m ? "border-navy-700 font-semibold text-navy-900" : "border-transparent font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900",
+                  )}
+                >
+                  {/* the name; Available items also shows how many, small and grey like the other tab counts */}
+                  {m === "pool" ? "Available items" : "Appraise now"}
+                  {m === "pool" && <span className="text-xs font-normal tabular-nums text-slate-500">{offered.length}</span>}
+                </button>
+              ))}
+            </div>
+            {itemMode === "pool" ? (
+              <div className="mt-3">
+                <label htmlFor="item-search" className="sr-only">
+                  Search available items
+                </label>
+                <input
+                  id="item-search"
+                  type="search"
+                  value={itemQuery}
+                  onChange={(e) => setItemQuery(e.target.value)}
+                  placeholder="Search by category, karat, weight or A-number"
+                  className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                />
+                <ul className="mt-2 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
+                  {filteredItems.length === 0 && <li className="px-3 py-3 text-sm text-slate-500">No available items match. Use Appraise now.</li>}
+                  {filteredItems.map((i) => (
+                    <li key={i.id}>
+                      <label className={cx("flex cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm", item?.id === i.id ? "bg-navy-50" : "hover:bg-slate-50")}>
+                        <span className="flex items-start gap-2">
+                          <input type="radio" name="pick-item" className="mt-1" checked={item?.id === i.id} onChange={() => setItem(i)} />
+                          <span>
+                            {i.label}
+                            {/* #38: before a customer is picked, say whose item it is */}
+                            {!customer && i.owner && <span className="ml-2 text-xs text-slate-500">for {i.owner}</span>}
+                            {/* NL8: value + when and by whom it was appraised, to tell similar items apart */}
+                            <span className="block text-xs text-slate-500">
+                              Value {formatPeso(i.value)}
+                              {i.meta ? ` · ${i.meta}` : " · Appraised just now"}
+                            </span>
+                          </span>
+                        </span>
+                        <span className="tabular-nums text-slate-600">max {formatPeso(i.max)}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="mt-3">
+                {/* NL3: the same full form as New appraisal (notes, photos, counterfeit flag), saved for the customer in step 1 */}
+                <AppraisalCalculator prices={prices} ltvPercent={ltvPercent} onSaved={onAppraised} forCustomer={customer} />
+              </div>
+            )}
+          </Card>
+        </div>
+
+        <Card className="xl:self-start">
+          <h2 className="text-sm font-semibold text-slate-900">3. Terms</h2>
+          <ActionForm
+            action={createLoan}
+            className="mt-3 space-y-4"
+            successMessage="Loan created."
+            onSuccess={(s: ActionState) => s.id && router.push(`/dashboard/loans/${s.id}`)}
+          >
+            <input type="hidden" name="customer_id" value={customer?.id ?? ""} />
+            <input type="hidden" name="appraisal_item_id" value={item?.id ?? ""} />
+            {/* #40: a new id for every customer + item pair. Pressing Create twice, or a retry, sends the same id and
+                the database returns the first loan instead of making a second one */}
+            <RequestIdInput key={`${customer?.id ?? ""}|${item?.id ?? ""}`} />
+            <dl className="space-y-1 text-sm">
+              <Row label="Customer" value={customer?.full_name ?? "Not selected"} />
+              <Row label="Item" value={item?.label ?? "Not selected"} />
+              <Row label="Maximum loan" value={item ? formatPeso(item.max) : "-"} />
+            </dl>
+            <Field
+              label="Loan amount (₱)"
+              name="principal_amount"
+              type="number"
+              step="0.01"
+              min="0.01"
+              max={item?.max}
+              required
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              hint={amountHint}
+            />
+            {/* NL7: fills the box only when clicked; the Cashier can still type a lower amount */}
+            {item && !wrongOwner && (
+              <button type="button" onClick={() => setAmount(String(item.max))} className="-mt-2 rounded-sm text-sm font-medium text-navy-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500">
+                Use maximum ({formatPeso(item.max)})
               </button>
-            ))}
-          </div>
-          {itemMode === "pool" ? (
-            <div className="mt-3">
-              <label htmlFor="item-search" className="sr-only">
-                Search available items
-              </label>
-              <input
-                id="item-search"
-                type="search"
-                value={itemQuery}
-                onChange={(e) => setItemQuery(e.target.value)}
-                placeholder="Search by category, karat, weight or A-number"
-                className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-              <ul className="mt-2 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
-                {filteredItems.length === 0 && <li className="px-3 py-3 text-sm text-slate-500">No available items match. Use Appraise now.</li>}
-                {filteredItems.map((i) => (
-                  <li key={i.id}>
-                    <label className={cx("flex cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm", item?.id === i.id ? "bg-navy-50" : "hover:bg-slate-50")}>
-                      <span className="flex items-center gap-2">
-                        <input type="radio" name="pick-item" checked={item?.id === i.id} onChange={() => setItem(i)} />
-                        {i.label}
-                        {/* #38: before a customer is picked, say whose item it is */}
-                        {!customer && i.owner && <span className="text-xs text-slate-500">for {i.owner}</span>}
-                      </span>
-                      <span className="tabular-nums text-slate-600">max {formatPeso(i.max)}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
+            )}
+            {/* #37: a list instead of a free text box, so "vault a", "Vault-A" and typos can't happen any more */}
+            <SelectField
+              label="Vault location"
+              name="vault_location"
+              value={vault}
+              onChange={(e) => setVault(e.target.value)}
+              required
+              hint={vaults.length ? "An Admin can add locations in Settings." : undefined}
+            >
+              {vaults.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </SelectField>
+            {!vaults.length && <Alert tone="warning">No vault location is switched on. An Admin must add one in Settings before a loan can be made.</Alert>}
+            <dl className="space-y-1 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+              <Row label={`Interest (${ratePercent}% per ${TERM_DAYS} days)`} value={principal > 0 ? formatPeso(interest) : "-"} />
+              <Row label="Due" value={formatDate(due)} />
+              <Row label="To redeem on time" value={principal > 0 ? formatPeso(redeemOnTime) : "-"} strong />
+            </dl>
+            {blocked && <Alert tone="danger">This customer is blacklisted. A loan cannot be issued.</Alert>}
+            {/* #38: the picked item belongs to someone else's appraisal */}
+            {wrongOwner && (
+              <Alert tone="danger">
+                This item was appraised for {item?.owner ?? "another customer"}. Pick that customer or another item. An Appraiser or Admin can change the customer on the appraisal.
+              </Alert>
+            )}
+            {/* the two buttons side by side */}
+            <div className="flex flex-wrap items-center gap-2">
+              <SubmitButton
+                pendingLabel="Creating"
+                disabled={!customer || !amountOk || blocked || !vault}
+                confirm={{
+                  title: "Review the loan",
+                  message: "Check every line with the customer before you confirm.",
+                  confirmLabel: "Create loan",
+                  tone: "primary",
+                  locked: true,
+                  details: [
+                    ["Customer", customer?.full_name ?? ""],
+                    ["Item", item?.label ?? ""],
+                    ["Loan amount", formatPeso(principal)],
+                    ["Interest", formatPeso(interest)],
+                    ["Due", formatDate(due)], // NL4: "Dec 10, 2026"
+                    ["To redeem on time", formatPeso(redeemOnTime)],
+                    ["Vault", vault],
+                    // NL10: the warnings again, right before the loan is made
+                    ...(warnings.length ? ([["Warnings", warnings.join(" · ")]] as [string, string][]) : []),
+                  ],
+                }}
+              >
+                Review and create loan
+              </SubmitButton>
+              {/* NL5: Cancel. With nothing filled in it just leaves; otherwise it asks first */}
+              {dirty ? (
+                <button type="button" onClick={() => setConfirmLeave(true)} className={buttonClasses("secondary")}>
+                  Cancel
+                </button>
+              ) : (
+                <Link href="/dashboard/loans" className={buttonClasses("secondary")}>
+                  Cancel
+                </Link>
+              )}
             </div>
-          ) : (
-            <div className="mt-3">
-              <AppraisalCalculator prices={prices} ltvPercent={ltvPercent} onSaved={onAppraised} compact forCustomer={customer} />
-            </div>
-          )}
+            {confirmLeave && (
+              <div role="alertdialog" aria-labelledby="discard-loan-title" aria-describedby="discard-loan-text" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <p id="discard-loan-title" className="font-semibold">
+                  Discard this loan?
+                </p>
+                <p id="discard-loan-text" className="mt-0.5">
+                  What you picked and typed will be lost. No loan has been made. An appraisal you saved with Appraise now is kept.
+                </p>
+                <div className="mt-3 flex flex-wrap justify-end gap-2">
+                  <button type="button" autoFocus onClick={() => setConfirmLeave(false)} className={buttonClasses("secondary", "sm")}>
+                    Continue editing
+                  </button>
+                  <button type="button" onClick={() => router.push("/dashboard/loans")} className={buttonClasses("danger", "sm")}>
+                    Discard
+                  </button>
+                </div>
+              </div>
+            )}
+          </ActionForm>
         </Card>
       </div>
-
-      <Card className="xl:self-start">
-        <h2 className="text-sm font-semibold text-slate-900">3. Terms</h2>
-        <ActionForm
-          action={createLoan}
-          className="mt-3 space-y-4"
-          successMessage="Loan created."
-          onSuccess={(s: ActionState) => s.id && router.push(`/dashboard/loans/${s.id}`)}
-        >
-          <input type="hidden" name="customer_id" value={customer?.id ?? ""} />
-          <input type="hidden" name="appraisal_item_id" value={item?.id ?? ""} />
-          {/* #40: a new id for every customer + item pair. Pressing Create twice, or a retry, sends the same id and
-              the database returns the first loan instead of making a second one */}
-          <RequestIdInput key={`${customer?.id ?? ""}|${item?.id ?? ""}`} />
-          <dl className="space-y-1 text-sm">
-            <Row label="Customer" value={customer?.full_name ?? "Not selected"} />
-            <Row label="Item" value={item?.label ?? "Not selected"} />
-            <Row label="Maximum loan" value={item ? formatPeso(item.max) : "-"} />
-          </dl>
-          <Field
-            label="Loan amount (₱)"
-            name="principal_amount"
-            type="number"
-            step="0.01"
-            min="0.01"
-            max={item?.max}
-            required
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            hint={item && principal > item.max ? `Above the maximum of ${formatPeso(item.max)}` : undefined}
-          />
-          {/* #37: a list instead of a free text box, so "vault a", "Vault-A" and typos can't happen any more */}
-          <SelectField
-            label="Vault location"
-            name="vault_location"
-            value={vault}
-            onChange={(e) => setVault(e.target.value)}
-            required
-            hint={vaults.length ? "An Admin can add locations in Settings." : undefined}
-          >
-            {vaults.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </SelectField>
-          {!vaults.length && <Alert tone="warning">No vault location is switched on. An Admin must add one in Settings before a loan can be made.</Alert>}
-          <dl className="space-y-1 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-            <Row label={`Interest (${ratePercent}% per ${TERM_DAYS} days)`} value={principal > 0 ? formatPeso(interest) : "-"} />
-            <Row label="Due" value={due} />
-            <Row label="To redeem on time" value={principal > 0 ? formatPeso(redeemOnTime) : "-"} strong />
-          </dl>
-          {blocked && <Alert tone="danger">This customer is blacklisted. A loan cannot be issued.</Alert>}
-          {/* #38: the picked item belongs to someone else's appraisal */}
-          {wrongOwner && (
-            <Alert tone="danger">
-              This item was appraised for {item?.owner ?? "another customer"}. Pick that customer or another item. An Appraiser or Admin can change the customer on the appraisal.
-            </Alert>
-          )}
-          <SubmitButton
-            pendingLabel="Creating"
-            disabled={!customer || !amountOk || blocked || !vault}
-            confirm={{
-              title: "Review the loan",
-              message: "Check every line with the customer before you confirm.",
-              confirmLabel: "Create loan",
-              tone: "primary",
-              locked: true,
-              details: [
-                ["Customer", customer?.full_name ?? ""],
-                ["Item", item?.label ?? ""],
-                ["Loan amount", formatPeso(principal)],
-                ["Interest", formatPeso(interest)],
-                ["Due", due],
-                ["To redeem on time", formatPeso(redeemOnTime)],
-                ["Vault", vault],
-              ],
-            }}
-          >
-            Review and create loan
-          </SubmitButton>
-        </ActionForm>
-      </Card>
     </div>
   );
+}
+
+// NL6: a blacklisted customer can't get a loan, so the Customer step isn't "done"
+function blockedCustomer(c: CustomerHit | null) {
+  return Boolean(c?.is_blacklisted);
 }
 
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
@@ -283,6 +388,12 @@ function HistoryPanel({ customer }: { customer: CustomerHit }) {
   return (
     <div className="mt-4 space-y-3">
       {customer.is_blacklisted && <Alert tone="danger">Blacklisted{customer.blacklist_reason ? `: ${customer.blacklist_reason}` : ""}.</Alert>}
+      {/* NL2: shown, not blocked. The reason is on the customer's profile */}
+      {customer.aml_status === "flagged" && (
+        <Alert tone="warning" title="AML identity check flagged this customer">
+          Check the customer&apos;s ID and profile before you lend. A loan is still allowed.
+        </Alert>
+      )}
       {hasWarnings && (
         <Alert tone="warning">
           History warning: {[counts.delinquent && `${counts.delinquent} late`, counts.reinstated && `${counts.reinstated} reinstated`, counts.defaulted && `${counts.defaulted} defaulted`]
@@ -389,6 +500,7 @@ function CustomerSearch({ onPick }: { onPick: (c: CustomerHit) => void }) {
             </span>
             <span className="flex gap-1.5">
               {c.is_blacklisted && <Badge tone="danger">Blacklisted</Badge>}
+              {c.aml_status === "flagged" && <Badge tone="warning">AML flagged</Badge>}
               {c.history.hasWarnings && <Badge tone="warning">Warnings</Badge>}
               <ScoreBadge score={c.history.score} tier={c.history.tier} />
             </span>
