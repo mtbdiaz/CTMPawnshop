@@ -2,8 +2,8 @@ import { z } from "zod";
 
 const categories = ["earrings", "ring", "pendant", "chain", "bracelet", "pendant_with_chain", "others"] as const;
 
-// Items 2, 3, 9: appraisal calculator inputs. No customer (attached at pawn
-// time) and no purity test (the per-karat price already encodes fineness).
+// Items 2, 3, 9: the item fields of an appraisal (used by New appraisal and Edit appraisal).
+// No purity test (the per-karat price already encodes fineness).
 export const appraisalSchema = z
   .object({
     category: z.enum(categories, { message: "Pick a category" }),
@@ -16,5 +16,11 @@ export const appraisalSchema = z
     photo_paths: z.array(z.string()).default([]),
     flag_counterfeit: z.boolean().default(false),
   });
+
+// #38: a NEW appraisal also says which customer the item belongs to (owner decision, Nov 10, 2026).
+// Edit appraisal doesn't send it: the customer is changed with its own button on the appraisal page.
+export const newAppraisalSchema = appraisalSchema.extend({
+  customer_id: z.string({ message: "Choose the customer" }).uuid("Choose the customer"),
+});
 
 export type AppraisalInput = z.infer<typeof appraisalSchema>;

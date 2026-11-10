@@ -1,4 +1,4 @@
-import { appraisalNo } from "@/lib/ref-numbers"; // #29: the short appraisal number (A-0045)
+import { appraisalNo, customerNo } from "@/lib/ref-numbers"; // #29: the short appraisal number (A-0045); #38: C-0012
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { hasRole } from "@/lib/auth/roles";
@@ -11,6 +11,7 @@ import { Icon } from "@/components/icons";
 import { ArchiveForm } from "@/components/archive-controls";
 import { ResolveForm } from "./resolve-form";
 import { EditAppraisalForm } from "./edit-form";
+import { SetCustomerForm } from "./set-customer-form"; // #38
 
 // C8: the browser tab shows the item (e.g. "Ring, 18K, 1.899 g · Appraisal"), never customer details
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -33,7 +34,7 @@ export default async function AppraisalDetailPage({ params }: { params: Promise<
   // C6: the staff on this record. Staff can only read names the database allows
   // (all for Admin; their own for others until Matt #11), so we never guess a name.
   const staffIds = [appraisal.appraised_by, appraisal.counterfeit_resolved_by].filter((x): x is string => Boolean(x));
-  const [photoUrls, { data: loan }, { data: staff }, { data: settings }] = await Promise.all([
+  const [photoUrls, { data: loan }, { data: staff }, { data: settings }, { data: owner }] = await Promise.all([
     Promise.all(
       appraisal.photo_paths.map(async (path) => {
         const { data } = await supabase.storage.from("item-photos").createSignedUrl(path, 3600);
@@ -43,7 +44,12 @@ export default async function AppraisalDetailPage({ params }: { params: Promise<
     supabase.from("loans").select("id, ticket_number, status").eq("appraisal_item_id", id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     staffIds.length ? supabase.from("profiles").select("id, full_name").in("id", staffIds) : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
     supabase.from("system_settings").select("price_24k, price_21k, price_18k, ltv_percent").eq("id", 1).maybeSingle(), // for the Edit preview
+    // #38: the customer the item belongs to (older appraisals may have none)
+    appraisal.customer_id
+      ? supabase.from("customers").select("id, full_name, customer_no").eq("id", appraisal.customer_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
+  const ownerText = owner ? `${owner.full_name} (${customerNo(owner.customer_no)})` : null; // "Ana Cruz (C-0012)"
   const names = new Map((staff ?? []).map((p) => [p.id, p.full_name]));
   const who = (staffId: string | null) => (!staffId ? "Not recorded" : staffId === user.id ? `${names.get(staffId) ?? "You"} (you)` : (names.get(staffId) ?? "Other staff")); // same words as the list
 
@@ -55,6 +61,7 @@ export default async function AppraisalDetailPage({ params }: { params: Promise<
   const cleared = appraisal.is_counterfeit_risk && appraisal.counterfeit_resolution === "cleared";
   const canEdit = editable && hasRole(role, ["appraiser"]) && Boolean(settings);
   const canArchive = available && hasRole(role, ["appraiser"]);
+  const canSetCustomer = available && hasRole(role, ["appraiser"]); // #38: Appraiser or Admin, only while not pawned (the database checks too)
   const title = `${categoryLabel(appraisal.category, appraisal.category_other)}, ${appraisal.karat}K, ${appraisal.weight_grams} g`;
   const photos = photoUrls.filter((u): u is string => Boolean(u));
 
@@ -123,6 +130,7 @@ export default async function AppraisalDetailPage({ params }: { params: Promise<
                 { label: "Weight", value: `${appraisal.weight_grams} g` },
                 { label: "Price used", value: `${formatPeso(appraisal.gold_price_used)} per gram` },
                 { label: "LTV used", value: `${appraisal.ltv_percent_used}%` },
+                { label: "Customer", value: ownerText ?? "Not recorded" }, // #38: who brought the item in (older appraisals have none)
                 { label: "Appraised by", value: who(appraisal.appraised_by) }, // C6
                 { label: "Notes", value: appraisal.condition_notes?.trim() || "None" }, // C9: never a blank
               ]}
@@ -131,7 +139,7 @@ export default async function AppraisalDetailPage({ params }: { params: Promise<
           </Card>
 
           {/* C7: Edit and Archive are closed by default (like Admin actions on the customer profile), so the page stays short */}
-          {(canEdit || canArchive) && (
+          {(canEdit || canArchive || canSetCustomer) && (
             <section>
               <SectionTitle description="Only while the item is not pawned. Changes are saved in the audit trail.">Appraisal actions</SectionTitle>
               <Card padded={false} className="divide-y divide-slate-200">
@@ -161,6 +169,23 @@ export default async function AppraisalDetailPage({ params }: { params: Promise<
                         cleared={cleared}
                         canChangeMaterial={role === "admin"} // A3: on a cleared item only an Admin may (the server checks too)
                       />
+                    </div>
+                  </details>
+                )}
+                {canSetCustomer && (
+                  <details className="group">
+                    {/* #38: put or correct who the item belongs to */}
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500 [&::-webkit-details-marker]:hidden">
+                      <span>
+                        <span className="block font-medium text-slate-900">{ownerText ? "Change customer" : "Set customer"}</span>
+                        <span className="block text-sm text-slate-500">
+                          {ownerText ? "If the item was saved under the wrong person. Only that customer can pawn it." : "This older appraisal has no customer yet, so anyone can pawn it."}
+                        </span>
+                      </span>
+                      <Icon name="chevron-down" className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
+                    </summary>
+                    <div className="border-t border-slate-100 px-5 py-4">
+                      <SetCustomerForm appraisalId={appraisal.id} updatedAt={appraisal.updated_at} currentName={ownerText} />
                     </div>
                   </details>
                 )}

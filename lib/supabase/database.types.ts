@@ -1555,6 +1555,15 @@ export type Database = {
         Returns: undefined
       }
       reinstate_loan: { Args: { p_loan_id: string }; Returns: undefined }
+      reminder_queue: {
+        Args: { p_lead_days?: number }
+        Returns: {
+          customer_id: string
+          id: string
+          logs: Json
+          maturity_date: string
+        }[]
+      }
       renew_loan: {
         Args: {
           p_expected_maturity?: string
@@ -1577,6 +1586,14 @@ export type Database = {
       search_customers_fuzzy: {
         Args: { p_limit?: number; p_q: string }
         Returns: { id: string; similarity: number }[]
+      }
+      set_appraisal_customer: {
+        Args: {
+          p_appraisal_id: string
+          p_customer_id: string
+          p_expected_updated_at?: string
+        }
+        Returns: undefined
       }
       submit_inventory_audit: {
         Args: { p_items: Json; p_notes: string }

@@ -14,7 +14,8 @@ import { AppraisalCalculator, type SavedAppraisal } from "../../appraisals/appra
 import { createLoan, type ActionState } from "../actions";
 import { previewLoan, searchCustomers, type CustomerHit, type LoanPreview } from "./actions";
 
-export type PoolItem = { id: string; label: string; value: number; max: number };
+// customerId / owner: #38, the customer the item was appraised for (null = an older appraisal, anyone can pawn it)
+export type PoolItem = { id: string; label: string; value: number; max: number; customerId: string | null; owner: string | null };
 
 export function NewLoanFlow({
   pool,
@@ -45,8 +46,11 @@ export function NewLoanFlow({
   // #39: the terms as the database works them out, and which item + amount they are for
   const [preview, setPreview] = useState<{ key: string; terms: LoanPreview } | null>(null);
 
+  // #38: an item appraised for one customer can only be pawned by that customer (the database refuses it too)
+  const wrongOwner = Boolean(item?.customerId && customer && item.customerId !== customer.id);
+
   const principal = Number(amount);
-  const amountOk = item !== null && principal > 0 && principal <= item.max;
+  const amountOk = item !== null && !wrongOwner && principal > 0 && principal <= item.max;
   const today = manilaToday();
 
   // #39: ask the database for the terms a moment after the cashier stops typing (or picks another item)
@@ -75,14 +79,17 @@ export function NewLoanFlow({
   const blocked = customer?.is_blacklisted ?? false;
 
   const itemRef = parseRefNo(itemQuery); // #29: "a45" / "A-0045" finds that one item
+  // #38: once a customer is picked, the list shows that customer's items and the older ones with no customer
+  const offered = customer ? items.filter((i) => !i.customerId || i.customerId === customer.id) : items;
   const filteredItems = itemQuery.trim()
-    ? items.filter((i) =>
+    ? offered.filter((i) =>
         itemRef?.kind === "A" ? i.label.endsWith(appraisalNo(itemRef.n)) : i.label.toLowerCase().includes(itemQuery.trim().toLowerCase()),
       )
-    : items;
+    : offered;
 
   function onAppraised(saved: SavedAppraisal) {
-    const next = { id: saved.id, label: saved.label, value: saved.value, max: saved.max };
+    // #38: "Appraise now" saves the item for the customer picked in step 1
+    const next = { id: saved.id, label: saved.label, value: saved.value, max: saved.max, customerId: customer?.id ?? null, owner: customer?.full_name ?? null };
     setItems((prev) => [next, ...prev]);
     setItem(next);
     setItemMode("pool");
@@ -133,7 +140,7 @@ export function NewLoanFlow({
               >
                 {/* the name; Available items also shows how many, small and grey like the other tab counts */}
                 {m === "pool" ? "Available items" : "Appraise now"}
-                {m === "pool" && <span className="text-xs font-normal tabular-nums text-slate-500">{items.length}</span>}
+                {m === "pool" && <span className="text-xs font-normal tabular-nums text-slate-500">{offered.length}</span>}
               </button>
             ))}
           </div>
@@ -158,6 +165,8 @@ export function NewLoanFlow({
                       <span className="flex items-center gap-2">
                         <input type="radio" name="pick-item" checked={item?.id === i.id} onChange={() => setItem(i)} />
                         {i.label}
+                        {/* #38: before a customer is picked, say whose item it is */}
+                        {!customer && i.owner && <span className="text-xs text-slate-500">for {i.owner}</span>}
                       </span>
                       <span className="tabular-nums text-slate-600">max {formatPeso(i.max)}</span>
                     </label>
@@ -167,7 +176,7 @@ export function NewLoanFlow({
             </div>
           ) : (
             <div className="mt-3">
-              <AppraisalCalculator prices={prices} ltvPercent={ltvPercent} onSaved={onAppraised} compact />
+              <AppraisalCalculator prices={prices} ltvPercent={ltvPercent} onSaved={onAppraised} compact forCustomer={customer} />
             </div>
           )}
         </Card>
@@ -226,6 +235,12 @@ export function NewLoanFlow({
             <Row label="To redeem on time" value={principal > 0 ? formatPeso(redeemOnTime) : "-"} strong />
           </dl>
           {blocked && <Alert tone="danger">This customer is blacklisted. A loan cannot be issued.</Alert>}
+          {/* #38: the picked item belongs to someone else's appraisal */}
+          {wrongOwner && (
+            <Alert tone="danger">
+              This item was appraised for {item?.owner ?? "another customer"}. Pick that customer or another item. An Appraiser or Admin can change the customer on the appraisal.
+            </Alert>
+          )}
           <SubmitButton
             pendingLabel="Creating"
             disabled={!customer || !amountOk || blocked || !vault}

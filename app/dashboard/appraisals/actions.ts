@@ -3,10 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server"; // runs something after the answer was sent, so the user doesn't wait for it
 import { cleanUpUnusedPhotos } from "@/lib/appraisal/photo-cleanup"; // #25
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { allowRequest, TOO_MANY } from "@/lib/rate-limit"; // #22: rate limiting
-import { appraisalSchema } from "@/lib/validation/appraisal";
+import { appraisalSchema, newAppraisalSchema } from "@/lib/validation/appraisal";
+import { parseRefNo } from "@/lib/ref-numbers"; // #38: "C-0012" finds that customer
+import { maskId } from "@/lib/customers/id-privacy"; // #38: only the last 4 of an ID number reach the browser
 import { validationFailure, type FieldErrors } from "@/lib/validation/errors";
 import { calculateKaratValuation } from "@/lib/appraisal/valuation";
 import { compareAppraisal } from "@/lib/appraisal/edit"; // A2/A3: what an edit really changed
@@ -18,8 +20,9 @@ export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?:
 const TRY_AGAIN = "Please try again. If it keeps happening, tell an Admin.";
 const CHANGED_WHILE_EDITING = "Someone changed this appraisal while you had it open, so nothing was saved. Reload the page and check the latest details.";
 
-function parse(formData: FormData) {
-  return appraisalSchema.safeParse({
+// the item fields, read from the form (the same for New appraisal and Edit appraisal)
+function itemFields(formData: FormData) {
+  return {
     category: formData.get("category"),
     category_other: formData.get("category_other") ?? undefined,
     karat: formData.get("karat"),
@@ -27,7 +30,46 @@ function parse(formData: FormData) {
     condition_notes: formData.get("condition_notes") ?? undefined,
     photo_paths: formData.getAll("photo_paths").map(String).filter(Boolean),
     flag_counterfeit: formData.get("flag_counterfeit") === "on",
-  });
+  };
+}
+// Edit appraisal: the item fields only
+function parse(formData: FormData) {
+  return appraisalSchema.safeParse(itemFields(formData));
+}
+// #38: New appraisal: the item fields + the customer the item belongs to
+function parseNew(formData: FormData) {
+  return newAppraisalSchema.safeParse({ ...itemFields(formData), customer_id: formData.get("customer_id") || undefined });
+}
+
+// #38: one customer in the "Customer" picker on New appraisal and "Change customer"
+export type CustomerOption = { id: string; customer_no: number; full_name: string; id_hint: string }; // id_hint = "UMID •••• 0418"
+
+// #38: finds customers for the picker by name, phone or C-number. It gives back only what is needed to pick the
+// right person: the name, the C-number and the last 4 of the ID (to tell two people with the same name apart).
+// No phone number, address or full ID. { limited: true } = over 60 searches a minute (#22).
+export async function findCustomersForAppraisal(query: string): Promise<CustomerOption[] | { limited: true }> {
+  await requireRole(["appraiser", "cashier", "admin"]); // the roles that can save an appraisal
+  const q = query.trim();
+  if (q.length < 2) return [];
+  if (!(await allowRequest("search"))) return { limited: true };
+  const safe = q.replace(/[%,()*\\"]/g, " ").trim().slice(0, 60); // characters that would break the filter
+  if (!safe) return [];
+  const ref = parseRefNo(q); // a typed customer number finds exactly that customer
+  let find = createAdminClient() // id_number is not readable with a staff login; the server reads it and masks it below
+    .from("customers")
+    .select("id, customer_no, full_name, id_type, id_number")
+    .is("archived_at", null);
+  const digits = safe.replace(/[\s-]/g, "");
+  find =
+    ref?.kind === "C"
+      ? find.eq("customer_no", ref.n)
+      : find.or([`full_name.ilike.%${safe}%`].concat(/^\d{4,}$/.test(digits) ? [`contact_number.ilike.%${digits}%`] : []).join(","));
+  const { data, error } = await find.order("full_name").limit(8);
+  if (error) {
+    console.error("findCustomersForAppraisal failed:", error.message); // details for the developers
+    return [];
+  }
+  return (data ?? []).map((c) => ({ id: c.id, customer_no: c.customer_no, full_name: c.full_name, id_hint: `${c.id_type} ${maskId(c.id_number)}` }));
 }
 
 async function valuationFor(karat: number, weight: number) {
@@ -49,12 +91,16 @@ async function valuationFor(karat: number, weight: number) {
 export async function createAppraisal(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const user = await requireRole(["appraiser", "cashier", "admin"]);
   if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
-  const parsed = parse(formData);
+  const parsed = parseNew(formData); // #38: the item fields + the customer
   if (!parsed.success) return validationFailure(parsed.error);
   const d = parsed.data;
 
   const v = await valuationFor(d.karat, d.weight_grams);
   if ("error" in v) return { error: v.error };
+
+  // #38: the customer must exist and not be archived (the database checks this too since migration 0040)
+  const { data: owner } = await v.supabase.from("customers").select("id").eq("id", d.customer_id).is("archived_at", null).maybeSingle();
+  if (!owner) return { error: "Choose the customer this item belongs to.", fieldErrors: { customer_id: "Customer not found. Choose the customer again." } };
 
   const { data, error } = await v.supabase
     .from("appraisal_items")
@@ -73,6 +119,7 @@ export async function createAppraisal(_prev: ActionState, formData: FormData): P
       is_counterfeit_risk: d.flag_counterfeit,
       counterfeit_resolution: d.flag_counterfeit ? "pending" : null,
       appraised_by: user.id,
+      customer_id: d.customer_id, // #38: who brought the item in
     })
     .select("id")
     .single();
@@ -207,4 +254,30 @@ export async function resolveCounterfeitFlag(_prev: ActionState, formData: FormD
 
   revalidatePath(`/dashboard/appraisals/${appraisalId}`);
   return { success: true, appraisalId };
+}
+
+// #38: put or correct the customer on an appraisal that is not pawned yet (Appraiser or Admin).
+// The database function set_appraisal_customer (migration 0039) does the checks and the change; a direct change
+// of the customer stays locked.
+export async function setAppraisalCustomer(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["appraiser", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22
+  const id = String(formData.get("appraisal_id") ?? "");
+  const customerId = String(formData.get("customer_id") ?? "");
+  const loadedAt = String(formData.get("updated_at") ?? ""); // when the page loaded the appraisal
+  const isId = (x: string) => /^[0-9a-f-]{36}$/i.test(x);
+  if (!isId(id)) return { error: "Appraisal not found. Reload the page." };
+  if (!isId(customerId)) return { error: "Choose the customer first.", fieldErrors: { customer_id: "Choose the customer" } };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_appraisal_customer", { p_appraisal_id: id, p_customer_id: customerId, p_expected_updated_at: loadedAt || undefined });
+  if (error) {
+    if (error.code === "P0001") return { error: error.message }; // the database said why, in plain words
+    if (error.code === "42501") return { error: "Only an Appraiser or an Admin can change the customer of an appraisal." };
+    console.error("setAppraisalCustomer failed:", error.message); // A5: details stay in the server log
+    return { error: `Couldn't change the customer, so nothing was changed. ${TRY_AGAIN}` };
+  }
+  revalidatePath("/dashboard/appraisals");
+  revalidatePath(`/dashboard/appraisals/${id}`);
+  return { success: true, appraisalId: id };
 }
