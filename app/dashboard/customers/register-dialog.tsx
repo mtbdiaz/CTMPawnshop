@@ -12,7 +12,21 @@ import { createCustomer } from "./actions";
 
 // U2: "Register customer" is one button in the page header. It opens the SAME form in a popup,
 // so the list isn't pushed down by a big card. Links with ?new=1 (Dashboard quick action) open it straight away.
-export function RegisterCustomerDialog({ defaultOpen }: { defaultOpen?: boolean }) {
+// RC2: New Loan uses the same popup with its own button words, the searched name filled in, and onRegistered,
+// which gets the new customer's id (the popup then closes instead of opening the profile)
+export function RegisterCustomerDialog({
+  defaultOpen,
+  label = "Register customer",
+  small = false,
+  defaultName,
+  onRegistered,
+}: {
+  defaultOpen?: boolean;
+  label?: string;
+  small?: boolean; // a smaller, secondary-looking button (New Loan)
+  defaultName?: string;
+  onRegistered?: (customerId: string) => void;
+}) {
   const ref = useRef<HTMLDialogElement>(null); // the <dialog> element
   const keepEditing = useRef<HTMLButtonElement>(null); // F9: the "Continue editing" button (gets focus)
   const [open, setOpen] = useState(false); // true while the popup is showing
@@ -47,9 +61,9 @@ export function RegisterCustomerDialog({ defaultOpen }: { defaultOpen?: boolean 
   return (
     <>
       {/* the header button */}
-      <button type="button" onClick={show} className={buttonClasses("primary")}>
+      <button type="button" onClick={show} className={small ? buttonClasses("secondary", "sm") : buttonClasses("primary")}>
         <Icon name="plus" className="h-4 w-4" />
-        Register customer
+        {label}
       </button>
 
       {/* the popup. Shadow is allowed because it floats above the page.
@@ -120,10 +134,24 @@ export function RegisterCustomerDialog({ defaultOpen }: { defaultOpen?: boolean 
         {/* the form. Only drawn while open, so it starts empty each time.
             onInput / onChange catch any typing or picking inside, to know there's something to lose (F9) */}
         <div className="px-5 py-5" onInput={() => setDirty(true)} onChange={() => setDirty(true)}>
-          {open && <CustomerForm action={createCustomer} onCancel={requestClose} />}
+          {open && (
+            <CustomerForm
+              action={createCustomer}
+              onCancel={requestClose}
+              defaultName={defaultName}
+              afterRegister={
+                onRegistered
+                  ? (id) => {
+                      ref.current?.close(); // close the popup first, then hand the new customer back
+                      onRegistered(id);
+                    }
+                  : undefined
+              }
+            />
+          )}
         </div>
       {/* end of the popup */}
       </dialog>
     </>
   );
-}
+}

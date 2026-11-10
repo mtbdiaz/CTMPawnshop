@@ -418,12 +418,16 @@ export type Database = {
           customer_no: number
           date_of_birth: string | null
           email: string | null
+          first_name: string | null
           full_name: string
           id: string
           id_number: string
           id_type: string
           is_blacklisted: boolean
           is_demo: boolean
+          last_name: string | null
+          middle_name: string | null
+          suffix: string | null
           updated_at: string
         }
         Insert: {
@@ -441,12 +445,16 @@ export type Database = {
           customer_no?: number
           date_of_birth?: string | null
           email?: string | null
+          first_name?: string | null
           full_name: string
           id?: string
           id_number: string
           id_type: string
           is_blacklisted?: boolean
           is_demo?: boolean
+          last_name?: string | null
+          middle_name?: string | null
+          suffix?: string | null
           updated_at?: string
         }
         Update: {
@@ -464,12 +472,16 @@ export type Database = {
           customer_no?: number
           date_of_birth?: string | null
           email?: string | null
+          first_name?: string | null
           full_name?: string
           id?: string
           id_number?: string
           id_type?: string
           is_blacklisted?: boolean
           is_demo?: boolean
+          last_name?: string | null
+          middle_name?: string | null
+          suffix?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1275,11 +1287,15 @@ export type Database = {
           p_address: string
           p_contact_number: string
           p_expected_updated_at?: string
+          p_first_name?: string
           p_full_name: string
           p_id: string
           p_id_number: string
           p_id_type: string
+          p_last_name?: string
+          p_middle_name?: string
           p_reason: string
+          p_suffix?: string
         }
         Returns: undefined
       }

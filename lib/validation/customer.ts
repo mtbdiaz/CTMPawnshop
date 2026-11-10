@@ -86,7 +86,36 @@ const realDateMessage = "Enter a real date of birth (not in the future or before
 
 // F4: length limits, long enough for real Filipino names and addresses, short enough to stop junk.
 // The same numbers are used as maxLength on the form boxes.
-export const MAX = { full_name: 120, address: 300, email: 254, id_number: 30 } as const;
+export const MAX = { full_name: 120, name_part: 55, address: 300, email: 254, id_number: 30 } as const; // NP: 55 per name part (migration 0042)
+
+// NP (Nov 11, Matt/Wush): every customer form asks for the name in parts. First and Last are required, Middle and
+// Suffix are optional. The database (migration 0042) builds full_name from the parts with the same rule as joinName,
+// so lists, search, receipts and reports keep showing one name.
+export const SUFFIXES = ["Jr.", "Sr.", "II", "III", "IV", "V"] as const; // the only suffixes allowed (same list as the database)
+const tidy = (v: string) => v.trim().replace(/\s+/g, " "); // F8: no spaces at the ends, one space inside
+
+// "Juan" + "Bautista" + "Dela Cruz" + "Jr." -> "Juan B. Dela Cruz Jr." (the middle name as its initial).
+// Same as ctm_join_name in the database, so the screen shows exactly what will be saved.
+export function joinName(first: string, middle: string | null | undefined, last: string, suffix: string | null | undefined): string {
+  const m = tidy(middle ?? ""); // the middle name, tidied
+  return [tidy(first), m ? `${m.charAt(0).toUpperCase()}.` : "", tidy(last), tidy(suffix ?? "")] // the four pieces
+    .filter(Boolean) // drop the empty ones
+    .join(" "); // one space between them
+}
+
+// one name box: required or optional, tidied, at most 55 characters
+const namePart = (label: string, required: boolean) => {
+  const base = z.string().trim().max(MAX.name_part, `${label} can be at most ${MAX.name_part} characters`).transform(tidy); // F4: length limit, F8: tidy
+  return required ? z.string().trim().min(1, `${label} is required`).pipe(base) : base.optional().default(""); // required = can't be empty; optional = left out is the same as empty
+};
+// the four name boxes, shared by Register and the Admin identity correction
+export const nameFields = {
+  first_name: namePart("First name", true),
+  middle_name: namePart("Middle name", false),
+  last_name: namePart("Last name", true),
+  // empty = no suffix; anything else must be one from the list
+  suffix: z.union([z.literal(""), z.enum(SUFFIXES)], { error: "Pick a suffix from the list" }).optional().default(""),
+};
 const adultMessage = `The customer must be at least ${MIN_AGE} years old to pawn`;
 
 // F15 + F16: used for both Register and Edit contact details. Required (email is the only optional field),
@@ -101,9 +130,9 @@ export const requiredDateOfBirthSchema = z
 // PB-7 AC2: missing required fields block submission.
 // This is the rule set for the Register customer form.
 export const customerSchema = z.object({
-  // F8: extra spaces inside the name are turned into one ("Juan  Dela   Cruz" -> "Juan Dela Cruz").
+  // NP: the name in parts. F8: extra spaces inside become one ("Dela   Cruz" -> "Dela Cruz").
   // Any letters, hyphens, apostrophes and periods are allowed (e.g. Ma. Teresa, O'Brien, Dela Cruz-Santos).
-  full_name: z.string().trim().min(1, "Full name is required").max(MAX.full_name, `Full name can be at most ${MAX.full_name} characters`).transform((v) => v.replace(/\s+/g, " ")), // F4: length limit
+  ...nameFields,
   address: z.string().trim().min(1, "Address is required").max(MAX.address, `Address can be at most ${MAX.address} characters`), // F4: length limit
   contact_number: phPhoneSchema, // uses the shared phone rule above
   email: z.string().trim().max(MAX.email, `Email can be at most ${MAX.email} characters`).email("Enter a valid email").optional().or(z.literal("")), // F4: length limit
@@ -118,4 +147,4 @@ export const customerSchema = z.object({
   });
 
 // Creates a TypeScript type from the rules, so other code knows the shape of the data
-export type CustomerInput = z.infer<typeof customerSchema>;
+export type CustomerInput = z.infer<typeof customerSchema>;
