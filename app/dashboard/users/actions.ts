@@ -72,7 +72,7 @@ export async function editAccount(
   if (!userId) return { error: "Missing account id" };
   if (!parsed.success) return validationFailure(parsed.error);
   if (userId === currentUser.id && (!parsed.data.is_active || parsed.data.role !== "admin")) {
-    return { error: "You can't deactivate or remove Admin rights from your own account — ask another Admin." };
+    return { error: "You can't deactivate or remove Admin rights from your own account. Ask another Admin." };
   }
 
   const admin = createAdminClient();

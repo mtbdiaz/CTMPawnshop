@@ -58,7 +58,8 @@ export default async function AnalyticsDashboard() {
                   <span className="h-6 rounded-md bg-slate-100 print:border print:border-slate-300">
                     <span
                       // F4: one solid navy colour, no gradient
-                      className="block h-6 rounded-md bg-navy-700"                      
+                      // S5: print-color-adjust = the bar also prints when "Background graphics" is off in the print box
+                      className="block h-6 rounded-md bg-navy-700 [-webkit-print-color-adjust:exact] [print-color-adjust:exact]"
                       style={{ width: `${Math.max(2, (m.totalPrincipal / maxPrincipal) * 100)}%` }}
                     />
                   </span>

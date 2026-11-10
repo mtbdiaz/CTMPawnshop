@@ -21,6 +21,7 @@ import {
   pageParam,
 } from "@/components/ui";
 import { AdminEditCashEntryForm, CashEntryForm } from "./cash-entry-form";
+import { ArchiveForm } from "@/components/archive-controls"; // S4
 
 export const metadata = { title: "Cash & ledger" };
 
@@ -121,6 +122,16 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
                             <summary className="cursor-pointer rounded-md border border-slate-300 px-2.5 py-1 text-sm">Edit (Admin)</summary>
                             <div className="mt-2 w-64">
                               <AdminEditCashEntryForm id={entry.id} amount={Number(entry.amount)} description={entry.description ?? ""} />
+                            </div>
+                          </details>
+                        )}
+                        {/* S4: a manual entry made by mistake can be archived (Admin, with a reason). Entries that belong
+                            to a loan can't: those are corrected through the loan */}
+                        {isAdmin && !entry.related_loan_id && (
+                          <details className="text-left">
+                            <summary className="cursor-pointer rounded-md border border-slate-300 px-2.5 py-1 text-sm">Archive (Admin)</summary>
+                            <div className="mt-2 w-64">
+                              <ArchiveForm table="cash_flow_entries" id={entry.id} label="Cash entry" />
                             </div>
                           </details>
                         )}

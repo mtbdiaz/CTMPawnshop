@@ -16,6 +16,7 @@ export type ActionState = {
   success?: boolean;
   id?: string;
   receiptNumber?: string;
+  paymentId?: string; // S1: the saved payment, so the form can link straight to its receipt
 };
 
 // All loan lifecycle writes go through SECURITY DEFINER database functions
@@ -109,7 +110,8 @@ export async function recordPayment(_prev: ActionState, formData: FormData): Pro
   });
   if (error) return { error: friendlyError("record the payment", error) }; // L20
   revalidateLoan(parsed.data.loan_id);
-  return { success: true, id: parsed.data.loan_id, receiptNumber: (data as { receipt_number?: string } | null)?.receipt_number };
+  const saved = data as { receipt_number?: string; payment_id?: string } | null; // what record_payment gives back
+  return { success: true, id: parsed.data.loan_id, receiptNumber: saved?.receipt_number, paymentId: saved?.payment_id };
 }
 
 function loanIdFrom(formData: FormData): string | null {

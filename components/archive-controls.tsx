@@ -26,7 +26,8 @@ export function ArchiveForm({ table, id, label }: { table: ArchivableTable; id: 
   );
 }
 
-export function RestoreButton({ table, id }: { table: ArchivableTable; id: string }) {
+// name: S2, what the record is ("Customer: Juan Dela Cruz"), so the popup says which one is being restored
+export function RestoreButton({ table, id, name }: { table: ArchivableTable; id: string; name?: string }) {
   return (
     <ActionForm action={restoreRecord} successMessage="Record restored.">
       <input type="hidden" name="table" value={table} />
@@ -35,7 +36,13 @@ export function RestoreButton({ table, id }: { table: ArchivableTable; id: strin
         variant="secondary"
         size="sm"
         pendingLabel="Restoring"
-        confirm={{ title: "Restore this record?", message: "It returns to the normal lists and counts.", confirmLabel: "Restore", tone: "primary" }}
+        confirm={{
+          title: "Restore this record?",
+          message: "It returns to the normal lists and counts.",
+          confirmLabel: "Restore",
+          tone: "primary",
+          details: name ? [["Record", name]] : undefined, // S2
+        }}
       >
         Restore
       </SubmitButton>
