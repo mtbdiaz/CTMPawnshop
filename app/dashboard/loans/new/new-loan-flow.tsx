@@ -330,7 +330,13 @@ function CustomerSearch({ onPick }: { onPick: (c: CustomerHit) => void }) {
         ))}
       </ul>
       <p className="mt-1 text-xs text-slate-500" aria-live="polite">
-        {pending ? "Searching" : q.trim().length >= 2 && searched === q.trim() && !hits.length ? "No customer found. Register them under Customers first." : ""}
+        {pending
+          ? "Searching"
+          : q.trim().length >= 2 && searched === q.trim() && !hits.length
+            ? "No customer found. Register them under Customers first."
+            : shown[0]?.similar // #16: the list above holds close names, not exact matches
+              ? "No exact match. These are similar names: check the name and ID before you pick one."
+              : ""}
       </p>
     </div>
   );

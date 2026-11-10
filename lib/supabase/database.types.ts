@@ -1448,6 +1448,7 @@ export type Database = {
           test: string
         }[]
       }
+      ctm_customer_score: { Args: { p_customer: string }; Returns: number }
       ctm_today: { Args: never; Returns: string }
       forfeit_loan: { Args: { p_loan_id: string }; Returns: undefined }
       get_my_role: {
@@ -1512,6 +1513,10 @@ export type Database = {
       reveal_customer_id: { Args: { p_customer_id: string }; Returns: string }
       run_default_detection: { Args: never; Returns: number }
       run_default_detection_job: { Args: never; Returns: number }
+      search_customers_fuzzy: {
+        Args: { p_limit?: number; p_q: string }
+        Returns: { id: string; similarity: number }[]
+      }
       submit_inventory_audit: {
         Args: { p_items: Json; p_notes: string }
         Returns: string

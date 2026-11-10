@@ -333,9 +333,11 @@ export function SortTH({
   basePath,
   params = {},
   align = "left",
+  children,
 }: {
   label: string;
   column: string;
+  children?: React.ReactNode; // shown after the sort link, e.g. an "i" help button (kept outside the link so it has its own click)
   current?: string;
   dir?: string;
   basePath: string;
@@ -354,16 +356,19 @@ export function SortTH({
       aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
       className={cx("px-3 py-2", align === "right" && "text-right")}
     >
-      <Link
-        href={`${basePath}?${query.toString()}`}
-        className={cx("inline-flex items-center gap-1 hover:text-navy-700", active && "text-navy-800")}
-      >
-        {label}
-        <Icon
-          name={active && dir === "asc" ? "chevron-up" : "chevron-down"}
-          className={cx("h-3 w-3 print:hidden", !active && "opacity-30")}
-        />
-      </Link>
+      <span className="inline-flex items-center gap-1">
+        <Link
+          href={`${basePath}?${query.toString()}`}
+          className={cx("inline-flex items-center gap-1 hover:text-navy-700", active && "text-navy-800")}
+        >
+          {label}
+          <Icon
+            name={active && dir === "asc" ? "chevron-up" : "chevron-down"}
+            className={cx("h-3 w-3 print:hidden", !active && "opacity-30")}
+          />
+        </Link>
+        {children}
+      </span>
     </th>
   );
 }
