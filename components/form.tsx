@@ -187,6 +187,11 @@ export function ActionForm<S extends FormState>({
   );
 }
 
+// #38: the error for one field, for inputs that are not a plain <Field> (e.g. the customer picker)
+export function useFieldError(name: string): string | undefined {
+  return useContext(FormCtx).fieldErrors[name];
+}
+
 export function useFormPending() {
   return useContext(FormCtx).pending;
 }

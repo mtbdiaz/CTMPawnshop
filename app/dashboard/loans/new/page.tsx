@@ -1,4 +1,4 @@
-import { appraisalNo } from "@/lib/ref-numbers"; // #29: the item's short number in the picker
+import { appraisalNo, customerNo } from "@/lib/ref-numbers"; // #29: the item's short number in the picker; #38: C-0012
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { categoryLabel } from "@/lib/appraisal/valuation";
@@ -17,11 +17,10 @@ export default async function NewLoanPage({ searchParams }: { searchParams: Prom
   await requireRole(["cashier", "admin"]);
   const params = await searchParams;
   const supabase = await createClient();
-  const initialCustomer = params.customer ? await loadCustomer(supabase, params.customer) : null;
   const [{ data: items }, { data: settings }, { data: vaultRows }] = await Promise.all([
     supabase
       .from("appraisal_items")
-      .select("id, appraisal_no, status, archived_at, category, category_other, karat, weight_grams, computed_value, suggested_loan_max, is_counterfeit_risk, counterfeit_resolution, created_at")
+      .select("id, appraisal_no, status, archived_at, category, category_other, karat, weight_grams, computed_value, suggested_loan_max, is_counterfeit_risk, counterfeit_resolution, created_at, customer_id, customers(full_name, customer_no)") // #38: + who the item was appraised for
       .eq("status", "available")
       .is("archived_at", null)
       .order("created_at", { ascending: false })
@@ -39,7 +38,13 @@ export default async function NewLoanPage({ searchParams }: { searchParams: Prom
       label: `${categoryLabel(a.category, a.category_other)}, ${a.karat}K, ${a.weight_grams} g · ${appraisalNo(a.appraisal_no)}`,
       value: Number(a.computed_value),
       max: Number(a.suggested_loan_max),
+      // #38: the customer the item was appraised for (null on older appraisals: anyone can pawn those)
+      customerId: a.customer_id,
+      owner: a.customers ? `${a.customers.full_name} (${customerNo(a.customers.customer_no)})` : null,
     }));
+  // #38: opened from an appraisal ("Create loan") with no customer in the link: start with the item's own customer
+  const itemOwnerId = !params.customer && params.item ? (pool.find((p) => p.id === params.item)?.customerId ?? null) : null;
+  const initialCustomer = params.customer ? await loadCustomer(supabase, params.customer) : itemOwnerId ? await loadCustomer(supabase, itemOwnerId) : null;
 
   return (
     <div className="space-y-5">

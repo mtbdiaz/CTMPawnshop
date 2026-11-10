@@ -80,7 +80,7 @@ export function NewAppraisalDialog({ prices, ltvPercent, defaultOpen }: { prices
             <h2 id="new-appraisal-title" className="text-lg font-semibold text-slate-900">
               New appraisal
             </h2>
-            <p className="mt-0.5 text-sm text-slate-500">Pick the category and karat, then enter the weight. Value and maximum loan update as you type.</p>
+            <p className="mt-0.5 text-sm text-slate-500">Pick the customer, the category and the karat, then enter the weight. Value and maximum loan update as you type.</p>
           </div>
           <button type="button" onClick={requestClose} aria-label="Close" className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800">
             <Icon name="x" className="h-5 w-5" />

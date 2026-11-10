@@ -31,7 +31,6 @@ const BASE = "/dashboard/compliance/reminders";
 // R3: 4 tabs. To contact = not contacted yet or no answer; Needs follow-up = wrong number or follow-up needed;
 // Contact made = reached or message sent
 const TABS: Record<ReminderView, string> = { todo: "To contact", followup: "Needs follow-up", logged: "Contact made", all: "All" };
-const ID_CHUNK = 150; // ask for reminder logs in groups, so the web address never gets too long
 
 // "Nov 9" (no year), for the short date ranges in the Due dropdown and summary
 function shortDate(iso: string): string {
@@ -99,27 +98,19 @@ export default async function RemindersPage({
       .order("maturity_date")
       .order("id");
 
-  const [{ data: windowLoans, error }, searchResult] = await Promise.all([
-    windowQuery(null), // the whole list (summary + tab counts)
+  // #36: the whole list in ONE call. The database function reminder_queue (migration 0039) returns every loan on the
+  // list with its contact logs (archived logs left out, newest first), by the same rules as windowQuery above.
+  // Before, the page asked for the loans and then for their logs in groups of 150.
+  const [{ data: queueRows, error }, searchResult] = await Promise.all([
+    supabase.rpc("reminder_queue", { p_lead_days: REMINDER_LEAD_DAYS }), // the whole list (summary + tab counts)
     searchOr ? windowQuery(searchOr) : Promise.resolve(null), // only the loans the search finds
   ]);
   if (error) throw error;
   if (searchResult?.error) throw searchResult.error;
-  const loans = (windowLoans ?? []) as QueueLoan[];
+  const loans: QueueLoan[] = (queueRows ?? []).map((r) => ({ id: r.id, customer_id: r.customer_id, maturity_date: r.maturity_date }));
   const matchIds = searchResult ? new Set((searchResult.data ?? []).map((l) => l.id)) : null;
-
-  // the reminder logs for those loans (archived logs don't count), in groups
-  const logs: QueueLog[] = [];
-  for (let i = 0; i < loans.length; i += ID_CHUNK) {
-    const ids = loans.slice(i, i + ID_CHUNK).map((l) => l.id);
-    const { data, error: logError } = await supabase
-      .from("reminder_log")
-      .select("loan_id, sent_at, created_by, contact_method, outcome, notes") // R3: how, what happened, note
-      .in("loan_id", ids)
-      .is("archived_at", null);
-    if (logError) throw logError;
-    logs.push(...(data ?? []));
-  }
+  // every log of those loans in one flat list (each log carries its loan_id), as buildQueue expects
+  const logs: QueueLog[] = (queueRows ?? []).flatMap((r) => (Array.isArray(r.logs) ? (r.logs as unknown as QueueLog[]) : []));
 
   // summary, tab counts and the list in order (lib/compliance/reminder-queue.ts, tested)
   const { summary, counts, list } = buildQueue(loans, logs, { today, view, due, matchIds, customerId });

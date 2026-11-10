@@ -10,6 +10,7 @@ import { buttonClasses, cx } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { AppraisalFields, hasPrice, weightError } from "./appraisal-fields"; // C2: the same item fields as Edit appraisal
 import { createAppraisal, type ActionState } from "./actions";
+import { CustomerPicker } from "./customer-picker"; // #38: who the item belongs to
 
 // C4: photo rules. Phone photos are often 3-8 MB; 5 MB keeps them readable without filling storage.
 const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"]; // JPEG, PNG, WebP only
@@ -25,8 +26,9 @@ export type SavedAppraisal = {
 };
 
 /**
- * Item 9: appraisal calculator. No customer field (the customer is attached
- * when the item is pawned). Value and maximum loan update as you type.
+ * Item 9: appraisal calculator. Value and maximum loan update as you type.
+ * #38: every new appraisal says which customer the item belongs to. The popup has a customer picker;
+ * inside New Loan the customer chosen in step 1 is used (forCustomer).
  */
 export function AppraisalCalculator({
   prices,
@@ -34,6 +36,7 @@ export function AppraisalCalculator({
   onSaved,
   onCancel,
   compact = false,
+  forCustomer,
 }: {
   prices: KaratPrices;
   ltvPercent: number;
@@ -42,6 +45,8 @@ export function AppraisalCalculator({
   /** C1: shows a Cancel button (used by the New appraisal popup). */
   onCancel?: () => void;
   compact?: boolean;
+  /** #38: New Loan only: the customer picked in step 1 (null = none picked yet, so nothing can be saved). */
+  forCustomer?: { id: string; full_name: string } | null;
 }) {
   const router = useRouter();
   const [category, setCategory] = useState("");
@@ -51,6 +56,7 @@ export function AppraisalCalculator({
   const [photos, setPhotos] = useState<Photo[]>([]); // C4: attached photos with a preview each
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [hasCustomer, setHasCustomer] = useState(false); // #38: the popup's customer picker has someone picked
   const [flagged, setFlagged] = useState(false); // N6: "Flag for counterfeit review" is ticked
   const previews = useRef<string[]>([]); // every preview made, so they can be freed when the form closes
 
@@ -148,7 +154,9 @@ export function AppraisalCalculator({
   );
 
   // C3: can't save until the karat has a price and the weight is above 0
-  const canSave = !uploading && Boolean(v) && w > 0 && !weightError(weight); // P7: also a weight within the rules
+  // #38: and only once the customer is known (the picker in the popup, step 1 in New Loan)
+  const customerOk = compact ? Boolean(forCustomer) : hasCustomer;
+  const canSave = !uploading && Boolean(v) && w > 0 && !weightError(weight) && customerOk; // P7: also a weight within the rules
 
   // New Loan (compact): the small inline calculator, same as before
   if (compact) {
@@ -167,6 +175,17 @@ export function AppraisalCalculator({
           setWeight("");
         }}
       >
+        {/* #38: the item is saved for the customer picked in step 1 */}
+        <input type="hidden" name="customer_id" value={forCustomer?.id ?? ""} />
+        {forCustomer ? (
+          <p className="text-sm text-slate-600">
+            This item will be saved for <span className="font-medium text-slate-900">{forCustomer.full_name}</span>.
+          </p>
+        ) : (
+          <p role="status" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Pick the customer in step 1 first. An appraisal is saved for the customer who brought the item in.
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <AppraisalFields idPrefix="calc-inline" prices={prices} category={category} setCategory={setCategory} other={other} setOther={setOther} karat={karat} setKarat={setKarat} weight={weight} setWeight={setWeight} />
         </div>
@@ -197,6 +216,10 @@ export function AppraisalCalculator({
 
       {/* LEFT: category, karat, weight, notes */}
       <div className="grid content-start grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* #38: first, who brought the item in */}
+        <div className="sm:col-span-2">
+          <CustomerPicker onPicked={(c) => setHasCustomer(Boolean(c))} />
+        </div>
         <AppraisalFields idPrefix="calc" prices={prices} category={category} setCategory={setCategory} other={other} setOther={setOther} karat={karat} setKarat={setKarat} weight={weight} setWeight={setWeight} />
         {/* N9: "(optional)" in the label instead of a separate line; the placeholder says what to write */}
         <TextareaField label="Notes (optional)" name="condition_notes" rows={3} maxLength={500} placeholder="Condition, markings, defects or other details" className="sm:col-span-2" />
