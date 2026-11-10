@@ -93,7 +93,8 @@ const TABS = {
 const PRIMARY_VIEWS: (keyof typeof TABS)[] = ["open", "overdue", "ready", "defaulted", "all"];
 const MORE_VIEWS: (keyof typeof TABS)[] = ["reinstated", "redeemed", "forfeited"];
 type Tab = keyof typeof TABS;
-const SORTS: Record<string, string> = { due: "maturity_date", issued: "created_at", principal: "principal_amount" };
+// #23: "owed" sorts by owed_now, the amount owed today that the database works out (same rule as lib/loans/status.ts)
+const SORTS: Record<string, string> = { due: "maturity_date", issued: "created_at", principal: "principal_amount", owed: "owed_now" };
 
 export default async function LoansPage({
   searchParams,
@@ -170,7 +171,7 @@ export default async function LoansPage({
     tab,
     true, // the list follows the search
   )
-    .order(SORTS[sort], { ascending: dir === "asc" })
+    .order(SORTS[sort], { ascending: dir === "asc", nullsFirst: false }) // #23: forfeited loans have no amount owed ("Item kept"), so they come last
     .order("id") // same date or amount -> always the same order, so no loan shows on two pages
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
 
@@ -320,14 +321,12 @@ export default async function LoansPage({
                   <TH>Item</TH>
                   {/* L11: say which principal this is */}
                   <SortTH label="Original principal" column="principal" current={sort} dir={dir} basePath="/dashboard/loans" params={listParams} align="right" />
-                  <TH align="right">
-                    <span className="inline-flex items-center gap-1">
-                      Owed now
-                      <InfoTip label="Owed now">
+                  {/* #23: Owed now can be sorted (the database works out the same amount the page shows) */}
+                  <SortTH label="Owed now" column="owed" current={sort} dir={dir} basePath="/dashboard/loans" params={listParams} align="right">
+                    <InfoTip label="Owed now">
                         Principal still unpaid plus interest, including interest added for each 30 days past the due date. It is the amount to redeem today. Original principal is the amount first lent. Forfeited loans show &quot;Item kept&quot;: the item became shop property and the loan is not collected.
                       </InfoTip>
-                    </span>
-                  </TH>
+                  </SortTH>
                   <SortTH label="Due" column="due" current={sort} dir={dir} basePath="/dashboard/loans" params={listParams} />
                   <TH>Status</TH>
                   <TH>

@@ -49,7 +49,8 @@ export const metadata = { title: "Customers" };
 
 // U3: 10 per page (was 25) so the table and the page buttons fit on a laptop screen
 const PAGE_SIZE = 10;
-const SORTS: Record<string, string> = { name: "full_name", registered: "created_at" };
+// #20: "score" sorts by history_score, a number the database works out with the same formula as lib/customers/score.ts
+const SORTS: Record<string, string> = { name: "full_name", registered: "created_at", score: "history_score" };
 // U4: the filter tabs. Only filters the database can answer quickly (no made-up statuses)
 const SHOWS = ["all", "blacklisted", "aml"] as const;
 type Show = (typeof SHOWS)[number];
@@ -76,16 +77,22 @@ export default async function CustomersPage({
   const hideIds = params.ids === "hide";
 
   const supabase = await createClient();
-  let query = createAdminClient() // #17: id_number is not readable with a staff login; the server reads it after requireRole
-    .from("customers")
-    .select("id, customer_no, full_name, contact_number, id_type, id_number, aml_status, aml_checked_at, is_blacklisted, created_at", { count: "exact" })
-    .is("archived_at", null)
-    .order(SORTS[sort], { ascending: dir === "asc" })
-    .order("id") // U3: same date or name -> always the same order, so nobody shows on two pages
-    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
-  // U4: the filter tab
-  if (show === "blacklisted") query = query.eq("is_blacklisted", true);
-  if (show === "aml") query = query.eq("aml_status", "flagged");
+  // the list query without the search: columns, sort, page and the open filter tab. Used for the normal list and,
+  // when a search finds nothing, again for the "similar names" list (#16)
+  const baseQuery = () => {
+    let b = createAdminClient() // #17: id_number is not readable with a staff login; the server reads it after requireRole
+      .from("customers")
+      .select("id, customer_no, full_name, contact_number, id_type, id_number, aml_status, aml_checked_at, is_blacklisted, created_at", { count: "exact" })
+      .is("archived_at", null)
+      .order(SORTS[sort], { ascending: dir === "asc", nullsFirst: false }) // #20: customers with no score (no loans) always come last
+      .order("id") // U3: same date, name or score -> always the same order, so nobody shows on two pages
+      .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+    // U4: the filter tab
+    if (show === "blacklisted") b = b.eq("is_blacklisted", true);
+    if (show === "aml") b = b.eq("aml_status", "flagged");
+    return b;
+  };
+  let query = baseQuery();
   const ref = parseRefNo(q); // #18: "C-0012" / "c12" = find that one customer by number
   if (ref?.kind === "C") query = query.eq("customer_no", ref.n);
   else if (q) {
@@ -111,7 +118,7 @@ export default async function CustomersPage({
     if (filter === "aml") c = c.eq("aml_status", "flagged");
     return c;
   };
-  const [{ data: customers, count, error }, { count: totalAll }, { count: totalBlacklisted }, { count: totalAml }] = await Promise.all([
+  const [{ data: found, count: foundCount, error }, { count: totalAll }, { count: totalBlacklisted }, { count: totalAml }] = await Promise.all([
     query,
     countOf(),
     countOf("blacklisted"),
@@ -122,8 +129,8 @@ export default async function CustomersPage({
   // so that case goes back to page 1 (we don't know the last page without the count).
   const pastEnd = error?.code === "PGRST103" && page > 1;
   if (error && !pastEnd) throw error;
-  if (pastEnd || ((customers?.length ?? 0) === 0 && (count ?? 0) > 0 && page > 1)) {
-    const last = pastEnd ? 1 : Math.ceil((count ?? 0) / PAGE_SIZE); // the last page that has customers
+  if (pastEnd || ((found?.length ?? 0) === 0 && (foundCount ?? 0) > 0 && page > 1)) {
+    const last = pastEnd ? 1 : Math.ceil((foundCount ?? 0) / PAGE_SIZE); // the last page that has customers
     const qs = new URLSearchParams(); // keep the search, filter and sort
     if (q) qs.set("q", q);
     if (params.sort) qs.set("sort", params.sort);
@@ -134,7 +141,23 @@ export default async function CustomersPage({
     const str = qs.toString();
     redirect(str ? `/dashboard/customers?${str}` : "/dashboard/customers");
   }
-  const scores = await loadCustomerScores(supabase, (customers ?? []).map((c) => c.id), manilaToday());
+  // #16: the search found nobody -> look for names that are close to what was typed (a typo like "Bautsita").
+  // Only for text searches on page 1; a customer number, phone or ID number is never guessed.
+  let customers = found ?? [];
+  let count = foundCount ?? 0;
+  let similar = false; // true = the list shows similar names, not exact matches
+  if (q && ref?.kind !== "C" && count === 0 && page === 1 && /[a-z]/i.test(q)) {
+    const { data: close } = await supabase.rpc("search_customers_fuzzy", { p_q: q, p_limit: PAGE_SIZE }); // best matches first
+    const ids = (close ?? []).map((r) => r.id);
+    if (ids.length) {
+      const { data: rows, count: n } = await baseQuery().in("id", ids);
+      const order = new Map(ids.map((id, i) => [id, i])); // keep the database's order: the closest name on top
+      customers = (rows ?? []).sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+      count = n ?? customers.length;
+      similar = customers.length > 0;
+    }
+  }
+  const scores = await loadCustomerScores(supabase, customers.map((c) => c.id), manilaToday());
 
   // what to keep in the address when sorting, paging or searching
   const listParams = { q, sort: params.sort, dir: params.dir, show: show === "all" ? undefined : show, ids: hideIds ? "hide" : undefined };
@@ -191,7 +214,7 @@ export default async function CustomersPage({
           ]}
         />
         {/* D1: the row under the tabs: search + Hide ID column on the left, "Viewing: All" (or "N matches in All") on the right */}
-        <ViewToolbar viewing={SHOW_LABELS[show]} matches={q ? (count ?? 0) : undefined}>
+        <ViewToolbar viewing={SHOW_LABELS[show]} matches={q && !similar ? count : undefined}>
           <CustomerSearch defaultValue={q} keep={{ show: listParams.show, sort: params.sort, dir: params.dir, ids: listParams.ids }} />
           {/* P2: Hide/Show IDs. Hides the whole ID column (and the ID on the cards), e.g. when a customer can see the screen.
               F6: no aria-pressed (it isn't allowed on a link); the words "Hide" / "Show" already say what it does */}
@@ -205,8 +228,14 @@ export default async function CustomersPage({
             {hideIds ? "Show ID column" : "Hide ID column"}
           </Link>
         </ViewToolbar>
-        {customers && customers.length > 0 ? (
+        {customers.length > 0 ? (
           <>
+            {/* #16: says clearly that these are close names, not exact matches, so staff check before picking one */}
+            {similar && (
+              <p role="status" className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                No exact match for &ldquo;{q}&rdquo;. Showing similar names. Check the name and ID before you continue.
+              </p>
+            )}
             {/* C11: CARDS on phones, tablets and big zoom (below 1100px wide). One card per customer instead of a wide table,
                 so the score and flags (Blacklisted, History warning) are visible without swiping.
                 R6: was phones only; at 150% zoom the 8-column table didn't fit and got cut off */}
@@ -278,11 +307,10 @@ export default async function CustomersPage({
                     AML check <InfoTip label="AML check">{AML_HELP}</InfoTip>
                   </span>
                 </TH>
-                <TH>
-                  <span className="inline-flex items-center gap-1">
-                    Score <InfoTip label="Score">{SCORE_HELP}</InfoTip>
-                  </span>
-                </TH>
+                {/* #20: the Score column can be sorted now (click once for lowest first, again for highest first; "No history" is always last) */}
+                <SortTH label="Score" column="score" current={sort} dir={dir} basePath="/dashboard/customers" params={listParams}>
+                  <InfoTip label="Score">{SCORE_HELP}</InfoTip>
+                </SortTH>
                 <TH>
                   {/* R1: "Compliance" on smaller screens (AML + flags together), "Flags" from 1536px (AML has its own column) */}
                   <span className="inline-flex items-center gap-1">
@@ -365,7 +393,7 @@ export default async function CustomersPage({
             </Table>
             {/* end of the computer-only table */}
             </div>
-            <Pagination page={page} pageSize={PAGE_SIZE} total={count ?? 0} basePath="/dashboard/customers" params={listParams} />
+            <Pagination page={page} pageSize={PAGE_SIZE} total={count} basePath="/dashboard/customers" params={listParams} />
           </>
         ) : (
           <EmptyState

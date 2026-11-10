@@ -177,7 +177,11 @@ export function QuickSearch() {
 
         {/* THE PREVIEW: floats under the box (z-20 = above the cards; shadow because it floats, like dialogs) */}
         {show && (
-          <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg sm:left-auto sm:w-[28rem]">
+          // Where the box sits: on phones it is as wide as the search bar. From 640px it is 28rem wide (never wider than
+          // the screen) and starts at the LEFT edge of the search bar, because there the search bar is on the left.
+          // From 1024px the search bar is on the right of the header, so the box lines up with its RIGHT edge.
+          // Before, it was right-aligned from 640px and stuck out past the left side of the screen on tablets.
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg sm:right-auto sm:w-[28rem] sm:max-w-[calc(100vw-2rem)] lg:left-auto lg:right-0">
             {/* screen readers hear how many results there are */}
             <p className="sr-only" aria-live="polite">
               {loading ? "Searching" : `${flat.length} result${flat.length === 1 ? "" : "s"}`}

@@ -129,7 +129,19 @@ export async function quickSearch(query: string): Promise<SearchResults> {
   // best customer matches first (name starts with it > a word starts with it > phone/ID > contains)
   // (a +63 phone number is ranked using its 09... form, the way it is saved)
   // (a customer number already found exactly one customer, so it isn't ranked)
-  const customers = shortNo?.kind === "C" ? (customerRows ?? []) : rankCustomers(customerRows ?? [], phone !== compact ? phone : q, 4);
+  let customers = shortNo?.kind === "C" ? (customerRows ?? []) : rankCustomers(customerRows ?? [], phone !== compact ? phone : q, 4);
+  // #16: no customer found by a text search -> show up to 3 names that are close to what was typed (a typo)
+  let similarNames = false;
+  if (!customers.length && !shortNo && /[a-z]/i.test(q)) {
+    const { data: close } = await supabase.rpc("search_customers_fuzzy", { p_q: q, p_limit: 3 }); // best matches first
+    const ids = (close ?? []).map((r) => r.id);
+    if (ids.length) {
+      const { data: rows } = await createAdminClient().from("customers").select("id, customer_no, full_name, contact_number, id_number").is("archived_at", null).in("id", ids);
+      const order = new Map(ids.map((id, i) => [id, i])); // keep the closest name on top
+      customers = (rows ?? []).sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+      similarNames = customers.length > 0;
+    }
+  }
   const customerIds = customers.map((c) => c.id);
 
   // ---------- 2. Loans of those customers + how many open loans each has ----------
@@ -198,7 +210,8 @@ export async function quickSearch(query: string): Promise<SearchResults> {
     return {
       id: c.id,
       title: c.full_name,
-      subtitle: `${customerNo(c.customer_no)} · ${c.contact_number} · ${n} open loan${n === 1 ? "" : "s"}`, // #18
+      // #18: the short number. #16: "Similar name" in front when this is a close match, not an exact one
+      subtitle: `${similarNames ? "Similar name · " : ""}${customerNo(c.customer_no)} · ${c.contact_number} · ${n} open loan${n === 1 ? "" : "s"}`,
       href: `/dashboard/customers/${c.id}`,
       action: "View profile",
     };
