@@ -17,6 +17,7 @@ export type ActionState = {
   id?: string;
   receiptNumber?: string;
   paymentId?: string; // S1: the saved payment, so the form can link straight to its receipt
+  renewedTo?: string; // AR1 (0043): the payment cleared the interest on an overdue loan, so it was renewed to this due date
 };
 
 // All loan lifecycle writes go through SECURITY DEFINER database functions
@@ -110,8 +111,8 @@ export async function recordPayment(_prev: ActionState, formData: FormData): Pro
   });
   if (error) return { error: friendlyError("record the payment", error) }; // L20
   revalidateLoan(parsed.data.loan_id);
-  const saved = data as { receipt_number?: string; payment_id?: string } | null; // what record_payment gives back
-  return { success: true, id: parsed.data.loan_id, receiptNumber: saved?.receipt_number, paymentId: saved?.payment_id };
+  const saved = data as { receipt_number?: string; payment_id?: string; renewed_to?: string | null } | null; // what record_payment gives back
+  return { success: true, id: parsed.data.loan_id, receiptNumber: saved?.receipt_number, paymentId: saved?.payment_id, renewedTo: saved?.renewed_to ?? undefined };
 }
 
 function loanIdFrom(formData: FormData): string | null {

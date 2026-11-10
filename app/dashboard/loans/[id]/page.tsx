@@ -152,9 +152,18 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
     {
       key: "payment",
       title: "Record payment",
-      hint: `${formatPeso(owed)} owed now. Interest is paid first, then principal.`,
+      // AR1: on an overdue loan, say that paying the interest also renews it
+      hint: `${formatPeso(owed)} owed now. Interest is paid first, then principal.${today > loan.maturity_date && !noRenew && principal > 0 ? ` Paying all the interest also renews the loan to ${formatDate(renew.newMaturity)}.` : ""}`,
       reason: owed > 0 ? undefined : "Nothing is owed. Use Redeem to release the item.",
-      body: <PaymentForm loanId={loan.id} interestDue={interest} principalBalance={principal} />,
+      // AR1 (0043): past the due date and still renewable -> clearing the interest renews it (same date as Renew)
+      body: (
+        <PaymentForm
+          loanId={loan.id}
+          interestDue={interest}
+          principalBalance={principal}
+          renewOnClear={today > loan.maturity_date && !noRenew ? { newMaturity: renew.newMaturity, ratePercent: Number(loan.interest_rate_percent) } : null}
+        />
+      ),
     },
     {
       key: "renew",

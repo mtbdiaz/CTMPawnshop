@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { customerSchema, requiredDateOfBirthSchema, adultCutoff, isCalendarDate, joinName, MAX } from "./customer";
+import { customerSchema, requiredDateOfBirthSchema, adultCutoff, isCalendarDate, joinName, tidyNamePart, MAX } from "./customer";
 
 describe("customerSchema (PB-7 AC2)", () => {
   const valid = {
@@ -29,6 +29,21 @@ describe("customerSchema (PB-7 AC2)", () => {
   it("only allows a suffix from the list", () => {
     expect(customerSchema.safeParse({ ...valid, suffix: "Jr." }).success).toBe(true); // in the list
     expect(customerSchema.safeParse({ ...valid, suffix: "Esq." }).success).toBe(false); // not in the list
+  });
+
+  // NC1: names typed all in small letters get capitals; anything with a capital is kept as typed
+  it("tidyNamePart capitalizes small-letter names only", () => {
+    expect(tidyNamePart("bautista")).toBe("Bautista");
+    expect(tidyNamePart("dela  cruz")).toBe("Dela Cruz"); // extra space removed too
+    expect(tidyNamePart("de los reyes")).toBe("De los Reyes"); // joining words stay small unless first
+    expect(tidyNamePart("santos y reyes")).toBe("Santos y Reyes");
+    expect(tidyNamePart("cruz-santos")).toBe("Cruz-Santos");
+    expect(tidyNamePart("niño")).toBe("Niño");
+    expect(tidyNamePart("dela Cruz")).toBe("dela Cruz"); // has a capital: kept exactly
+    expect(tidyNamePart("McArthur")).toBe("McArthur");
+    expect(tidyNamePart("TEST")).toBe("TEST");
+    const r = customerSchema.safeParse({ ...valid, first_name: "juan", middle_name: "bautista", last_name: "dela cruz" });
+    expect(r.success && [r.data.first_name, r.data.middle_name, r.data.last_name]).toEqual(["Juan", "Bautista", "Dela Cruz"]);
   });
 
   // NP: the same rule as ctm_join_name in the database (migration 0042)
@@ -169,4 +184,4 @@ describe("customerSchema (PB-7 AC2)", () => {
     expect(customerSchema.safeParse({ ...valid, email: "a".repeat(250) + "@x.ph" }).success).toBe(false); // email too long
     expect(customerSchema.safeParse({ ...valid, id_type: "Postal ID", id_number: "C".repeat(MAX.id_number + 1) }).success).toBe(false); // ID too long
   });
-});
+});
