@@ -5,7 +5,7 @@ import { ActionForm, CheckboxField, Field, SubmitButton, TextareaField } from "@
 import { buttonClasses } from "@/components/ui";
 import { formatDate, formatPeso } from "@/lib/format";
 import { RequestIdInput } from "@/components/request-id"; // #31 one-time id so a retry never saves twice
-import { recordPayment, processExtension, redeemLoan, capitalizeLoan, reinstateLoan, forfeitLoan, adminEditLoan, adminEditPayment } from "../actions";
+import { type ActionState, recordPayment, processExtension, redeemLoan, capitalizeLoan, reinstateLoan, forfeitLoan, adminEditLoan, adminEditPayment } from "../actions";
 
 function LostTicketFields() {
   const [show, setShow] = useState(false);
@@ -43,6 +43,7 @@ export function PaymentForm({
 }) {
   const [amount, setAmount] = useState("");
   const [round, setRound] = useState(0); // #31: +1 after each saved payment, so the next payment gets a new id
+  const [lastReceipt, setLastReceipt] = useState<{ id: string; number: string } | null>(null); // S1: the payment just saved
   const total = Math.round((interestDue + principalBalance) * 100) / 100;
   // L17: what this payment does, with the database's own rule (record_payment): interest is paid first, the rest
   // goes to principal. interestDue already includes interest added after the due date, as the database does first.
@@ -58,11 +59,22 @@ export function PaymentForm({
       className="space-y-3"
       resetOnSuccess
       successMessage="Payment recorded. The receipt is in the payment history."
-      onSuccess={() => {
+      onSuccess={(state: ActionState) => {
         setAmount("");
         setRound((r) => r + 1);
+        // S1: remember the new payment, to offer its receipt right here
+        setLastReceipt(state.paymentId ? { id: state.paymentId, number: state.receiptNumber ?? "" } : null);
       }}
     >
+      {/* S1: straight to the receipt after a payment, instead of looking for it in the payment history */}
+      {lastReceipt && (
+        <p role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          <span>Payment recorded{lastReceipt.number ? ` · ${lastReceipt.number}` : ""}</span>
+          <a href={`/print/receipt/${lastReceipt.id}`} target="_blank" rel="noreferrer" className={buttonClasses("secondary", "sm")}>
+            Print receipt
+          </a>
+        </p>
+      )}
       <input type="hidden" name="loan_id" value={loanId} />
       <RequestIdInput key={round} />
       <Field

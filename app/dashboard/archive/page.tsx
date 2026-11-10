@@ -110,7 +110,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                     <span className="block text-xs">{r.archived_by ? (names.get(r.archived_by) ?? "Unknown user") : ""}</span>
                   </TD>
                   <TD align="right">
-                    <RestoreButton table={table} id={r.id} />
+                    <RestoreButton table={table} id={r.id} name={r.summary} />
                   </TD>
                 </TR>
               ))}

@@ -41,6 +41,8 @@ export function AccountRow({ account, isSelf }: { account: Account; isSelf: bool
               ))}
             </select>
             {isSelf && <input type="hidden" name="role" value={account.role} />}
+            {/* S3: say why the box is greyed out and why there is no Deactivate button on this row */}
+            {isSelf && <span className="mt-0.5 block text-xs text-slate-500">You can&apos;t change your own role or deactivate yourself. Ask another Admin.</span>}
           </div>
           <SubmitButton variant="secondary" size="sm" pendingLabel="Saving">
             Save
