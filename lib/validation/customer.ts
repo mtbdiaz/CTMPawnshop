@@ -94,18 +94,33 @@ export const MAX = { full_name: 120, name_part: 55, address: 300, email: 254, id
 export const SUFFIXES = ["Jr.", "Sr.", "II", "III", "IV", "V"] as const; // the only suffixes allowed (same list as the database)
 const tidy = (v: string) => v.trim().replace(/\s+/g, " "); // F8: no spaces at the ends, one space inside
 
+// NC1 (Nov 11): a name part typed all in small letters gets capitals ("bautista" -> "Bautista",
+// "dela cruz" -> "Dela Cruz", "de los reyes" -> "De los Reyes", "santos y reyes" -> "Santos y Reyes").
+// Small joining words stay small unless they come first. Anything typed with a capital is kept exactly as typed,
+// because real names like "dela Cruz" or "McArthur" are spelled in many ways.
+const SMALL_WORDS = new Set(["de", "del", "la", "las", "los", "y", "da", "van", "von"]);
+export function tidyNamePart(v: string): string {
+  const t = tidy(v);
+  if (t !== t.toLowerCase()) return t; // has a capital somewhere: keep it
+  return t
+    .split(" ")
+    .map((w, i) => (i > 0 && SMALL_WORDS.has(w) ? w : w.replace(/^\p{L}/u, (c) => c.toUpperCase()))) // first letter big
+    .join(" ")
+    .replace(/-(\p{L})/gu, (_m, c: string) => `-${c.toUpperCase()}`); // "cruz-santos" -> "Cruz-Santos"
+}
+
 // "Juan" + "Bautista" + "Dela Cruz" + "Jr." -> "Juan B. Dela Cruz Jr." (the middle name as its initial).
 // Same as ctm_join_name in the database, so the screen shows exactly what will be saved.
 export function joinName(first: string, middle: string | null | undefined, last: string, suffix: string | null | undefined): string {
   const m = tidy(middle ?? ""); // the middle name, tidied
-  return [tidy(first), m ? `${m.charAt(0).toUpperCase()}.` : "", tidy(last), tidy(suffix ?? "")] // the four pieces
+  return [tidyNamePart(first), m ? `${m.charAt(0).toUpperCase()}.` : "", tidyNamePart(last), tidy(suffix ?? "")] // the four pieces (NC1: capitals)
     .filter(Boolean) // drop the empty ones
     .join(" "); // one space between them
 }
 
 // one name box: required or optional, tidied, at most 55 characters
 const namePart = (label: string, required: boolean) => {
-  const base = z.string().trim().max(MAX.name_part, `${label} can be at most ${MAX.name_part} characters`).transform(tidy); // F4: length limit, F8: tidy
+  const base = z.string().trim().max(MAX.name_part, `${label} can be at most ${MAX.name_part} characters`).transform(tidyNamePart); // F4: length limit, F8: tidy, NC1: capitals
   return required ? z.string().trim().min(1, `${label} is required`).pipe(base) : base.optional().default(""); // required = can't be empty; optional = left out is the same as empty
 };
 // the four name boxes, shared by Register and the Admin identity correction
@@ -147,4 +162,4 @@ export const customerSchema = z.object({
   });
 
 // Creates a TypeScript type from the rules, so other code knows the shape of the data
-export type CustomerInput = z.infer<typeof customerSchema>;
+export type CustomerInput = z.infer<typeof customerSchema>;

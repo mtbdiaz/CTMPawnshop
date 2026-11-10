@@ -1,6 +1,6 @@
 "use client"; // runs in the browser: it opens a popup and reacts to clicks, keys and dragging
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 
 // PV1 (Wush, Nov 11): item photos open in a popup on the same page instead of a new browser tab.
@@ -18,6 +18,7 @@ export function PhotoViewer({ photos, index, onIndex }: { photos: ViewerPhoto[];
   const box = useRef<HTMLDivElement>(null); // the area the photo sits in (it scrolls when zoomed)
   const drag = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(null); // where a drag started
   const [zoomStep, setZoomStep] = useState(0); // position in ZOOMS
+  const [fitWidth, setFitWidth] = useState(0); // PV2: how wide the photo is at "Fit", so 200% really is twice that size
   const zoom = ZOOMS[zoomStep];
   const open = index !== null && photos[index] !== undefined;
   const photo = open ? photos[index] : null;
@@ -40,7 +41,22 @@ export function PhotoViewer({ photos, index, onIndex }: { photos: ViewerPhoto[];
     if (index === null || photos.length < 2) return;
     onIndex((index + step + photos.length) % photos.length); // wraps around: after the last comes the first
   };
-  const zoomBy = (step: number) => setZoomStep((z) => Math.min(ZOOMS.length - 1, Math.max(0, z + step)));
+  // PV2: remember the "Fit" width before zooming in (measured from the photo on screen)
+  const rememberFit = () => {
+    const img = box.current?.querySelector("img");
+    if (img && zoom === 1) setFitWidth(img.getBoundingClientRect().width);
+  };
+  const zoomBy = (step: number) => {
+    rememberFit();
+    setZoomStep((z) => Math.min(ZOOMS.length - 1, Math.max(0, z + step)));
+  };
+  // PV2: after zooming, keep the middle of the photo in the middle of the screen
+  useLayoutEffect(() => {
+    const b = box.current;
+    if (!b || zoom === 1) return;
+    b.scrollLeft = (b.scrollWidth - b.clientWidth) / 2;
+    b.scrollTop = (b.scrollHeight - b.clientHeight) / 2;
+  }, [zoom]);
 
   // keys: ← → photos, + − zoom, 0 back to fit. Esc is handled by the browser (it closes the dialog)
   function onKeyDown(e: React.KeyboardEvent) {
@@ -71,7 +87,10 @@ export function PhotoViewer({ photos, index, onIndex }: { photos: ViewerPhoto[];
   function onPointerUp() {
     // a click (no drag) on the photo switches between fit and 2x
     if (drag.current && !drag.current.moved) setZoomStep(0);
-    else if (!drag.current && zoom === 1) setZoomStep(2);
+    else if (!drag.current && zoom === 1) {
+      rememberFit(); // PV2
+      setZoomStep(2);
+    }
     drag.current = null;
   }
 
@@ -135,7 +154,8 @@ export function PhotoViewer({ photos, index, onIndex }: { photos: ViewerPhoto[];
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
-              style={zoom === 1 ? undefined : { width: `${zoom * 100}%`, maxWidth: "none" }}
+              // PV2: zoomed = the Fit width times the zoom (e.g. 200% = twice as wide as at Fit)
+              style={zoom === 1 ? undefined : { width: `${Math.round((fitWidth || 600) * zoom)}px`, maxWidth: "none" }}
               className={
                 zoom === 1
                   ? "max-h-full max-w-full cursor-zoom-in select-none object-contain p-4"
@@ -176,7 +196,7 @@ export function PhotoGrid({ photos, className }: { photos: ViewerPhoto[]; classN
             key={p.url}
             type="button"
             onClick={() => setOpen(i)}
-            aria-label={`View ${p.alt}`}
+            aria-label={`View photo ${i + 1} of ${photos.length}: ${p.alt}`} // PV2
             className="block cursor-zoom-in overflow-hidden rounded-md border border-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500"
           >
             {/* eslint-disable-next-line @next/next/no-img-element -- a stored photo, not a page image */}

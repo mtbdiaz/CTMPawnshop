@@ -14,7 +14,7 @@ import { calculateKaratValuation } from "@/lib/appraisal/valuation";
 import { compareAppraisal } from "@/lib/appraisal/edit"; // A2/A3: what an edit really changed
 import type { TablesUpdate } from "@/lib/supabase/database.types";
 
-export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; appraisalId?: string; message?: string }; // message: A2/A3 success text that depends on what was saved
+export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; appraisalId?: string; appraisalNo?: number; message?: string }; // AN1: appraisalNo = the new A-number // message: A2/A3 success text that depends on what was saved
 
 // A5: plain words for staff. The technical details go to the server log only.
 const TRY_AGAIN = "Please try again. If it keeps happening, tell an Admin.";
@@ -121,7 +121,7 @@ export async function createAppraisal(_prev: ActionState, formData: FormData): P
       appraised_by: user.id,
       customer_id: d.customer_id, // #38: who brought the item in
     })
-    .select("id")
+    .select("id, appraisal_no") // AN1: also the new A-number, so New Loan can show "· A-1370" right away
     .single();
   if (error) {
     console.error("createAppraisal failed:", error.message); // A5: details stay in the server log
@@ -135,7 +135,7 @@ export async function createAppraisal(_prev: ActionState, formData: FormData): P
   });
 
   revalidatePath("/dashboard/appraisals");
-  return { success: true, appraisalId: data.id };
+  return { success: true, appraisalId: data.id, appraisalNo: data.appraisal_no };
 }
 
 // Appraisals stay editable until pawned (enforced by RLS + trigger).

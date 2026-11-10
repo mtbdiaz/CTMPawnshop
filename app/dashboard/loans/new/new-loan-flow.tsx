@@ -60,7 +60,8 @@ export function NewLoanFlow({
   const appraising = itemMode === "new" && (!item || changingItem);
   const shownDraft = appraising ? draft : null;
   // the maximum the amount is checked against: the unsaved item's while appraising, else the picked item's
-  const shownMax = shownDraft ? shownDraft.max : (item?.max ?? null);
+  // TP2: a draft flagged for counterfeit review can't be used for this loan, so it gives no maximum to check against
+  const shownMax = shownDraft ? (shownDraft.flagged ? null : shownDraft.max) : (item?.max ?? null);
 
   const principal = Number(amount);
   // NL7: checked while typing. Pesos have at most 2 decimals (centavos)
@@ -371,7 +372,7 @@ export function NewLoanFlow({
               <Row label="Customer" value={customer?.full_name ?? "Not selected"} />
               {/* TP1: while appraising, the item being typed shows here right away, marked "not saved yet" */}
               <Row label="Item" value={shownDraft ? `${shownDraft.label} (not saved yet)` : (item?.label ?? "Not selected")} />
-              <Row label="Maximum loan" value={shownMax !== null ? formatPeso(shownMax) : "-"} />
+              <Row label="Maximum loan" value={shownMax !== null ? formatPeso(shownMax) : shownDraft?.flagged ? "Not for this loan" : "-"} />
             </dl>
             {/* TP1: what to do next with the unsaved item. A flagged item can't be used for a loan */}
             {shownDraft && (

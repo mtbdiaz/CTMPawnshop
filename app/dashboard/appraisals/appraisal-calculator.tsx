@@ -6,6 +6,7 @@ import { ActionForm, SubmitButton, TextareaField } from "@/components/form";
 import { createClient } from "@/lib/supabase/client";
 import { calculateKaratValuation, categoryLabel, type KaratPrices } from "@/lib/appraisal/valuation";
 import { formatPeso } from "@/lib/format";
+import { appraisalNo } from "@/lib/ref-numbers"; // AN1: "A-1370"
 import { buttonClasses, cx } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { PhotoViewer } from "@/components/photo-viewer"; // PV1: view a photo in a popup on the same page
@@ -189,7 +190,9 @@ export function AppraisalCalculator({
         if (!state.appraisalId) return;
         if (onSaved && v) {
           // NL3: inside New Loan: hand the new item to the loan form and empty this form for the next item
-          onSaved({ id: state.appraisalId, label: `${categoryLabel(category, other)}, ${karat}K, ${w} g`, value: v.value, max: v.suggestedLoanMax, flagged });
+          // AN1: the label ends with the new A-number, the same as the items in Available items
+          const no = state.appraisalNo ? ` · ${appraisalNo(state.appraisalNo)}` : "";
+          onSaved({ id: state.appraisalId, label: `${categoryLabel(category, other)}, ${karat}K, ${w} g${no}`, value: v.value, max: v.suggestedLoanMax, flagged });
           setCategory("");
           setOther("");
           setKarat(null);
@@ -290,7 +293,7 @@ export function AppraisalCalculator({
             </ul>
           )}
           {/* PV1: the photo popup (zoom, previous / next). A removed photo closes it */}
-          <PhotoViewer photos={photos.map((p, i) => ({ url: p.url, alt: `Photo ${i + 1}, ${p.name}` }))} index={viewing !== null && viewing < photos.length ? viewing : null} onIndex={setViewing} />
+          <PhotoViewer photos={photos.map((p) => ({ url: p.url, alt: p.name }))} index={viewing !== null && viewing < photos.length ? viewing : null} onIndex={setViewing} />
         </div>
       </div>
 

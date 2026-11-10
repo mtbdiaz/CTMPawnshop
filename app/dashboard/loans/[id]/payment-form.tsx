@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ActionForm, CheckboxField, Field, SubmitButton, TextareaField } from "@/components/form";
 import { buttonClasses } from "@/components/ui";
 import { formatDate, formatPeso } from "@/lib/format";
+import { termInterest } from "@/lib/loans/accrual"; // AR1: one term of interest on what is left
 import { RequestIdInput } from "@/components/request-id"; // #31 one-time id so a retry never saves twice
 import { type ActionState, recordPayment, processExtension, redeemLoan, capitalizeLoan, reinstateLoan, forfeitLoan, adminEditLoan, adminEditPayment } from "../actions";
 
@@ -36,14 +37,18 @@ export function PaymentForm({
   loanId,
   interestDue,
   principalBalance,
+  renewOnClear,
 }: {
   loanId: string;
   interestDue: number;
   principalBalance: number;
+  // AR1 (Matt, 0043): the loan is past its due date and can still be renewed. A payment that clears all the interest
+  // renews it by itself (record_payment), to this due date, with one term of interest billed for the new term
+  renewOnClear?: { newMaturity: string; ratePercent: number } | null;
 }) {
   const [amount, setAmount] = useState("");
   const [round, setRound] = useState(0); // #31: +1 after each saved payment, so the next payment gets a new id
-  const [lastReceipt, setLastReceipt] = useState<{ id: string; number: string } | null>(null); // S1: the payment just saved
+  const [lastReceipt, setLastReceipt] = useState<{ id: string; number: string; renewedTo?: string } | null>(null); // S1: the payment just saved (AR1: and the new due date if it renewed the loan)
   const total = Math.round((interestDue + principalBalance) * 100) / 100;
   // L17: what this payment does, with the database's own rule (record_payment): interest is paid first, the rest
   // goes to principal. interestDue already includes interest added after the due date, as the database does first.
@@ -52,24 +57,35 @@ export function PaymentForm({
   const toPrincipal = Math.round((paid - toInterest) * 100) / 100;
   const interestLeft = Math.round((interestDue - toInterest) * 100) / 100;
   const principalLeft = Math.round((principalBalance - toPrincipal) * 100) / 100;
+  // AR1: this payment renews the loan (same rule as the database: overdue, all interest paid, principal still owed)
+  const willRenew = Boolean(renewOnClear) && paid > 0 && interestLeft === 0 && principalLeft > 0;
+  const newTermInterest = willRenew ? termInterest(principalLeft, renewOnClear!.ratePercent) : 0; // billed for the new term
 
   return (
     <ActionForm
       action={recordPayment}
       className="space-y-3"
       resetOnSuccess
-      successMessage="Payment recorded. The receipt is in the payment history."
+      successMessage={(s: ActionState) =>
+        s.renewedTo
+          ? `Payment recorded. The interest is paid, so the loan is renewed: new due date ${formatDate(s.renewedTo)}.` // AR1
+          : "Payment recorded. The receipt is in the payment history."
+      }
       onSuccess={(state: ActionState) => {
         setAmount("");
         setRound((r) => r + 1);
         // S1: remember the new payment, to offer its receipt right here
-        setLastReceipt(state.paymentId ? { id: state.paymentId, number: state.receiptNumber ?? "" } : null);
+        setLastReceipt(state.paymentId ? { id: state.paymentId, number: state.receiptNumber ?? "", renewedTo: state.renewedTo } : null);
       }}
     >
       {/* S1: straight to the receipt after a payment, instead of looking for it in the payment history */}
       {lastReceipt && (
         <p role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-          <span>Payment recorded{lastReceipt.number ? ` · ${lastReceipt.number}` : ""}</span>
+          <span>
+            Payment recorded{lastReceipt.number ? ` · ${lastReceipt.number}` : ""}
+            {/* AR1: say that it also renewed the loan */}
+            {lastReceipt.renewedTo && <span className="block">Loan renewed. New due date {formatDate(lastReceipt.renewedTo)}.</span>}
+          </span>
           <a href={`/print/receipt/${lastReceipt.id}`} target="_blank" rel="noreferrer" className={buttonClasses("secondary", "sm")}>
             Print receipt
           </a>
@@ -100,6 +116,19 @@ export function PaymentForm({
           Pay in full · {formatPeso(total)}
         </button>
       </div>
+      {/* AR1: before saving, say that this payment also renews the overdue loan, and what that means */}
+      {willRenew && (
+        <p role="status" className="rounded-md border border-navy-200 bg-navy-50 px-3 py-2 text-sm text-navy-900">
+          This pays all the interest, so the loan is <span className="font-semibold">renewed</span>: new due date {formatDate(renewOnClear!.newMaturity)}.
+          Interest for the new term ({formatPeso(newTermInterest)}) is added, the same as Renew.
+        </p>
+      )}
+      {/* AR1: an overdue loan with interest still unpaid after this payment stays overdue */}
+      {renewOnClear && paid > 0 && interestLeft > 0 && (
+        <p className="text-xs text-slate-600">
+          Pay at least {formatPeso(interestDue)} (all the interest) to also renew the loan to {formatDate(renewOnClear.newMaturity)}.
+        </p>
+      )}
       <LostTicketFields />
       <SubmitButton
         pendingLabel="Recording"
@@ -118,7 +147,14 @@ export function PaymentForm({
             ["To principal", formatPeso(toPrincipal)],
             ["Interest left after", formatPeso(interestLeft)],
             ["Principal left after", formatPeso(principalLeft)],
-            ["Total left after", formatPeso(Math.round((interestLeft + principalLeft) * 100) / 100)],
+            // AR1: when the payment renews the loan, the new term's interest is added and the due date moves
+            ...(willRenew
+              ? ([
+                  ["Renews the loan", `Yes, new due date ${formatDate(renewOnClear!.newMaturity)}`],
+                  ["New term interest", formatPeso(newTermInterest)],
+                  ["Total to redeem after", formatPeso(Math.round((principalLeft + newTermInterest) * 100) / 100)],
+                ] as [string, string][])
+              : ([["Total left after", formatPeso(Math.round((interestLeft + principalLeft) * 100) / 100)]] as [string, string][])),
           ],
         }}
       >

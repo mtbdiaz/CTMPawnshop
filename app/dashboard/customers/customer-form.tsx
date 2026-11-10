@@ -143,8 +143,9 @@ export function CustomerForm({
   // only an answer for exactly what is in the box now counts
   const phoneNow = phoneCheck && phoneCheck.key === phoneKey ? phoneCheck : null;
   const idNow = idCheck && idCheck.key === idKey ? idCheck : null;
-  // NP: the name as it will be saved and shown everywhere ("Juan B. Dela Cruz Jr."), once a first or last name is typed
-  const savedName = vals.first_name.trim() || vals.last_name.trim() ? joinName(vals.first_name, vals.middle_name, vals.last_name, vals.suffix) : "";
+  // NP: the name as it will be saved and shown everywhere ("Juan B. Dela Cruz Jr."), once both the first and the last name are typed
+  // NP2: only once both First and Last are typed, so it never shows half a name like "B. Dela Cruz Jr."
+  const savedName = vals.first_name.trim() && vals.last_name.trim() ? joinName(vals.first_name, vals.middle_name, vals.last_name, vals.suffix) : "";
   const who = (h?: DuplicateHit) => (h ? `${h.name} (${customerNo(h.customerNo)})${h.archived ? ", archived" : ""}` : "another customer");
 
   return (

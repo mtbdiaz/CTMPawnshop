@@ -216,7 +216,7 @@ export default async function AppraisalDetailPage({ params }: { params: Promise<
           <SectionTitle>Photos</SectionTitle>
           {photos.length > 0 ? (
             // PV1: a click opens the photo in a popup on this page (zoom, previous / next) instead of a new tab
-            <PhotoGrid className="grid grid-cols-2 gap-2" photos={photos.map((url, i) => ({ url, alt: `Photo ${i + 1} of ${title}` }))} />
+            <PhotoGrid className="grid grid-cols-2 gap-2" photos={photos.map((url) => ({ url, alt: title }))} />
           ) : (
             <p className="text-sm text-slate-500">No photos.</p>
           )}
