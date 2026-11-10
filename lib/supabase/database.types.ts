@@ -1209,6 +1209,41 @@ export type Database = {
           },
         ]
       }
+      vault_locations: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_locations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       customer_history_summary: {
@@ -1284,6 +1319,7 @@ export type Database = {
               p_appraisal_item_id: string
               p_customer_id: string
               p_principal_amount: number
+              p_request_id?: string
               p_vault_location?: string
             }
             Returns: string
@@ -1449,6 +1485,15 @@ export type Database = {
         }[]
       }
       ctm_customer_score: { Args: { p_customer: string }; Returns: number }
+      ctm_loan_terms: {
+        Args: { p_principal: number }
+        Returns: {
+          grace_period_days: number
+          interest: number
+          interest_rate_percent: number
+          maturity_date: string
+        }[]
+      }
       ctm_photo_in_use: { Args: { p_name: string }; Returns: boolean }
       ctm_rate_check: { Args: { p_kind: string }; Returns: boolean }
       ctm_today: { Args: never; Returns: string }
@@ -1470,6 +1515,16 @@ export type Database = {
           p_outcome: Database["public"]["Enums"]["reminder_outcome"]
         }
         Returns: string
+      }
+      preview_pawn_loan: {
+        Args: { p_appraisal_item_id: string; p_principal_amount: number }
+        Returns: {
+          interest: number
+          interest_rate_percent: number
+          max_loan: number
+          maturity_date: string
+          redeem_on_time: number
+        }[]
       }
       record_auction_sale: {
         Args: {

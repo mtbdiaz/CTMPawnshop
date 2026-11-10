@@ -18,7 +18,7 @@ export default async function NewLoanPage({ searchParams }: { searchParams: Prom
   const params = await searchParams;
   const supabase = await createClient();
   const initialCustomer = params.customer ? await loadCustomer(supabase, params.customer) : null;
-  const [{ data: items }, { data: settings }] = await Promise.all([
+  const [{ data: items }, { data: settings }, { data: vaultRows }] = await Promise.all([
     supabase
       .from("appraisal_items")
       .select("id, appraisal_no, status, archived_at, category, category_other, karat, weight_grams, computed_value, suggested_loan_max, is_counterfeit_risk, counterfeit_resolution, created_at")
@@ -27,7 +27,9 @@ export default async function NewLoanPage({ searchParams }: { searchParams: Prom
       .order("created_at", { ascending: false })
       .limit(300),
     supabase.from("system_settings").select("price_24k, price_21k, price_18k, ltv_percent, interest_rate_percent").eq("id", 1).maybeSingle(),
+    supabase.from("vault_locations").select("name").eq("is_active", true).order("name"), // #37: the locations a new loan may use
   ]);
+  const vaults = (vaultRows ?? []).map((v) => v.name);
 
   const pool: PoolItem[] = (items ?? [])
     .filter(isPawnable)
@@ -53,6 +55,7 @@ export default async function NewLoanPage({ searchParams }: { searchParams: Prom
           interestRatePercent={Number(settings.interest_rate_percent)}
           initialCustomer={initialCustomer}
           initialItemId={params.item}
+          vaults={vaults}
         />
       ) : (
         <p className="text-sm text-red-700">Rates are not configured. An Admin must set them in Settings first.</p>

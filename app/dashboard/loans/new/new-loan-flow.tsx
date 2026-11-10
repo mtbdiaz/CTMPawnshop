@@ -3,7 +3,8 @@
 import { appraisalNo, customerNo, parseRefNo } from "@/lib/ref-numbers"; // #18 + #29: short numbers
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ActionForm, Field, SubmitButton } from "@/components/form";
+import { ActionForm, Field, SelectField, SubmitButton } from "@/components/form";
+import { RequestIdInput } from "@/components/request-id"; // #40: one-time id, so the same form can't make two loans
 import { Alert, Badge, Card, cx } from "@/components/ui";
 import { ScoreBadge } from "@/components/score-badge";
 import { formatPeso, manilaToday } from "@/lib/format";
@@ -11,7 +12,7 @@ import { addDaysIso, TERM_DAYS, termInterest } from "@/lib/loans/accrual";
 import type { KaratPrices } from "@/lib/appraisal/valuation";
 import { AppraisalCalculator, type SavedAppraisal } from "../../appraisals/appraisal-calculator";
 import { createLoan, type ActionState } from "../actions";
-import { searchCustomers, type CustomerHit } from "./actions";
+import { previewLoan, searchCustomers, type CustomerHit, type LoanPreview } from "./actions";
 
 export type PoolItem = { id: string; label: string; value: number; max: number };
 
@@ -22,6 +23,7 @@ export function NewLoanFlow({
   interestRatePercent,
   initialCustomer = null,
   initialItemId,
+  vaults,
 }: {
   pool: PoolItem[];
   prices: KaratPrices;
@@ -29,6 +31,7 @@ export function NewLoanFlow({
   interestRatePercent: number;
   initialCustomer?: CustomerHit | null;
   initialItemId?: string;
+  vaults: string[]; // #37: the active vault locations, from the database list
 }) {
   const router = useRouter();
   const [customer, setCustomer] = useState<CustomerHit | null>(initialCustomer);
@@ -37,12 +40,38 @@ export function NewLoanFlow({
   const [itemMode, setItemMode] = useState<"pool" | "new">(pool.length ? "pool" : "new");
   const [itemQuery, setItemQuery] = useState("");
   const [amount, setAmount] = useState("");
-  const [vault, setVault] = useState("Vault A");
+  // #37: starts on Vault A when it is on the list, else on the first location
+  const [vault, setVault] = useState(vaults.includes("Vault A") ? "Vault A" : (vaults[0] ?? ""));
+  // #39: the terms as the database works them out, and which item + amount they are for
+  const [preview, setPreview] = useState<{ key: string; terms: LoanPreview } | null>(null);
 
   const principal = Number(amount);
   const amountOk = item !== null && principal > 0 && principal <= item.max;
   const today = manilaToday();
-  const interest = principal > 0 ? termInterest(principal, interestRatePercent) : 0;
+
+  // #39: ask the database for the terms a moment after the cashier stops typing (or picks another item)
+  const previewKey = item && amountOk ? `${item.id}|${principal}` : "";
+  useEffect(() => {
+    if (!previewKey) return;
+    const [itemId, amt] = previewKey.split("|");
+    let stale = false; // true once the amount or item changed again: that answer is thrown away
+    const t = setTimeout(async () => {
+      const terms = await previewLoan(itemId, Number(amt));
+      if (!stale && terms) setPreview({ key: previewKey, terms });
+    }, 300);
+    return () => {
+      stale = true;
+      clearTimeout(t);
+    };
+  }, [previewKey]);
+
+  // use the database's answer when it is for exactly this item and amount; until it arrives (or if it can't be
+  // reached) show the app's own math, which follows the same rule
+  const fromDb = preview && preview.key === previewKey ? preview.terms : null;
+  const ratePercent = fromDb?.ratePercent ?? interestRatePercent;
+  const interest = fromDb ? fromDb.interest : principal > 0 ? termInterest(principal, interestRatePercent) : 0;
+  const due = fromDb?.due ?? addDaysIso(today, TERM_DAYS);
+  const redeemOnTime = fromDb ? fromDb.redeemOnTime : principal + interest;
   const blocked = customer?.is_blacklisted ?? false;
 
   const itemRef = parseRefNo(itemQuery); // #29: "a45" / "A-0045" finds that one item
@@ -154,6 +183,9 @@ export function NewLoanFlow({
         >
           <input type="hidden" name="customer_id" value={customer?.id ?? ""} />
           <input type="hidden" name="appraisal_item_id" value={item?.id ?? ""} />
+          {/* #40: a new id for every customer + item pair. Pressing Create twice, or a retry, sends the same id and
+              the database returns the first loan instead of making a second one */}
+          <RequestIdInput key={`${customer?.id ?? ""}|${item?.id ?? ""}`} />
           <dl className="space-y-1 text-sm">
             <Row label="Customer" value={customer?.full_name ?? "Not selected"} />
             <Row label="Item" value={item?.label ?? "Not selected"} />
@@ -172,16 +204,31 @@ export function NewLoanFlow({
             onChange={(e) => setAmount(e.target.value)}
             hint={item && principal > item.max ? `Above the maximum of ${formatPeso(item.max)}` : undefined}
           />
-          <Field label="Vault location" name="vault_location" value={vault} onChange={(e) => setVault(e.target.value)} required />
+          {/* #37: a list instead of a free text box, so "vault a", "Vault-A" and typos can't happen any more */}
+          <SelectField
+            label="Vault location"
+            name="vault_location"
+            value={vault}
+            onChange={(e) => setVault(e.target.value)}
+            required
+            hint={vaults.length ? "An Admin can add locations in Settings." : undefined}
+          >
+            {vaults.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </SelectField>
+          {!vaults.length && <Alert tone="warning">No vault location is switched on. An Admin must add one in Settings before a loan can be made.</Alert>}
           <dl className="space-y-1 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-            <Row label={`Interest (${interestRatePercent}% per ${TERM_DAYS} days)`} value={principal > 0 ? formatPeso(interest) : "-"} />
-            <Row label="Due" value={addDaysIso(today, TERM_DAYS)} />
-            <Row label="To redeem on time" value={principal > 0 ? formatPeso(principal + interest) : "-"} strong />
+            <Row label={`Interest (${ratePercent}% per ${TERM_DAYS} days)`} value={principal > 0 ? formatPeso(interest) : "-"} />
+            <Row label="Due" value={due} />
+            <Row label="To redeem on time" value={principal > 0 ? formatPeso(redeemOnTime) : "-"} strong />
           </dl>
           {blocked && <Alert tone="danger">This customer is blacklisted. A loan cannot be issued.</Alert>}
           <SubmitButton
             pendingLabel="Creating"
-            disabled={!customer || !amountOk || blocked}
+            disabled={!customer || !amountOk || blocked || !vault}
             confirm={{
               title: "Review the loan",
               message: "Check every line with the customer before you confirm.",
@@ -193,7 +240,8 @@ export function NewLoanFlow({
                 ["Item", item?.label ?? ""],
                 ["Loan amount", formatPeso(principal)],
                 ["Interest", formatPeso(interest)],
-                ["Due", addDaysIso(today, TERM_DAYS)],
+                ["Due", due],
+                ["To redeem on time", formatPeso(redeemOnTime)],
                 ["Vault", vault],
               ],
             }}

@@ -74,3 +74,26 @@ export async function searchCustomers(query: string): Promise<CustomerHit[] | { 
   // #19: search by the full ID still works (above, on the server), but the browser only gets the last 4
   return ranked.map((c) => ({ ...c, id_number: maskId(c.id_number), history: scores.get(c.id)!, similar }));
 }
+
+// #39: what the Terms panel shows for an amount, worked out by the DATABASE (preview_pawn_loan, migration 0038)
+// with the same math the loan itself gets, so the screen and the saved loan can't disagree.
+export type LoanPreview = { maxLoan: number; ratePercent: number; interest: number; due: string; redeemOnTime: number };
+
+// Returns null when there is nothing to show (bad input, over the search limit, or the database couldn't answer).
+// The form then falls back to its own math, which follows the same rule.
+export async function previewLoan(itemId: string, amount: number): Promise<LoanPreview | null> {
+  await requireRole(["cashier", "admin"]);
+  if (!/^[0-9a-f-]{36}$/i.test(itemId) || !Number.isFinite(amount) || amount <= 0) return null; // only real ids and amounts
+  if (!(await allowRequest("search"))) return null; // #22: counted with the searches (it runs while the cashier types)
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("preview_pawn_loan", { p_appraisal_item_id: itemId, p_principal_amount: amount });
+  const row = data?.[0]; // one row for the item (none if the item doesn't exist)
+  if (error || !row) return null;
+  return {
+    maxLoan: Number(row.max_loan),
+    ratePercent: Number(row.interest_rate_percent),
+    interest: Number(row.interest),
+    due: row.maturity_date,
+    redeemOnTime: Number(row.redeem_on_time),
+  };
+}
