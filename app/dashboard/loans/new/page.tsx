@@ -3,7 +3,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { categoryLabel } from "@/lib/appraisal/valuation";
 import { isPawnable } from "@/lib/appraisal/pool";
-import { manilaToday } from "@/lib/format";
+import { formatDateTime, manilaToday } from "@/lib/format";
 import { loadCustomerScores } from "@/lib/customers/history";
 import { maskId } from "@/lib/customers/id-privacy"; // #19 only the last 4 reach the browser
 import { PageHeader } from "@/components/ui";
@@ -20,7 +20,7 @@ export default async function NewLoanPage({ searchParams }: { searchParams: Prom
   const [{ data: items }, { data: settings }, { data: vaultRows }] = await Promise.all([
     supabase
       .from("appraisal_items")
-      .select("id, appraisal_no, status, archived_at, category, category_other, karat, weight_grams, computed_value, suggested_loan_max, is_counterfeit_risk, counterfeit_resolution, created_at, customer_id, customers(full_name, customer_no)") // #38: + who the item was appraised for
+      .select("id, appraisal_no, status, archived_at, category, category_other, karat, weight_grams, computed_value, suggested_loan_max, is_counterfeit_risk, counterfeit_resolution, created_at, appraised_by, customer_id, customers(full_name, customer_no)") // #38: + who the item was appraised for
       .eq("status", "available")
       .is("archived_at", null)
       .order("created_at", { ascending: false })
@@ -30,14 +30,21 @@ export default async function NewLoanPage({ searchParams }: { searchParams: Prom
   ]);
   const vaults = (vaultRows ?? []).map((v) => v.name);
 
-  const pool: PoolItem[] = (items ?? [])
-    .filter(isPawnable)
+  // NL8: who appraised each item, so two similar items ("Ring, 18K") can be told apart
+  const pawnable = (items ?? []).filter(isPawnable);
+  const staffIds = [...new Set(pawnable.map((a) => a.appraised_by).filter((x): x is string => Boolean(x)))];
+  const { data: staff } = staffIds.length ? await supabase.from("profiles").select("id, full_name").in("id", staffIds) : { data: [] };
+  const staffName = new Map((staff ?? []).map((p) => [p.id, p.full_name]));
+
+  const pool: PoolItem[] = pawnable
     .map((a) => ({
       id: a.id,
       // #29: the A-number at the end, so staff can match the item to its tag ("Ring, 18K, 2 g · A-0045")
       label: `${categoryLabel(a.category, a.category_other)}, ${a.karat}K, ${a.weight_grams} g · ${appraisalNo(a.appraisal_no)}`,
       value: Number(a.computed_value),
       max: Number(a.suggested_loan_max),
+      // NL8: "Appraised Nov 5, 2026, 3:10 PM by Ana Cruz"
+      meta: `Appraised ${formatDateTime(a.created_at)}${a.appraised_by && staffName.get(a.appraised_by) ? ` by ${staffName.get(a.appraised_by)}` : ""}`,
       // #38: the customer the item was appraised for (null on older appraisals: anyone can pawn those)
       customerId: a.customer_id,
       owner: a.customers ? `${a.customers.full_name} (${customerNo(a.customers.customer_no)})` : null,

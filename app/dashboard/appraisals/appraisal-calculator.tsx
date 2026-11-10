@@ -23,19 +23,20 @@ export type SavedAppraisal = {
   label: string;
   value: number;
   max: number;
+  flagged: boolean; // NL3: saved with "Flag for counterfeit review", so it can't be pawned until an Admin clears it
 };
 
 /**
  * Item 9: appraisal calculator. Value and maximum loan update as you type.
  * #38: every new appraisal says which customer the item belongs to. The popup has a customer picker;
  * inside New Loan the customer chosen in step 1 is used (forCustomer).
+ * NL3: New Loan's "Appraise now" uses this same full form (notes, photos, counterfeit flag), not a smaller copy.
  */
 export function AppraisalCalculator({
   prices,
   ltvPercent,
   onSaved,
   onCancel,
-  compact = false,
   forCustomer,
 }: {
   prices: KaratPrices;
@@ -44,7 +45,6 @@ export function AppraisalCalculator({
   onSaved?: (saved: SavedAppraisal) => void;
   /** C1: shows a Cancel button (used by the New appraisal popup). */
   onCancel?: () => void;
-  compact?: boolean;
   /** #38: New Loan only: the customer picked in step 1 (null = none picked yet, so nothing can be saved). */
   forCustomer?: { id: string; full_name: string } | null;
 }) {
@@ -121,9 +121,9 @@ export function AppraisalCalculator({
 
   // N2: the live valuation box. Maximum loan is the biggest number; value comes second.
   const valuation = (
-    <section aria-labelledby={`${compact ? "inline" : "popup"}-valuation-title`} className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+    <section aria-labelledby="valuation-title" className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
       {/* P3: a small heading so it's clear these numbers update as you type */}
-      <h3 id={`${compact ? "inline" : "popup"}-valuation-title`} className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+      <h3 id="valuation-title" className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
         Live valuation
       </h3>
       <dl className="space-y-1.5">
@@ -155,49 +155,9 @@ export function AppraisalCalculator({
 
   // C3: can't save until the karat has a price and the weight is above 0
   // #38: and only once the customer is known (the picker in the popup, step 1 in New Loan)
-  const customerOk = compact ? Boolean(forCustomer) : hasCustomer;
+  const inLoan = forCustomer !== undefined; // true = used inside New Loan (the customer comes from step 1)
+  const customerOk = inLoan ? Boolean(forCustomer) : hasCustomer;
   const canSave = !uploading && Boolean(v) && w > 0 && !weightError(weight) && customerOk; // P7: also a weight within the rules
-
-  // New Loan (compact): the small inline calculator, same as before
-  if (compact) {
-    return (
-      <ActionForm
-        action={createAppraisal}
-        resetOnSuccess
-        className="grid grid-cols-1 gap-4"
-        successMessage="Appraisal saved. It is picked for this loan."
-        onSuccess={(state: ActionState) => {
-          if (!state.appraisalId || !onSaved || !v) return;
-          onSaved({ id: state.appraisalId, label: `${categoryLabel(category, other)}, ${karat}K, ${w} g`, value: v.value, max: v.suggestedLoanMax });
-          setCategory("");
-          setOther("");
-          setKarat(null);
-          setWeight("");
-        }}
-      >
-        {/* #38: the item is saved for the customer picked in step 1 */}
-        <input type="hidden" name="customer_id" value={forCustomer?.id ?? ""} />
-        {forCustomer ? (
-          <p className="text-sm text-slate-600">
-            This item will be saved for <span className="font-medium text-slate-900">{forCustomer.full_name}</span>.
-          </p>
-        ) : (
-          <p role="status" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Pick the customer in step 1 first. An appraisal is saved for the customer who brought the item in.
-          </p>
-        )}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <AppraisalFields idPrefix="calc-inline" prices={prices} category={category} setCategory={setCategory} other={other} setOther={setOther} karat={karat} setKarat={setKarat} weight={weight} setWeight={setWeight} />
-        </div>
-        {valuation}
-        <div>
-          <SubmitButton pendingLabel="Saving" disabled={!canSave}>
-            Save appraisal
-          </SubmitButton>
-        </div>
-      </ActionForm>
-    );
-  }
 
   // N1: the popup. Left = the item; right = live valuation and photos; bottom = review flag and the buttons.
   return (
@@ -205,10 +165,23 @@ export function AppraisalCalculator({
       action={createAppraisal}
       className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
       // N7: say where the item went
-      successMessage={flagged ? "Appraisal saved and sent to counterfeit review. No loan until an Admin clears it." : "Appraisal saved. It can now be pawned."}
+      successMessage={flagged ? "Appraisal saved and sent to counterfeit review. No loan until an Admin clears it." : inLoan ? "Appraisal saved. It is picked for this loan." : "Appraisal saved. It can now be pawned."}
       onSuccess={(state: ActionState) => {
-        if (state.appraisalId) router.push(`/dashboard/appraisals/${state.appraisalId}`); // open the new appraisal
+        if (!state.appraisalId) return;
+        if (onSaved && v) {
+          // NL3: inside New Loan: hand the new item to the loan form and empty this form for the next item
+          onSaved({ id: state.appraisalId, label: `${categoryLabel(category, other)}, ${karat}K, ${w} g`, value: v.value, max: v.suggestedLoanMax, flagged });
+          setCategory("");
+          setOther("");
+          setKarat(null);
+          setWeight("");
+          setPhotos([]); // the photos now belong to the saved appraisal
+          setFlagged(false);
+          return;
+        }
+        router.push(`/dashboard/appraisals/${state.appraisalId}`); // open the new appraisal
       }}
+      resetOnSuccess={inLoan} // NL3: also empties the notes box
     >
       {photos.map((p) => (
         <input key={p.path} type="hidden" name="photo_paths" value={p.path} />
@@ -216,9 +189,24 @@ export function AppraisalCalculator({
 
       {/* LEFT: category, karat, weight, notes */}
       <div className="grid content-start grid-cols-1 gap-4 sm:grid-cols-2">
-        {/* #38: first, who brought the item in */}
+        {/* #38: first, who brought the item in. NL3: inside New Loan it is the customer picked in step 1 */}
         <div className="sm:col-span-2">
-          <CustomerPicker onPicked={(c) => setHasCustomer(Boolean(c))} />
+          {!inLoan ? (
+            <CustomerPicker onPicked={(c) => setHasCustomer(Boolean(c))} />
+          ) : (
+            <>
+              <input type="hidden" name="customer_id" value={forCustomer?.id ?? ""} />
+              {forCustomer ? (
+                <p className="text-sm text-slate-600">
+                  This item will be saved for <span className="font-medium text-slate-900">{forCustomer.full_name}</span>. If the loan is cancelled, the appraisal stays under Available items for this customer.
+                </p>
+              ) : (
+                <p role="status" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  Pick the customer in step 1 first. An appraisal is saved for the customer who brought the item in.
+                </p>
+              )}
+            </>
+          )}
         </div>
         <AppraisalFields idPrefix="calc" prices={prices} category={category} setCategory={setCategory} other={other} setOther={setOther} karat={karat} setKarat={setKarat} weight={weight} setWeight={setWeight} />
         {/* N9: "(optional)" in the label instead of a separate line; the placeholder says what to write */}
