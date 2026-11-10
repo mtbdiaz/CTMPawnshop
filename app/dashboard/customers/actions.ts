@@ -8,7 +8,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { allowRequest, TOO_MANY } from "@/lib/rate-limit"; // #22: rate limiting
 // also import the shared phone rule we just exported
-import { customerSchema, requiredDateOfBirthSchema, idNumberError, phPhoneSchema, MAX } from "@/lib/validation/customer"; // F4: MAX = length limits
+import { customerSchema, requiredDateOfBirthSchema, idNumberError, phPhoneSchema, joinName, nameFields, MAX } from "@/lib/validation/customer"; // F4: MAX = length limits; NP: joinName + nameFields = the name in parts
 import { runAmlCheck } from "@/lib/customers/aml";
 // P3: which roles may see a full government ID number
 import { ID_REVEAL_ROLES } from "@/lib/customers/id-privacy";
@@ -36,7 +36,10 @@ const loosePattern = (value: string) => `%${value.split("").join("%")}%`;
 
 function parseCustomerForm(formData: FormData) {
   return customerSchema.safeParse({
-    full_name: formData.get("full_name"),
+    first_name: formData.get("first_name"), // NP: the name in parts (migration 0042)
+    middle_name: formData.get("middle_name") ?? "", // optional
+    last_name: formData.get("last_name"),
+    suffix: formData.get("suffix") ?? "", // optional, "" = none
     address: formData.get("address"),
     contact_number: formData.get("contact_number"),
     email: formData.get("email"),
@@ -46,17 +49,56 @@ function parseCustomerForm(formData: FormData) {
   });
 }
 
+// LV2: who already has this phone number or this ID, checked while the Register form is being filled in (same
+// matching rules as createCustomer below, which still checks again on Register). null = nobody.
+// { limited: true } = over 60 checks a minute (#22). Only the name and the C-number are sent back.
+export type DuplicateHit = { id: string; name: string; customerNo: number; archived: boolean };
+export async function checkCustomerDuplicate(
+  kind: "phone" | "id",
+  value: string,
+  idType?: string,
+): Promise<DuplicateHit | null | { limited: true }> {
+  await requireRole(["operator", "cashier", "admin"]); // the roles that can register
+  if (!(await allowRequest("search"))) return { limited: true };
+  if (kind === "phone") {
+    const phone = phPhoneSchema.safeParse(value); // the same phone rule as the form
+    if (!phone.success) return null; // a wrong format is shown by the form itself
+    const { data } = await (await createClient())
+      .from("customers")
+      .select("id, full_name, customer_no, contact_number, archived_at")
+      .ilike("contact_number", loosePattern(phone.data.slice(1))) // numbers that look similar (without the first 0)
+      .limit(20);
+    const match = (data ?? []).find((c) => normalPhone(c.contact_number) === phone.data); // the same number once cleaned
+    return match ? { id: match.id, name: match.full_name, customerNo: match.customer_no, archived: !!match.archived_at } : null;
+  }
+  if (!idType || idNumberError(idType, value)) return null; // wrong format: the form shows that itself
+  const idClean = onlyLettersDigits(value);
+  if (!idClean) return null;
+  const { data } = await createAdminClient() // #17: id_number is only readable on the server
+    .from("customers")
+    .select("id, full_name, customer_no, id_number, archived_at")
+    .eq("id_type", idType)
+    .ilike("id_number", loosePattern(idClean))
+    .limit(20);
+  const match = (data ?? []).find((c) => onlyLettersDigits(c.id_number) === idClean); // the same ID once cleaned
+  return match ? { id: match.id, name: match.full_name, customerNo: match.customer_no, archived: !!match.archived_at } : null;
+}
+
 // PB-7 + PB-8: register a new customer, run the AML check as part of registration.
 export async function createCustomer(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const user = await requireRole(["operator", "admin"]);
+  // RC1: a Cashier may register too (owner decision Nov 11, migration 0041), so New Loan can register a walk-in customer
+  const user = await requireRole(["operator", "cashier", "admin"]);
   if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const parsed = parseCustomerForm(formData);
   if (!parsed.success) return validationFailure(parsed.error);
 
-  const aml = runAmlCheck(parsed.data.full_name, parsed.data.id_number);
+  // NP: the one-line name, built the same way the database builds full_name ("Juan B. Dela Cruz Jr.")
+  const fullName = joinName(parsed.data.first_name, parsed.data.middle_name, parsed.data.last_name, parsed.data.suffix);
+  // the AML check gets every part in full (the whole middle name, not only its initial)
+  const aml = runAmlCheck([parsed.data.first_name, parsed.data.middle_name, parsed.data.last_name, parsed.data.suffix].filter(Boolean).join(" "), parsed.data.id_number);
 
   const supabase = await createClient();
   
@@ -95,7 +137,11 @@ export async function createCustomer(
   const { data, error } = await supabase
     .from("customers")
     .insert({
-      full_name: parsed.data.full_name,
+      first_name: parsed.data.first_name, // NP: the parts are saved...
+      middle_name: parsed.data.middle_name || null, // empty = no middle name
+      last_name: parsed.data.last_name,
+      suffix: parsed.data.suffix || null, // empty = no suffix
+      full_name: fullName, // ...and the database rebuilds full_name from them anyway (trigger customers_build_name)
       address: parsed.data.address,
       contact_number: parsed.data.contact_number,
       email: parsed.data.email || null,
@@ -196,7 +242,7 @@ export async function updateCustomer(_prev: ActionState, formData: FormData): Pr
 
 const identitySchema = z.object({
   customer_id: z.string().uuid("Customer not found."), // PR12: plain message instead of "Invalid UUID" if the link is broken
-  full_name: z.string().trim().min(1, "Full name is required").max(MAX.full_name, `Full name can be at most ${MAX.full_name} characters`).transform((v) => v.replace(/\s+/g, " ")), // PR4: extra spaces become one, same as Register; F4: length limit
+  ...nameFields, // NP: First, Middle, Last and Suffix, the same rules as Register (PR4)
   id_type: z.string().trim().min(1, "ID type is required"),
   id_number: z.string().trim().max(MAX.id_number, `ID number can be at most ${MAX.id_number} characters`), // PR4: may be empty = keep the current number; F4: length limit
   reason: z.string().trim().min(5, "Write a reason of at least 5 characters"),
@@ -213,13 +259,15 @@ export async function adminEditCustomer(_prev: ActionState, formData: FormData):
 
   // F10: if the Admin changes the ID type or number, the new one must fit the format for its type.
   // If only the name is being fixed, the saved ID is left alone even if it's an old one that doesn't fit.
-  const { data: current } = await createAdminClient().from("customers").select("full_name, id_type, id_number").eq("id", parsed.data.customer_id).maybeSingle(); // the name and ID saved now, before this correction
+  const { data: current } = await createAdminClient().from("customers").select("first_name, middle_name, last_name, suffix, id_type, id_number").eq("id", parsed.data.customer_id).maybeSingle(); // the name and ID saved now, before this correction
   if (!current) return { error: "Customer not found." }; // PR4: wrong or deleted customer id
   // PR4: an empty "New ID number" means keep the current number
   parsed.data.id_number = parsed.data.id_number || current.id_number;
   const cleanId = (v: string) => v.replace(/[\s-]/g, "").toUpperCase(); // ignore dashes, spaces and capitals
   // PR4: stop a "correction" that changes nothing (same name, same ID type, same number)
-  if (current.full_name === parsed.data.full_name && current.id_type === parsed.data.id_type && cleanId(current.id_number) === cleanId(parsed.data.id_number)) {
+  // NP: the name is the same when all four parts are the same (empty and nothing count as the same)
+  const sameName = (["first_name", "middle_name", "last_name", "suffix"] as const).every((k) => (current[k] ?? "") === parsed.data[k]);
+  if (sameName && current.id_type === parsed.data.id_type && cleanId(current.id_number) === cleanId(parsed.data.id_number)) {
     return { error: "Nothing to correct: the name and ID are the same as what's saved now." }; // nothing saved, nothing written to the audit trail
   } // end of the nothing-changed check
   const idChanged = current.id_type !== parsed.data.id_type || cleanId(current.id_number) !== cleanId(parsed.data.id_number); // true if the type or the number is different
@@ -247,7 +295,7 @@ export async function adminEditCustomer(_prev: ActionState, formData: FormData):
 
   const { error } = await supabase.rpc("admin_edit_customer", {
     p_id: parsed.data.customer_id,
-    p_full_name: parsed.data.full_name,
+    p_full_name: joinName(parsed.data.first_name, parsed.data.middle_name, parsed.data.last_name, parsed.data.suffix), // NP: for old callers; the parts below are what is saved
     p_id_type: parsed.data.id_type,
     p_id_number: parsed.data.id_number,
     p_contact_number: "",
@@ -255,6 +303,11 @@ export async function adminEditCustomer(_prev: ActionState, formData: FormData):
     p_reason: parsed.data.reason,
     // #21: the database refuses if someone changed this customer after the page was opened
     p_expected_updated_at: parsed.data.loaded_at || undefined,
+    // NP (0042): the name parts. The database builds full_name from them
+    p_first_name: parsed.data.first_name,
+    p_middle_name: parsed.data.middle_name || undefined, // empty = no middle name
+    p_last_name: parsed.data.last_name,
+    p_suffix: parsed.data.suffix || undefined, // empty = no suffix
   });
   if (error) return { error: error.message }; // plain words, e.g. "Someone changed this customer after you opened the page…"
   revalidatePath(`/dashboard/customers/${parsed.data.customer_id}`);
@@ -306,4 +359,4 @@ export async function setBlacklistStatus(
   revalidatePath(`/dashboard/customers/${customerId}`);
   revalidatePath("/dashboard/customers");
   return { success: true, customerId };
-}
+}

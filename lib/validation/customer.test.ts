@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { customerSchema, requiredDateOfBirthSchema, adultCutoff, isCalendarDate, MAX } from "./customer";
+import { customerSchema, requiredDateOfBirthSchema, adultCutoff, isCalendarDate, joinName, MAX } from "./customer";
 
 describe("customerSchema (PB-7 AC2)", () => {
   const valid = {
-    full_name: "Juan Dela Cruz",
+    first_name: "Juan", // NP: the name in parts
+    middle_name: "",
+    last_name: "Dela Cruz",
+    suffix: "",
     address: "123 Rizal St, Davao City",
     contact_number: "09171234567",
     email: "",
@@ -16,8 +19,23 @@ describe("customerSchema (PB-7 AC2)", () => {
     expect(customerSchema.safeParse(valid).success).toBe(true);
   });
 
-  it("rejects a missing full name", () => {
-    expect(customerSchema.safeParse({ ...valid, full_name: "" }).success).toBe(false);
+  // NP: first and last name are required; middle name and suffix are optional
+  it("rejects a missing first or last name, allows no middle name or suffix", () => {
+    expect(customerSchema.safeParse({ ...valid, first_name: "  " }).success).toBe(false); // no first name
+    expect(customerSchema.safeParse({ ...valid, last_name: "" }).success).toBe(false); // no last name
+    expect(customerSchema.safeParse({ ...valid, middle_name: undefined, suffix: undefined }).success).toBe(true); // both left out: fine
+  });
+
+  it("only allows a suffix from the list", () => {
+    expect(customerSchema.safeParse({ ...valid, suffix: "Jr." }).success).toBe(true); // in the list
+    expect(customerSchema.safeParse({ ...valid, suffix: "Esq." }).success).toBe(false); // not in the list
+  });
+
+  // NP: the same rule as ctm_join_name in the database (migration 0042)
+  it("joinName puts the parts together with the middle initial", () => {
+    expect(joinName("Juan", "Bautista", "Dela Cruz", "Jr.")).toBe("Juan B. Dela Cruz Jr."); // all four
+    expect(joinName(" Ma.  Teresa ", "", "Cruz", "")).toBe("Ma. Teresa Cruz"); // no middle, no suffix, spaces tidied
+    expect(joinName("Pedro", "reyes", "Santos", null)).toBe("Pedro R. Santos"); // the initial is a capital
   });
 
   it("rejects a missing address", () => {
@@ -50,10 +68,10 @@ describe("customerSchema (PB-7 AC2)", () => {
 
   // F8: extra spaces inside a name become one; real names with punctuation are allowed
   it("cleans extra spaces in the name and allows real Filipino names", () => {
-    const r = customerSchema.safeParse({ ...valid, full_name: "  Ma.  Teresa   Dela Cruz-Santos  " });
+    const r = customerSchema.safeParse({ ...valid, first_name: "  Ma.  Teresa ", last_name: " Dela   Cruz-Santos  " });
     expect(r.success).toBe(true);
-    if (r.success) expect(r.data.full_name).toBe("Ma. Teresa Dela Cruz-Santos");
-    expect(customerSchema.safeParse({ ...valid, full_name: "Niño O'Brien" }).success).toBe(true);
+    if (r.success) expect([r.data.first_name, r.data.last_name]).toEqual(["Ma. Teresa", "Dela Cruz-Santos"]);
+    expect(customerSchema.safeParse({ ...valid, first_name: "Niño", last_name: "O'Brien" }).success).toBe(true);
   });
 
   // F10: the ID number must fit the chosen ID type (dashes, spaces and capitals don't matter)
@@ -142,12 +160,13 @@ describe("customerSchema (PB-7 AC2)", () => {
 
   // F4 regression: length limits stop junk but allow real long names and addresses
   it("F4: length limits", () => {
-    const longRealName = "Ma. Teresa Josefina Dela Cruz-Santos y Villanueva-Macaraeg de los Reyes Jr."; // 75 characters, a real-looking name
-    expect(customerSchema.safeParse({ ...valid, full_name: longRealName }).success).toBe(true); // allowed
-    expect(customerSchema.safeParse({ ...valid, full_name: "A".repeat(MAX.full_name) }).success).toBe(true); // exactly the limit: OK
-    expect(customerSchema.safeParse({ ...valid, full_name: "A".repeat(MAX.full_name + 1) }).success).toBe(false); // one over: refused
+    // NP: each name part can be up to 55 characters
+    expect(customerSchema.safeParse({ ...valid, first_name: "Ma. Teresa Josefina", last_name: "Dela Cruz-Santos y Villanueva-Macaraeg de los Reyes" }).success).toBe(true); // a long real-looking name
+    expect(customerSchema.safeParse({ ...valid, last_name: "A".repeat(MAX.name_part) }).success).toBe(true); // exactly the limit: OK
+    expect(customerSchema.safeParse({ ...valid, last_name: "A".repeat(MAX.name_part + 1) }).success).toBe(false); // one over: refused
+    expect(customerSchema.safeParse({ ...valid, middle_name: "B".repeat(MAX.name_part + 1) }).success).toBe(false); // middle name too long
     expect(customerSchema.safeParse({ ...valid, address: "B".repeat(MAX.address + 1) }).success).toBe(false); // address too long
     expect(customerSchema.safeParse({ ...valid, email: "a".repeat(250) + "@x.ph" }).success).toBe(false); // email too long
     expect(customerSchema.safeParse({ ...valid, id_type: "Postal ID", id_number: "C".repeat(MAX.id_number + 1) }).success).toBe(false); // ID too long
   });
-});
+});

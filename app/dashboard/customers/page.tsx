@@ -70,7 +70,7 @@ export default async function CustomersPage({
   const dir = params.dir === "asc" ? "asc" : params.dir === "desc" ? "desc" : sort === "name" ? "asc" : "desc";
   // U4: which filter tab is open ("all" if the address has something else)
   const show: Show = SHOWS.includes(params.show as Show) ? (params.show as Show) : "all";
-  const canRegister = hasRole(user.profile.role, ["operator"]);
+  const canRegister = hasRole(user.profile.role, ["operator", "cashier"]); // RC1: Cashier too since Nov 11 (migration 0041)
   // P3: may this person reveal a full ID? (Admin, Operator, Cashier; not Appraiser)
   const canReveal = hasRole(user.profile.role, ID_REVEAL_ROLES);
   // P2: "?ids=hide" = the whole ID column is hidden. Only the on/off choice is in the address, never an ID number.
@@ -417,7 +417,7 @@ export default async function CustomersPage({
                   ? "Choose All to see every customer."
                   : canRegister
                     ? "Use Register customer at the top to add the first one."
-                    : "An Operator or Admin registers customers before their first appraisal."
+                    : "An Operator, Cashier or Admin registers customers before their first appraisal."
             }
           />
         )}

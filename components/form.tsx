@@ -306,7 +306,15 @@ type FieldProps = {
   name: string;
   hint?: ReactNode;
   className?: string;
+  // LV1: an error worked out in the browser while typing. undefined = use the server's error (after Register);
+  // null = the field is fine now (also hides an old server error); text = show this error
+  liveError?: string | null;
 };
+
+// LV1: which error a field shows: the live one once the person has worked on the field, otherwise the server's
+function pickError(liveError: string | null | undefined, serverError: string | undefined) {
+  return liveError === undefined ? serverError : (liveError ?? undefined);
+}
 
 export function Field({
   label,
@@ -314,9 +322,10 @@ export function Field({
   hint,
   className,
   id,
+  liveError,
   ...input
 }: FieldProps & InputHTMLAttributes<HTMLInputElement>) {
-  const error = useContext(FormCtx).fieldErrors[name];
+  const error = pickError(liveError, useContext(FormCtx).fieldErrors[name]);
   const fieldId = id ?? `f-${name}`;
   return (
     <FieldShell id={fieldId} label={label} hint={hint} error={error} required={input.required} className={className}>
@@ -338,10 +347,11 @@ export function SelectField({
   hint,
   className,
   id,
+  liveError,
   children,
   ...select
 }: FieldProps & SelectHTMLAttributes<HTMLSelectElement>) {
-  const error = useContext(FormCtx).fieldErrors[name];
+  const error = pickError(liveError, useContext(FormCtx).fieldErrors[name]);
   const fieldId = id ?? `f-${name}`;
   return (
     <FieldShell id={fieldId} label={label} hint={hint} error={error} required={select.required} className={className}>
@@ -365,9 +375,10 @@ export function TextareaField({
   hint,
   className,
   id,
+  liveError,
   ...textarea
 }: FieldProps & TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  const error = useContext(FormCtx).fieldErrors[name];
+  const error = pickError(liveError, useContext(FormCtx).fieldErrors[name]);
   const fieldId = id ?? `f-${name}`;
   return (
     <FieldShell id={fieldId} label={label} hint={hint} error={error} required={textarea.required} className={className}>

@@ -13,7 +13,8 @@ import { addDaysIso, TERM_DAYS, termInterest } from "@/lib/loans/accrual";
 import type { KaratPrices } from "@/lib/appraisal/valuation";
 import { AppraisalCalculator, type SavedAppraisal } from "../../appraisals/appraisal-calculator";
 import { createLoan, type ActionState } from "../actions";
-import { previewLoan, searchCustomers, type CustomerHit, type LoanPreview } from "./actions";
+import { getCustomerHit, previewLoan, searchCustomers, type CustomerHit, type LoanPreview } from "./actions";
+import { RegisterCustomerDialog } from "../../customers/register-dialog"; // RC2: the same Register customer popup
 
 // customerId / owner: #38, the customer the item was appraised for (null = an older appraisal, anyone can pawn it)
 // meta: NL8, when it was appraised and by whom (not set on an item appraised a moment ago on this page)
@@ -42,6 +43,7 @@ export function NewLoanFlow({
   const [item, setItem] = useState<PoolItem | null>(() => pool.find((p) => p.id === initialItemId) ?? null);
   const [itemMode, setItemMode] = useState<"pool" | "new">(pool.length ? "pool" : "new");
   const [itemQuery, setItemQuery] = useState("");
+  const [changingItem, setChangingItem] = useState(false); // NR3: true = an item is picked but the list is open to pick another
   const [amount, setAmount] = useState("");
   // #37: starts on Vault A when it is on the list, else on the first location
   const [vault, setVault] = useState(vaults.includes("Vault A") ? "Vault A" : (vaults[0] ?? ""));
@@ -63,7 +65,9 @@ export function NewLoanFlow({
         ? "Use at most 2 decimals (centavos)"
         : item && principal > item.max
           ? `Above the maximum of ${formatPeso(item.max)}`
-          : undefined;
+          : amountOk
+            ? `Within the maximum of ${formatPeso(item!.max)}` // NR6: say so when the amount is fine, too
+            : undefined;
 
   // NL2 + NL10: what the Cashier should know about this customer before lending. Shown, not blocked:
   // the database only blocks blacklisted customers, and CTM gave no rule that stops a loan for an AML flag.
@@ -84,6 +88,18 @@ export function NewLoanFlow({
     ["Item", item !== null && !wrongOwner],
     ["Terms", amountOk && Boolean(vault)],
   ];
+  // NR1: the step to work on now = the first one that isn't done (-1 when all three are done)
+  const currentStep = steps.findIndex(([, done]) => !done);
+
+  // NR5: why "Review and create loan" is switched off, in the order the form is filled in
+  const missing: string[] = [];
+  if (!customer) missing.push("pick a customer");
+  else if (blockedCustomer(customer)) missing.push("pick a customer who is not blacklisted");
+  if (!item) missing.push("pick an item");
+  else if (wrongOwner) missing.push("pick an item that belongs to this customer");
+  if (item && !wrongOwner && !amount.trim()) missing.push("enter the loan amount");
+  else if (item && !wrongOwner && !amountOk) missing.push("fix the loan amount");
+  if (!vault) missing.push("choose a vault location");
   const today = manilaToday();
 
   // #39: ask the database for the terms a moment after the cashier stops typing (or picks another item)
@@ -128,6 +144,7 @@ export function NewLoanFlow({
     const next = { id: saved.id, label: saved.label, value: saved.value, max: saved.max, customerId: customer?.id ?? null, owner: customer?.full_name ?? null };
     setItems((prev) => [next, ...prev]);
     setItem(next);
+    setChangingItem(false); // NR3: show the new item's summary
     setItemMode("pool");
   }
 
@@ -135,18 +152,29 @@ export function NewLoanFlow({
     <div className="space-y-4">
       {/* NL6: a small progress line: which of the 3 steps are done */}
       <ol aria-label="Steps" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        {steps.map(([name, done], i) => (
-          <li key={name} className={cx("flex items-center gap-1.5", done ? "font-medium text-emerald-800" : "text-slate-600")}>
-            <span
-              aria-hidden="true"
-              className={cx("flex h-5 w-5 items-center justify-center rounded-full text-xs font-semibold", done ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600")}
+        {steps.map(([name, done], i) => {
+          // NR1: three looks. Done = green check. Current = navy number and bold name. Not started = grey.
+          const current = i === currentStep;
+          return (
+            <li
+              key={name}
+              aria-current={current ? "step" : undefined} // screen readers say which step is the current one
+              className={cx("flex items-center gap-1.5", done ? "font-medium text-emerald-800" : current ? "font-semibold text-navy-900" : "text-slate-500")}
             >
-              {done ? "✓" : i + 1}
-            </span>
-            {name}
-            <span className="sr-only">{done ? "(done)" : "(not done)"}</span>
-          </li>
-        ))}
+              <span
+                aria-hidden="true"
+                className={cx(
+                  "flex h-5 w-5 items-center justify-center rounded-full text-xs font-semibold",
+                  done ? "bg-emerald-100 text-emerald-800" : current ? "bg-navy-700 text-white" : "bg-slate-100 text-slate-500",
+                )}
+              >
+                {done ? "✓" : i + 1}
+              </span>
+              {name}
+              <span className="sr-only">{done ? "(done)" : current ? "(current step)" : "(not started)"}</span>
+            </li>
+          );
+        })}
       </ol>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <div className="space-y-5 xl:col-span-2">
@@ -158,9 +186,16 @@ export function NewLoanFlow({
                   <p className="font-medium text-slate-900">
                     {customer.full_name} <span className="font-mono text-xs font-normal text-slate-500">{customerNo(customer.customer_no)}</span>
                   </p>
+                  {/* NR2: only what the Cashier needs to confirm the person: phone and the last 4 of the ID (never the full ID) */}
                   <p className="text-sm text-slate-600">
                     {customer.contact_number} · {customer.id_type} {customer.id_number}
                   </p>
+                  {/* NR2: say it when the identity check is clear too (a flagged or blacklisted customer gets the warning below) */}
+                  {!customer.is_blacklisted && customer.aml_status !== "flagged" && (
+                    <p className="mt-1">
+                      <Badge tone="success">AML clear</Badge>
+                    </p>
+                  )}
                 </div>
                 <button type="button" className="text-sm font-medium text-navy-700 underline" onClick={() => setCustomer(null)}>
                   Change customer
@@ -174,75 +209,123 @@ export function NewLoanFlow({
 
           <Card>
             <h2 className="text-sm font-semibold text-slate-900">2. Item</h2>
-            {/* D2: the same underline tab look as every page (was two solid navy buttons). They stay buttons, not links,
-                because they only switch what this card shows; nothing is saved and the page address doesn't change */}
-            <div className="mt-3 flex flex-wrap gap-x-1 border-b border-slate-200" role="tablist" aria-label="Choose the item">
-              {(["pool", "new"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  role="tab"
-                  aria-selected={itemMode === m} // screen readers say which one is open
-                  onClick={() => setItemMode(m)}
-                  className={cx(
-                    // -mb-px = the navy line sits on the grey line under the row (same classes as components/view-tabs.tsx)
-                    "-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500",
-                    itemMode === m ? "border-navy-700 font-semibold text-navy-900" : "border-transparent font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900",
-                  )}
-                >
-                  {/* the name; Available items also shows how many, small and grey like the other tab counts */}
-                  {m === "pool" ? "Available items" : "Appraise now"}
-                  {m === "pool" && <span className="text-xs font-normal tabular-nums text-slate-500">{offered.length}</span>}
+            {/* NR3: once an item is picked, the long list folds into a short summary with a Change button */}
+            {item && !changingItem && (
+              <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  {/* "Chain, 18K, 3.001 g · A-1296": category, karat, weight and the appraisal number */}
+                  <p className="font-medium text-slate-900">{item.label}</p>
+                  <p className="text-sm text-slate-600">
+                    Appraised value {formatPeso(item.value)}
+                    {item.meta ? ` · ${item.meta}` : " · Appraised just now"}
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    Maximum loan <span className="font-semibold tabular-nums text-navy-900">{formatPeso(item.max)}</span>
+                  </p>
+                  {wrongOwner && <p className="mt-1 text-sm font-medium text-red-700">Appraised for {item.owner ?? "another customer"}. Pick another item.</p>}
+                </div>
+                <button type="button" className="text-sm font-medium text-navy-700 underline" onClick={() => setChangingItem(true)}>
+                  Change item
                 </button>
-              ))}
-            </div>
-            {itemMode === "pool" ? (
-              <div className="mt-3">
-                <label htmlFor="item-search" className="sr-only">
-                  Search available items
-                </label>
-                <input
-                  id="item-search"
-                  type="search"
-                  value={itemQuery}
-                  onChange={(e) => setItemQuery(e.target.value)}
-                  placeholder="Search by category, karat, weight or A-number"
-                  className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                />
-                <ul className="mt-2 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
-                  {filteredItems.length === 0 && <li className="px-3 py-3 text-sm text-slate-500">No available items match. Use Appraise now.</li>}
-                  {filteredItems.map((i) => (
-                    <li key={i.id}>
-                      <label className={cx("flex cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm", item?.id === i.id ? "bg-navy-50" : "hover:bg-slate-50")}>
-                        <span className="flex items-start gap-2">
-                          <input type="radio" name="pick-item" className="mt-1" checked={item?.id === i.id} onChange={() => setItem(i)} />
-                          <span>
-                            {i.label}
-                            {/* #38: before a customer is picked, say whose item it is */}
-                            {!customer && i.owner && <span className="ml-2 text-xs text-slate-500">for {i.owner}</span>}
-                            {/* NL8: value + when and by whom it was appraised, to tell similar items apart */}
-                            <span className="block text-xs text-slate-500">
-                              Value {formatPeso(i.value)}
-                              {i.meta ? ` · ${i.meta}` : " · Appraised just now"}
-                            </span>
-                          </span>
-                        </span>
-                        <span className="tabular-nums text-slate-600">max {formatPeso(i.max)}</span>
-                      </label>
-                    </li>
+              </div>
+            )}
+            {/* the list and Appraise now: shown while nothing is picked, or after Change item */}
+            {(!item || changingItem) && (
+              <>
+                {item && (
+                  <p className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                    <span>
+                      Picked now: <span className="font-medium text-slate-900">{item.label}</span>
+                    </span>
+                    <button type="button" className="text-sm font-medium text-navy-700 underline" onClick={() => setChangingItem(false)}>
+                      Keep this item
+                    </button>
+                  </p>
+                )}
+                {/* D2: the same underline tab look as every page (was two solid navy buttons). They stay buttons, not links,
+                    because they only switch what this card shows; nothing is saved and the page address doesn't change */}
+                <div className="mt-3 flex flex-wrap gap-x-1 border-b border-slate-200" role="tablist" aria-label="Choose the item">
+                  {(["pool", "new"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      role="tab"
+                      aria-selected={itemMode === m} // screen readers say which one is open
+                      onClick={() => setItemMode(m)}
+                      className={cx(
+                        // -mb-px = the navy line sits on the grey line under the row (same classes as components/view-tabs.tsx)
+                        "-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500",
+                        itemMode === m ? "border-navy-700 font-semibold text-navy-900" : "border-transparent font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900",
+                      )}
+                    >
+                      {/* the name; Available items also shows how many, small and grey like the other tab counts */}
+                      {m === "pool" ? "Available items" : "Appraise now"}
+                      {m === "pool" && <span className="text-xs font-normal tabular-nums text-slate-500">{offered.length}</span>}
+                    </button>
                   ))}
-                </ul>
-              </div>
-            ) : (
-              <div className="mt-3">
-                {/* NL3: the same full form as New appraisal (notes, photos, counterfeit flag), saved for the customer in step 1 */}
-                <AppraisalCalculator prices={prices} ltvPercent={ltvPercent} onSaved={onAppraised} forCustomer={customer} />
-              </div>
+                </div>
+                {itemMode === "pool" ? (
+                  <div className="mt-3">
+                    <label htmlFor="item-search" className="sr-only">
+                      Search available items
+                    </label>
+                    <input
+                      id="item-search"
+                      type="search"
+                      value={itemQuery}
+                      onChange={(e) => setItemQuery(e.target.value)}
+                      placeholder="Search by category, karat, weight or A-number"
+                      className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    <ul className="mt-2 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-200">
+                      {filteredItems.length === 0 && <li className="px-3 py-3 text-sm text-slate-500">No available items match. Use Appraise now.</li>}
+                      {filteredItems.map((i) => (
+                        <li key={i.id}>
+                          <label className={cx("flex cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm", item?.id === i.id ? "bg-navy-50" : "hover:bg-slate-50")}>
+                            <span className="flex items-start gap-2">
+                              <input
+                                type="radio"
+                                name="pick-item"
+                                className="mt-1"
+                                checked={item?.id === i.id}
+                                onChange={() => {
+                                  setItem(i);
+                                  setChangingItem(false); // NR3: picked -> fold the list into the summary
+                                }}
+                              />
+                              <span>
+                                {/* NR4: the item name is the main line; the details under it are smaller and grey */}
+                                <span className="font-medium text-slate-900">{i.label}</span>
+                                {/* #38: before a customer is picked, say whose item it is */}
+                                {!customer && i.owner && <span className="ml-2 text-xs text-slate-500">for {i.owner}</span>}
+                                {/* NL8: value + when and by whom it was appraised, to tell similar items apart */}
+                                <span className="block text-xs text-slate-500">
+                                  Value {formatPeso(i.value)}
+                                  {i.meta ? ` · ${i.meta}` : " · Appraised just now"}
+                                </span>
+                              </span>
+                            </span>
+                            <span className="tabular-nums text-slate-600">max {formatPeso(i.max)}</span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <div className="mt-3">
+                    {/* NL3: the same full form as New appraisal (notes, photos, counterfeit flag), saved for the customer in step 1 */}
+                    <AppraisalCalculator prices={prices} ltvPercent={ltvPercent} onSaved={onAppraised} forCustomer={customer} />
+                  </div>
+                )}
+              </>
             )}
           </Card>
         </div>
 
-        <Card className="xl:self-start">
+        {/* NR8: on a wide and tall screen the Terms card stays in view while the left side scrolls. Only when the
+            screen is at least 900px tall, so the whole card always fits and nothing is cut off. top-16 = just under the
+            top bar, which also stays in place */}
+        <Card className="xl:self-start [@media(min-width:1280px)_and_(min-height:900px)]:sticky [@media(min-width:1280px)_and_(min-height:900px)]:top-16">
           <h2 className="text-sm font-semibold text-slate-900">3. Terms</h2>
           <ActionForm
             action={createLoan}
@@ -300,6 +383,12 @@ export function NewLoanFlow({
               <Row label="Due" value={formatDate(due)} />
               <Row label="To redeem on time" value={principal > 0 ? formatPeso(redeemOnTime) : "-"} strong />
             </dl>
+            {/* NR7: say where the numbers come from. The loan's real terms are set by the database when it is created */}
+            {principal > 0 && amountOk && (
+              <p className="-mt-2 text-xs text-slate-500" aria-live="polite">
+                {fromDb ? "Worked out by the database for this amount. The final terms are set when the loan is created." : "Estimate. Checking with the database."}
+              </p>
+            )}
             {blocked && <Alert tone="danger">This customer is blacklisted. A loan cannot be issued.</Alert>}
             {/* #38: the picked item belongs to someone else's appraisal */}
             {wrongOwner && (
@@ -344,6 +433,12 @@ export function NewLoanFlow({
                 </Link>
               )}
             </div>
+            {/* NR5: the button is off -> say exactly what is still needed */}
+            {missing.length > 0 && (
+              <p id="loan-missing" className="text-sm text-slate-600">
+                To continue: {missing.join(", ")}.
+              </p>
+            )}
             {confirmLeave && (
               <div role="alertdialog" aria-labelledby="discard-loan-title" aria-describedby="discard-loan-text" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                 <p id="discard-loan-title" className="font-semibold">
@@ -513,11 +608,29 @@ function CustomerSearch({ onPick }: { onPick: (c: CustomerHit) => void }) {
           : limited && searched === q.trim() // #22: don't say "No customer found" when the search didn't run
             ? "Too many searches. Wait a minute, then try again."
             : q.trim().length >= 2 && searched === q.trim() && !hits.length
-              ? "No customer found. Register them under Customers first."
+              ? "No customer found. Register them with the button below."
               : shown[0]?.similar // #16: the list above holds close names, not exact matches
                 ? "No exact match. These are similar names: check the name and ID before you pick one."
                 : ""}
       </p>
+      {/* RC2: Matt's request. The person isn't found (or isn't among the similar names): register them here, without
+          leaving New Loan. The popup is the same form as on Customers (ID and phone duplicate checks, AML check).
+          After saving, the new customer is picked in step 1 and the loan continues */}
+      {q.trim().length >= 2 && searched === q.trim() && !limited && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+          <span>{hits.length ? "Not the right person?" : "New customer?"}</span>
+          <RegisterCustomerDialog
+            small
+            label="Register new customer"
+            // a typed name (letters, no digits) starts the Full name box; a phone or ID number doesn't
+            defaultName={/[a-z]/i.test(q) && !/\d/.test(q) ? q.trim() : undefined}
+            onRegistered={async (id) => {
+              const hit = await getCustomerHit(id); // the new customer, with the masked ID and history
+              if (hit) onPick(hit);
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

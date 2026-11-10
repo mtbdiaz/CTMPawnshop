@@ -97,3 +97,19 @@ export async function previewLoan(itemId: string, amount: number): Promise<LoanP
     redeemOnTime: Number(row.redeem_on_time),
   };
 }
+
+// RC2: one customer in the same shape as a search result, for the customer just registered from New Loan.
+// Same columns and the same masked ID as searchCustomers. null = not found (or archived).
+export async function getCustomerHit(id: string): Promise<CustomerHit | null> {
+  await requireRole(["cashier", "admin"]);
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null; // only a real id
+  const { data } = await createAdminClient() // #17: id_number is read on the server only
+    .from("customers")
+    .select("id, customer_no, full_name, contact_number, id_type, id_number, is_blacklisted, blacklist_reason, aml_status")
+    .eq("id", id)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (!data) return null;
+  const scores = await loadCustomerScores(await createClient(), [data.id], manilaToday());
+  return { ...data, id_number: maskId(data.id_number), history: scores.get(data.id)! }; // #19: only the last 4
+}
