@@ -5,6 +5,7 @@ type IconName =
   | "chevron-right"
   | "chevron-left"
   | "minus"
+  | "camera"
   | "chevron-down"
   | "chevron-up"
   | "plus"
@@ -36,6 +37,7 @@ const PATHS: Record<IconName, string> = {
   "chevron-right": "m9 18 6-6-6-6",
   "chevron-left": "m15 18-6-6 6-6", // PV1: previous photo
   minus: "M5 12h14", // PV1: zoom out
+  camera: "M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8", // CAM1: take a photo
   "chevron-down": "m6 9 6 6 6-6",
   "chevron-up": "m18 15-6-6-6 6",
   plus: "M12 5v14M5 12h14",

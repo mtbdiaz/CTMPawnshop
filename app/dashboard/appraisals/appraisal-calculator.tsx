@@ -10,6 +10,7 @@ import { appraisalNo } from "@/lib/ref-numbers"; // AN1: "A-1370"
 import { buttonClasses, cx } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { PhotoViewer } from "@/components/photo-viewer"; // PV1: view a photo in a popup on the same page
+import { CameraButton } from "@/components/camera-capture"; // CAM1: take a photo with the camera
 import { AppraisalFields, hasPrice, weightError } from "./appraisal-fields"; // C2: the same item fields as Edit appraisal
 import { createAppraisal, type ActionState } from "./actions";
 import { CustomerPicker } from "./customer-picker"; // #38: who the item belongs to
@@ -90,6 +91,11 @@ export function AppraisalCalculator({
   async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     e.target.value = ""; // so the same file can be picked again after Remove
+    await uploadFiles(files);
+  }
+
+  // CAM1: the same checks and upload for picked files and for a photo taken with the camera
+  async function uploadFiles(files: File[]) {
     if (!files.length) return;
     const problems: string[] = [];
     // C4: check type, size and count BEFORE uploading anything
@@ -247,15 +253,17 @@ export function AppraisalCalculator({
           {/* P4: a small dashed area. Click it, or Tab to it and press Enter/Space, to pick photos.
               The real file picker is hidden inside; the area shows the keyboard outline when it has focus */}
           {photos.length < PHOTO_MAX && (
+            // CAM1: two ways side by side: pick files, or take a photo with the camera
+            <div className="mt-1 grid grid-cols-2 gap-2">
             <label
               className={cx(
-                "mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-white px-3 text-sm text-slate-700 hover:border-navy-500 hover:bg-slate-50 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-navy-500",
+                "flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-white px-3 text-sm text-slate-700 hover:border-navy-500 hover:bg-slate-50 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-navy-500",
                 photos.length ? "py-2" : "py-4", // smaller once photos are attached
                 uploading && "pointer-events-none opacity-60",
               )}
             >
               <Icon name="plus" className="h-4 w-4 text-slate-500" />
-              <span className="font-medium">{uploading ? "Uploading" : photos.length ? "Add more photos" : "Add photos"}</span>
+              <span className="font-medium">{uploading ? "Uploading" : photos.length ? "Add more" : "Add photos"}</span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
@@ -266,6 +274,8 @@ export function AppraisalCalculator({
                 className="sr-only"
               />
             </label>
+            <CameraButton compact={photos.length > 0} disabled={uploading} onCapture={(file) => void uploadFiles([file])} />
+            </div>
           )}
           <p id="photos-status" aria-live="polite" className="mt-1 text-xs text-slate-500">
             {photos.length >= PHOTO_MAX ? `Photo limit reached (${PHOTO_MAX}). Remove one to add another.` : `Optional. JPEG, PNG or WebP, up to ${PHOTO_MAX_MB} MB each.`}

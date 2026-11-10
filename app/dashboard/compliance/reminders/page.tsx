@@ -22,6 +22,7 @@ import { Icon } from "@/components/icons";
 import { RemindersSearch } from "./reminders-search";
 import { LogContactButton } from "./log-contact-button";
 import { CopyNumber } from "./copy-number"; // R2: copy the mobile number
+import { ContactHistoryButton } from "./contact-history"; // RH1: the history in a popup
 import { InfoTip } from "../../customers/info-tip"; // the same "i" help button as on Customers and Loans
 
 export const metadata = { title: "Reminders" };
@@ -239,21 +240,15 @@ export default async function RemindersPage({
         )}
         {/* the history, folded away so rows stay short; only when there's more than the line above */}
         {(last ? r.allLogs.length > 1 : r.allLogs.length > 0) && (
-          <details className="mt-0.5">
-            <summary className="cursor-pointer rounded text-navy-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500">
-              Contact history ({r.allLogs.length})
-            </summary>
-            <ul className="mt-1 space-y-1 text-slate-600">
-              {r.allLogs.map((l, i) => (
-                <li key={`${l.sent_at}-${i}`}>
-                  <span className="font-medium text-slate-700">{outcomeBadge(l.outcome).label}</span> · {logLine(l)}
-                  {/* a log from before the loan's current due date (before a renewal) */}
-                  {!r.cycleLogs.includes(l) && <span className="text-slate-500"> (earlier due date)</span>}
-                  {l.notes && <span className="block break-words italic">&ldquo;{l.notes}&rdquo;</span>}
-                </li>
-              ))}
-            </ul>
-          </details>
+          // RH1 (Matt, Nov 11): a popup instead of opening inside the row, so the columns don't jump
+          <ContactHistoryButton
+            customer={r.d.customers?.full_name ?? "Customer"}
+            ticket={r.d.ticket_number}
+            items={r.allLogs.map((l) => {
+              const b = outcomeBadge(l.outcome);
+              return { result: b.label, tone: b.tone, line: logLine(l), note: l.notes, earlier: !r.cycleLogs.includes(l) };
+            })}
+          />
         )}
       </div>
     );

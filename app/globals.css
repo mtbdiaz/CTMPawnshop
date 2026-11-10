@@ -26,6 +26,12 @@
   --color-gold-600: #a97f1a;
   --color-gold-700: #7d5d14;
 
+  /* CT1 (Matt, Nov 11): the two lightest greys used for text and icons, a little darker so small text is easy to read.
+     slate-500 (small secondary text, hints, dates): about 4.8:1 on white before, about 6.5:1 now (WCAG AA is 4.5:1).
+     slate-400 (icons, the "·" dots): about 2.6:1 before, about 3.6:1 now (3:1 is the rule for icons). */
+  --color-slate-500: oklch(47.5% 0.046 257.4);
+  --color-slate-400: oklch(62% 0.042 257);
+
   --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-playfair), Georgia, serif;
   --font-mono: var(--font-dm-mono), ui-monospace, monospace;

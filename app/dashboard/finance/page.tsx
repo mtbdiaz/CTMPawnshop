@@ -1,4 +1,5 @@
 import { requireRole } from "@/lib/auth/require-role";
+import { PopupButton } from "@/components/popup-button"; // RH2: row forms open in a popup
 import { createClient } from "@/lib/supabase/server";
 import { computeCashPosition, computeRunningBalances } from "@/lib/finance/ledger";
 import { formatDateTime, formatPeso, humanize, manilaDayStart } from "@/lib/format";
@@ -118,22 +119,17 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
                       <ActionsCell>
                         {entry.related_loan_id && <ViewButton href={`/dashboard/loans/${entry.related_loan_id}`}>View loan</ViewButton>}
                         {isAdmin && !entry.related_loan_id && (
-                          <details className="text-left">
-                            <summary className="cursor-pointer rounded-md border border-slate-300 px-2.5 py-1 text-sm">Edit (Admin)</summary>
-                            <div className="mt-2 w-64">
-                              <AdminEditCashEntryForm id={entry.id} amount={Number(entry.amount)} description={entry.description ?? ""} />
-                            </div>
-                          </details>
+                          // RH2: opens in a popup, so the row keeps its height and the columns stay in place
+                          <PopupButton label="Edit (Admin)" title="Correct this cash entry">
+                            <AdminEditCashEntryForm id={entry.id} amount={Number(entry.amount)} description={entry.description ?? ""} />
+                          </PopupButton>
                         )}
                         {/* S4: a manual entry made by mistake can be archived (Admin, with a reason). Entries that belong
                             to a loan can't: those are corrected through the loan */}
                         {isAdmin && !entry.related_loan_id && (
-                          <details className="text-left">
-                            <summary className="cursor-pointer rounded-md border border-slate-300 px-2.5 py-1 text-sm">Archive (Admin)</summary>
-                            <div className="mt-2 w-64">
-                              <ArchiveForm table="cash_flow_entries" id={entry.id} label="Cash entry" />
-                            </div>
-                          </details>
+                          <PopupButton label="Archive (Admin)" title="Archive this cash entry">
+                            <ArchiveForm table="cash_flow_entries" id={entry.id} label="Cash entry" />
+                          </PopupButton>
                         )}
                       </ActionsCell>
                     </TR>
