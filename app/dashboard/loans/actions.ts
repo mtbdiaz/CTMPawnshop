@@ -27,7 +27,8 @@ const createSchema = z.object({
   customer_id: z.string().uuid("Select a customer"),
   appraisal_item_id: z.string().uuid("Select an item"),
   principal_amount: z.coerce.number().gt(0, "Loan amount must be greater than 0"),
-  vault_location: z.string().trim().max(80).optional().or(z.literal("")),
+  vault_location: z.string().trim().min(1, "Choose a vault location").max(40), // #37: one from the list (the database checks it is on the list)
+  request_id: z.string().uuid().optional(), // #40: the form's one-time id, so the same form can't make two loans
 });
 
 // L20: what staff see when a loan action fails. The database's own messages (raised with RAISE EXCEPTION,
@@ -54,16 +55,20 @@ export async function createLoan(_prev: ActionState, formData: FormData): Promis
     customer_id: formData.get("customer_id"),
     appraisal_item_id: formData.get("appraisal_item_id"),
     principal_amount: formData.get("principal_amount"),
-    vault_location: formData.get("vault_location") ?? undefined,
+    vault_location: formData.get("vault_location") ?? "",
+    request_id: formData.get("request_id") || undefined, // empty (page not ready yet) = no id, like an old-style call
   });
   if (!parsed.success) return validationFailure(parsed.error);
 
   const supabase = await createClient();
+  // The database does the real checks (migration 0038): the vault must be on the list (#37), the item must not
+  // belong to another customer's appraisal (#38), and a form that was already saved returns its first loan (#40).
   const { data: loanId, error } = await supabase.rpc("create_pawn_loan", {
     p_customer_id: parsed.data.customer_id,
     p_appraisal_item_id: parsed.data.appraisal_item_id,
     p_principal_amount: parsed.data.principal_amount,
-    p_vault_location: parsed.data.vault_location || "Vault A",
+    p_vault_location: parsed.data.vault_location,
+    p_request_id: parsed.data.request_id,
   });
   if (error || !loanId) return { error: friendlyError("create the loan", error) }; // L20
 
