@@ -65,7 +65,7 @@ export function AppraisalFilters({
           type="search"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Search item, karat, customer or A-number"
+          placeholder="Search item, customer or A-number"
           autoComplete="off"
           maxLength={60}
           className="w-full rounded-md border border-slate-300 bg-white py-2 pl-9 pr-24 text-sm placeholder:text-slate-500 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20 [&::-webkit-search-cancel-button]:hidden"
