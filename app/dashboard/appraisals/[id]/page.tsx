@@ -1,4 +1,5 @@
 import { appraisalNo, customerNo } from "@/lib/ref-numbers"; // #29: the short appraisal number (A-0045); #38: C-0012
+import { PhotoGrid } from "@/components/photo-viewer"; // PV1: photos open in a popup on the same page
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { hasRole } from "@/lib/auth/roles";
@@ -214,14 +215,8 @@ export default async function AppraisalDetailPage({ params }: { params: Promise<
         <Card>
           <SectionTitle>Photos</SectionTitle>
           {photos.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2">
-              {photos.map((url, i) => (
-                <a key={url} href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border border-slate-200">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt={`Photo ${i + 1} of ${title}`} className="aspect-square w-full object-cover" />
-                </a>
-              ))}
-            </div>
+            // PV1: a click opens the photo in a popup on this page (zoom, previous / next) instead of a new tab
+            <PhotoGrid className="grid grid-cols-2 gap-2" photos={photos.map((url, i) => ({ url, alt: `Photo ${i + 1} of ${title}` }))} />
           ) : (
             <p className="text-sm text-slate-500">No photos.</p>
           )}

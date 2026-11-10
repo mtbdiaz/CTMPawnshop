@@ -11,7 +11,7 @@ import { ScoreBadge } from "@/components/score-badge";
 import { formatDate, formatPeso, manilaToday } from "@/lib/format";
 import { addDaysIso, TERM_DAYS, termInterest } from "@/lib/loans/accrual";
 import type { KaratPrices } from "@/lib/appraisal/valuation";
-import { AppraisalCalculator, type SavedAppraisal } from "../../appraisals/appraisal-calculator";
+import { AppraisalCalculator, type AppraisalDraft, type SavedAppraisal } from "../../appraisals/appraisal-calculator";
 import { createLoan, type ActionState } from "../actions";
 import { getCustomerHit, previewLoan, searchCustomers, type CustomerHit, type LoanPreview } from "./actions";
 import { RegisterCustomerDialog } from "../../customers/register-dialog"; // RC2: the same Register customer popup
@@ -47,11 +47,20 @@ export function NewLoanFlow({
   const [amount, setAmount] = useState("");
   // #37: starts on Vault A when it is on the list, else on the first location
   const [vault, setVault] = useState(vaults.includes("Vault A") ? "Vault A" : (vaults[0] ?? ""));
+  // TP1 (Matt, Nov 11): the item being typed in Appraise now, before it is saved (null = nothing picked yet)
+  const [draft, setDraft] = useState<AppraisalDraft | null>(null);
   // #39: the terms as the database works them out, and which item + amount they are for
   const [preview, setPreview] = useState<{ key: string; terms: LoanPreview } | null>(null);
 
   // #38: an item appraised for one customer can only be pawned by that customer (the database refuses it too)
   const wrongOwner = Boolean(item?.customerId && customer && item.customerId !== customer.id);
+
+  // TP1: Appraise now is open (no item picked, or Change item) and something is typed in it.
+  // Terms then shows that item and its maximum right away, marked "not saved yet"
+  const appraising = itemMode === "new" && (!item || changingItem);
+  const shownDraft = appraising ? draft : null;
+  // the maximum the amount is checked against: the unsaved item's while appraising, else the picked item's
+  const shownMax = shownDraft ? shownDraft.max : (item?.max ?? null);
 
   const principal = Number(amount);
   // NL7: checked while typing. Pesos have at most 2 decimals (centavos)
@@ -63,10 +72,10 @@ export function NewLoanFlow({
       ? "Enter an amount above 0"
       : tooManyDecimals
         ? "Use at most 2 decimals (centavos)"
-        : item && principal > item.max
-          ? `Above the maximum of ${formatPeso(item.max)}`
-          : amountOk
-            ? `Within the maximum of ${formatPeso(item!.max)}` // NR6: say so when the amount is fine, too
+        : shownMax !== null && principal > shownMax
+          ? `Above the maximum of ${formatPeso(shownMax)}`
+          : shownMax !== null && (amountOk || shownDraft)
+            ? `Within the maximum of ${formatPeso(shownMax)}` // NR6: say so when the amount is fine, too (TP1: also for the unsaved item)
             : undefined;
 
   // NL2 + NL10: what the Cashier should know about this customer before lending. Shown, not blocked:
@@ -95,10 +104,11 @@ export function NewLoanFlow({
   const missing: string[] = [];
   if (!customer) missing.push("pick a customer");
   else if (blockedCustomer(customer)) missing.push("pick a customer who is not blacklisted");
-  if (!item) missing.push("pick an item");
+  if (shownDraft) missing.push("save the appraisal (Save appraisal, under the photos)"); // TP1: the item isn't saved yet
+  else if (!item) missing.push("pick an item");
   else if (wrongOwner) missing.push("pick an item that belongs to this customer");
-  if (item && !wrongOwner && !amount.trim()) missing.push("enter the loan amount");
-  else if (item && !wrongOwner && !amountOk) missing.push("fix the loan amount");
+  if (!shownDraft && item && !wrongOwner && !amount.trim()) missing.push("enter the loan amount");
+  else if (!shownDraft && item && !wrongOwner && !amountOk) missing.push("fix the loan amount");
   if (!vault) missing.push("choose a vault location");
   const today = manilaToday();
 
@@ -135,6 +145,12 @@ export function NewLoanFlow({
         itemRef?.kind === "A" ? i.label.endsWith(appraisalNo(itemRef.n)) : i.label.toLowerCase().includes(itemQuery.trim().toLowerCase()),
       )
     : offered;
+
+  // UI1: no item on this loan any more. The appraisal itself stays in Available items; the list opens again
+  function unpickItem() {
+    setItem(null);
+    setChangingItem(false);
+  }
 
   function onAppraised(saved: SavedAppraisal) {
     // NL3: an item flagged for counterfeit review can't be pawned until an Admin clears it, so it isn't picked
@@ -224,9 +240,15 @@ export function NewLoanFlow({
                   </p>
                   {wrongOwner && <p className="mt-1 text-sm font-medium text-red-700">Appraised for {item.owner ?? "another customer"}. Pick another item.</p>}
                 </div>
-                <button type="button" className="text-sm font-medium text-navy-700 underline" onClick={() => setChangingItem(true)}>
-                  Change item
-                </button>
+                {/* UI1 (Wush, Nov 11): Change item opens the list again; Unselect takes the item off this loan (nothing is deleted) */}
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <button type="button" className="text-sm font-medium text-navy-700 underline" onClick={() => setChangingItem(true)}>
+                    Change item
+                  </button>
+                  <button type="button" className="text-sm font-medium text-navy-700 underline" onClick={unpickItem}>
+                    Unselect
+                  </button>
+                </div>
               </div>
             )}
             {/* the list and Appraise now: shown while nothing is picked, or after Change item */}
@@ -234,12 +256,19 @@ export function NewLoanFlow({
               <>
                 {item && (
                   <p className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                    {/* UI1: says the old item is still on the loan until another one is picked */}
                     <span>
-                      Picked now: <span className="font-medium text-slate-900">{item.label}</span>
+                      Still picked: <span className="font-medium text-slate-900">{item.label}</span>
                     </span>
-                    <button type="button" className="text-sm font-medium text-navy-700 underline" onClick={() => setChangingItem(false)}>
-                      Keep this item
-                    </button>
+                    <span className="flex flex-wrap gap-x-4 gap-y-1">
+                      {/* UI1: was "Keep this item". Closes the list and keeps the item, like nothing happened */}
+                      <button type="button" className="text-sm font-medium text-navy-700 underline" onClick={() => setChangingItem(false)}>
+                        Cancel change
+                      </button>
+                      <button type="button" className="text-sm font-medium text-navy-700 underline" onClick={unpickItem}>
+                        Unselect
+                      </button>
+                    </span>
                   </p>
                 )}
                 {/* D2: the same underline tab look as every page (was two solid navy buttons). They stay buttons, not links,
@@ -314,7 +343,7 @@ export function NewLoanFlow({
                 ) : (
                   <div className="mt-3">
                     {/* NL3: the same full form as New appraisal (notes, photos, counterfeit flag), saved for the customer in step 1 */}
-                    <AppraisalCalculator prices={prices} ltvPercent={ltvPercent} onSaved={onAppraised} forCustomer={customer} />
+                    <AppraisalCalculator prices={prices} ltvPercent={ltvPercent} onSaved={onAppraised} forCustomer={customer} onDraft={setDraft} />
                   </div>
                 )}
               </>
@@ -340,9 +369,20 @@ export function NewLoanFlow({
             <RequestIdInput key={`${customer?.id ?? ""}|${item?.id ?? ""}`} />
             <dl className="space-y-1 text-sm">
               <Row label="Customer" value={customer?.full_name ?? "Not selected"} />
-              <Row label="Item" value={item?.label ?? "Not selected"} />
-              <Row label="Maximum loan" value={item ? formatPeso(item.max) : "-"} />
+              {/* TP1: while appraising, the item being typed shows here right away, marked "not saved yet" */}
+              <Row label="Item" value={shownDraft ? `${shownDraft.label} (not saved yet)` : (item?.label ?? "Not selected")} />
+              <Row label="Maximum loan" value={shownMax !== null ? formatPeso(shownMax) : "-"} />
             </dl>
+            {/* TP1: what to do next with the unsaved item. A flagged item can't be used for a loan */}
+            {shownDraft && (
+              <p role="status" className="-mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                {shownDraft.flagged
+                  ? "Flagged for counterfeit review. After saving, it goes to Awaiting review and can't be used for this loan."
+                  : shownDraft.max === null
+                    ? "Pick the karat and enter the weight to see the maximum loan."
+                    : "Not saved yet. Press Save appraisal (under the photos) to use this item for the loan."}
+              </p>
+            )}
             <Field
               label="Loan amount (₱)"
               name="principal_amount"
@@ -357,9 +397,9 @@ export function NewLoanFlow({
               hint={amountHint}
             />
             {/* NL7: fills the box only when clicked; the Cashier can still type a lower amount */}
-            {item && !wrongOwner && (
-              <button type="button" onClick={() => setAmount(String(item.max))} className="-mt-2 rounded-sm text-sm font-medium text-navy-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500">
-                Use maximum ({formatPeso(item.max)})
+            {shownMax !== null && !(shownDraft?.flagged) && !(!shownDraft && wrongOwner) && (
+              <button type="button" onClick={() => setAmount(String(shownMax))} className="-mt-2 rounded-sm text-sm font-medium text-navy-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500">
+                Use maximum ({formatPeso(shownMax)})
               </button>
             )}
             {/* #37: a list instead of a free text box, so "vault a", "Vault-A" and typos can't happen any more */}
@@ -384,9 +424,13 @@ export function NewLoanFlow({
               <Row label="To redeem on time" value={principal > 0 ? formatPeso(redeemOnTime) : "-"} strong />
             </dl>
             {/* NR7: say where the numbers come from. The loan's real terms are set by the database when it is created */}
-            {principal > 0 && amountOk && (
+            {principal > 0 && (amountOk || shownDraft) && (
               <p className="-mt-2 text-xs text-slate-500" aria-live="polite">
-                {fromDb ? "Worked out by the database for this amount. The final terms are set when the loan is created." : "Estimate. Checking with the database."}
+                {shownDraft
+                  ? "Estimate. The database works out the terms once the appraisal is saved." // TP1: no saved item to ask about yet
+                  : fromDb
+                    ? "Worked out by the database for this amount. The final terms are set when the loan is created."
+                    : "Estimate. Checking with the database."}
               </p>
             )}
             {blocked && <Alert tone="danger">This customer is blacklisted. A loan cannot be issued.</Alert>}
@@ -400,7 +444,7 @@ export function NewLoanFlow({
             <div className="flex flex-wrap items-center gap-2">
               <SubmitButton
                 pendingLabel="Creating"
-                disabled={!customer || !amountOk || blocked || !vault}
+                disabled={!customer || !amountOk || blocked || !vault || Boolean(shownDraft)} // TP1: not while an unsaved item is being appraised
                 confirm={{
                   title: "Review the loan",
                   message: "Check every line with the customer before you confirm.",

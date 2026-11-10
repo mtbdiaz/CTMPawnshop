@@ -8,6 +8,7 @@ import { calculateKaratValuation, categoryLabel, type KaratPrices } from "@/lib/
 import { formatPeso } from "@/lib/format";
 import { buttonClasses, cx } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { PhotoViewer } from "@/components/photo-viewer"; // PV1: view a photo in a popup on the same page
 import { AppraisalFields, hasPrice, weightError } from "./appraisal-fields"; // C2: the same item fields as Edit appraisal
 import { createAppraisal, type ActionState } from "./actions";
 import { CustomerPicker } from "./customer-picker"; // #38: who the item belongs to
@@ -26,6 +27,10 @@ export type SavedAppraisal = {
   flagged: boolean; // NL3: saved with "Flag for counterfeit review", so it can't be pawned until an Admin clears it
 };
 
+// TP1 (Matt, Nov 11): the item being appraised, before it is saved, so New Loan's Terms can show it right away.
+// max = null until the karat and a valid weight give a value.
+export type AppraisalDraft = { label: string; max: number | null; flagged: boolean };
+
 /**
  * Item 9: appraisal calculator. Value and maximum loan update as you type.
  * #38: every new appraisal says which customer the item belongs to. The popup has a customer picker;
@@ -38,6 +43,7 @@ export function AppraisalCalculator({
   onSaved,
   onCancel,
   forCustomer,
+  onDraft,
 }: {
   prices: KaratPrices;
   ltvPercent: number;
@@ -47,6 +53,8 @@ export function AppraisalCalculator({
   onCancel?: () => void;
   /** #38: New Loan only: the customer picked in step 1 (null = none picked yet, so nothing can be saved). */
   forCustomer?: { id: string; full_name: string } | null;
+  /** TP1: New Loan only: told about every change to the item being typed (null = nothing picked yet) */
+  onDraft?: (draft: AppraisalDraft | null) => void;
 }) {
   const router = useRouter();
   const [category, setCategory] = useState("");
@@ -58,11 +66,22 @@ export function AppraisalCalculator({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [hasCustomer, setHasCustomer] = useState(false); // #38: the popup's customer picker has someone picked
   const [flagged, setFlagged] = useState(false); // N6: "Flag for counterfeit review" is ticked
+  const [viewing, setViewing] = useState<number | null>(null); // PV1: which photo is open in the popup (null = none)
   const previews = useRef<string[]>([]); // every preview made, so they can be freed when the form closes
 
   const w = Number(weight);
   const priced = hasPrice(karat, prices); // C3: false when the picked karat has no price in Settings
   const v = karat && priced ? calculateKaratValuation(w, karat, prices, ltvPercent) : null;
+
+  // TP1: tell New Loan what is being appraised, on every click or key press. Only the label, the maximum and the
+  // flag: nothing is saved until Save appraisal. "Pendant, 21K, 3 g"; missing parts are left out
+  const draftMax = v && w > 0 && !weightError(weight) ? v.suggestedLoanMax : null; // a maximum only for a valid weight
+  const draftLabel = [category ? categoryLabel(category, other) : "", karat ? `${karat}K` : "", w > 0 ? `${w} g` : ""].filter(Boolean).join(", ");
+  useEffect(() => {
+    onDraft?.(draftLabel ? { label: draftLabel, max: draftMax, flagged } : null);
+  }, [onDraft, draftLabel, draftMax, flagged]);
+  // TP1: when the form goes away (Available items tab, or the item was saved), there is no draft any more
+  useEffect(() => () => onDraft?.(null), [onDraft]);
 
   // free the previews' memory when the form goes away
   useEffect(() => () => previews.current.forEach((u) => URL.revokeObjectURL(u)), []);
@@ -258,10 +277,11 @@ export function AppraisalCalculator({
             <ul aria-labelledby="photos-title" className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-3">
               {photos.map((p, i) => (
                 <li key={p.path}>
-                  <a href={p.url} target="_blank" rel="noreferrer" aria-label={`View photo ${i + 1}, ${p.name}`} className="block overflow-hidden rounded-md border border-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500">
+                  {/* PV1: opens the popup on this page (was a new browser tab) */}
+                  <button type="button" onClick={() => setViewing(i)} aria-label={`View photo ${i + 1}, ${p.name}`} className="block w-full cursor-zoom-in overflow-hidden rounded-md border border-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500">
                     {/* eslint-disable-next-line @next/next/no-img-element -- a local preview, not a page image */}
                     <img src={p.url} alt="" className="aspect-square w-full object-cover" />
-                  </a>
+                  </button>
                   <button type="button" onClick={() => removePhoto(p.path)} className="mt-1 w-full rounded text-xs font-medium text-red-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" aria-label={`Remove photo ${i + 1}, ${p.name}`}>
                     Remove
                   </button>
@@ -269,6 +289,8 @@ export function AppraisalCalculator({
               ))}
             </ul>
           )}
+          {/* PV1: the photo popup (zoom, previous / next). A removed photo closes it */}
+          <PhotoViewer photos={photos.map((p, i) => ({ url: p.url, alt: `Photo ${i + 1}, ${p.name}` }))} index={viewing !== null && viewing < photos.length ? viewing : null} onIndex={setViewing} />
         </div>
       </div>
 
