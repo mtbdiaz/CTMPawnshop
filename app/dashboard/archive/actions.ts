@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
+import { allowRequest, TOO_MANY } from "@/lib/rate-limit"; // #22: rate limiting
 import type { FieldErrors } from "@/lib/validation/errors";
 import { ARCHIVABLE_TABLES } from "@/lib/archive";
 
@@ -17,6 +18,7 @@ const tableSchema = z.enum(ARCHIVABLE_TABLES);
 // the archive_record() database function.
 export async function archiveRecord(_prev: ArchiveState, formData: FormData): Promise<ArchiveState> {
   await requireRole(["appraiser", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const table = tableSchema.safeParse(formData.get("table"));
   const id = z.string().uuid().safeParse(formData.get("id"));
   const reason = String(formData.get("reason") ?? "").trim();
@@ -32,6 +34,7 @@ export async function archiveRecord(_prev: ArchiveState, formData: FormData): Pr
 
 export async function restoreRecord(_prev: ArchiveState, formData: FormData): Promise<ArchiveState> {
   await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const table = tableSchema.safeParse(formData.get("table"));
   const id = z.string().uuid().safeParse(formData.get("id"));
   if (!table.success || !id.success) return { error: "Invalid record" };

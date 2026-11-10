@@ -1,8 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server"; // runs something after the answer was sent, so the user doesn't wait for it
+import { cleanUpUnusedPhotos } from "@/lib/appraisal/photo-cleanup"; // #25
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
+import { allowRequest, TOO_MANY } from "@/lib/rate-limit"; // #22: rate limiting
 import { appraisalSchema } from "@/lib/validation/appraisal";
 import { validationFailure, type FieldErrors } from "@/lib/validation/errors";
 import { calculateKaratValuation } from "@/lib/appraisal/valuation";
@@ -45,6 +48,7 @@ async function valuationFor(karat: number, weight: number) {
 // Items 2, 3, 4, 9: save a calculator result into the available pool.
 export async function createAppraisal(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const user = await requireRole(["appraiser", "cashier", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const parsed = parse(formData);
   if (!parsed.success) return validationFailure(parsed.error);
   const d = parsed.data;
@@ -77,6 +81,12 @@ export async function createAppraisal(_prev: ActionState, formData: FormData): P
     return { error: `Couldn't save the appraisal, so nothing was saved. ${TRY_AGAIN}` }; // A5: plain message
   }
 
+  // #25: every saved appraisal also tidies the photo storage: photos uploaded more than 24 hours ago that no
+  // appraisal uses are deleted. It runs after the answer is sent and can't fail the save.
+  after(async () => {
+    await cleanUpUnusedPhotos();
+  });
+
   revalidatePath("/dashboard/appraisals");
   return { success: true, appraisalId: data.id };
 }
@@ -87,6 +97,7 @@ export async function createAppraisal(_prev: ActionState, formData: FormData): P
 // the flag back to review. A4: confirmed-risk items can't be edited.
 export async function updateAppraisal(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const user = await requireRole(["appraiser", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const id = String(formData.get("appraisal_id") ?? "");
   const loadedAt = String(formData.get("updated_at") ?? ""); // when the form was opened, to catch someone else's change
   const parsed = parse(formData);
@@ -169,6 +180,7 @@ export async function updateAppraisal(_prev: ActionState, formData: FormData): P
 // PB-16: Admin reviews a flagged item and clears or confirms the risk.
 export async function resolveCounterfeitFlag(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const user = await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const appraisalId = String(formData.get("appraisal_id") ?? "");
   const decision = String(formData.get("decision") ?? "");
   if (!appraisalId || (decision !== "cleared" && decision !== "confirmed")) return { error: "Choose Clear flag or Confirm risk." }; // A5

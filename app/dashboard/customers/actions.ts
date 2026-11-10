@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
+import { allowRequest, TOO_MANY } from "@/lib/rate-limit"; // #22: rate limiting
 // also import the shared phone rule we just exported
 import { customerSchema, requiredDateOfBirthSchema, idNumberError, phPhoneSchema, MAX } from "@/lib/validation/customer"; // F4: MAX = length limits
 import { runAmlCheck } from "@/lib/customers/aml";
@@ -51,6 +52,7 @@ export async function createCustomer(
   formData: FormData,
 ): Promise<ActionState> {
   const user = await requireRole(["operator", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const parsed = parseCustomerForm(formData);
   if (!parsed.success) return validationFailure(parsed.error);
 
@@ -133,6 +135,7 @@ const cleanPhone = (value: string) => value.replace(/[\s-]/g, "");
 
 export async function updateCustomer(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["operator", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const customerId = String(formData.get("customer_id") ?? "");
   if (!customerId) return { error: "Missing customer id" };
   const parsed = contactSchema.safeParse({
@@ -203,6 +206,7 @@ const identitySchema = z.object({
 // Item 5: Admin-only identity correction, reason required, before/after audited.
 export async function adminEditCustomer(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const parsed = identitySchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return validationFailure(parsed.error);
   const supabase = await createClient();
@@ -262,6 +266,7 @@ export async function adminEditCustomer(_prev: ActionState, formData: FormData):
 // The list and profile never send full IDs to the browser; this is the only way to get one, one at a time.
 export async function revealCustomerId(customerId: string): Promise<{ idNumber?: string; error?: string }> {
   await requireRole(ID_REVEAL_ROLES); // not allowed -> sent back to the Dashboard with "You don't have access"
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   if (!z.string().uuid().safeParse(customerId).success) return { error: "Customer not found." }; // must look like a real customer id
   const supabase = await createClient();
   // #19: the database checks the role again and writes a VIEW row to the audit trail for every reveal
@@ -277,6 +282,7 @@ export async function setBlacklistStatus(
   formData: FormData,
 ): Promise<ActionState> {
   await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const customerId = String(formData.get("customer_id") ?? "");
   const isBlacklisted = formData.get("is_blacklisted") === "on";
   const reason = String(formData.get("blacklist_reason") ?? "").trim();

@@ -3,6 +3,7 @@
 import { parseRefNo } from "@/lib/ref-numbers"; // #18: "C-0012" finds that customer
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
+import { allowRequest } from "@/lib/rate-limit"; // #22: rate limiting
 import { rankCustomers } from "@/lib/customers/search";
 import { loadCustomerScores } from "@/lib/customers/history";
 import type { CustomerScore } from "@/lib/customers/score";
@@ -26,10 +27,12 @@ export type CustomerHit = {
 // Item 10: search-as-you-type. The database narrows candidates with a
 // case-insensitive match on name, phone or ID; ranking (prefix first) and
 // scoring happen here so the order is consistent with the unit-tested rules.
-export async function searchCustomers(query: string): Promise<CustomerHit[]> {
+// #22: over 60 searches a minute it answers { limited: true } instead of a list, and the form says so.
+export async function searchCustomers(query: string): Promise<CustomerHit[] | { limited: true }> {
   await requireRole(["cashier", "admin"]);
   const q = query.trim();
   if (!q) return [];
+  if (!(await allowRequest("search"))) return { limited: true }; // #22
   const safe = q.replace(/[%,()*\\]/g, " ").slice(0, 60);
   const compact = safe.replace(/[\s-]/g, "");
 

@@ -244,6 +244,7 @@ function CustomerSearch({ onPick }: { onPick: (c: CustomerHit) => void }) {
   const [hits, setHits] = useState<CustomerHit[]>([]);
   const [active, setActive] = useState(0);
   const [searched, setSearched] = useState("");
+  const [limited, setLimited] = useState(false); // #22: true = too many searches this minute, the server didn't search
   const [pending, startTransition] = useTransition();
   const listId = useId();
   const seq = useRef(0);
@@ -256,7 +257,9 @@ function CustomerSearch({ onPick }: { onPick: (c: CustomerHit) => void }) {
       startTransition(async () => {
         const res = await searchCustomers(term);
         if (mine !== seq.current) return;
-        setHits(res);
+        const overLimit = !Array.isArray(res); // #22: the server answered "too many searches" instead of a list
+        setLimited(overLimit);
+        setHits(overLimit ? [] : res);
         setActive(0);
         setSearched(term);
       });
@@ -332,11 +335,13 @@ function CustomerSearch({ onPick }: { onPick: (c: CustomerHit) => void }) {
       <p className="mt-1 text-xs text-slate-500" aria-live="polite">
         {pending
           ? "Searching"
-          : q.trim().length >= 2 && searched === q.trim() && !hits.length
-            ? "No customer found. Register them under Customers first."
-            : shown[0]?.similar // #16: the list above holds close names, not exact matches
-              ? "No exact match. These are similar names: check the name and ID before you pick one."
-              : ""}
+          : limited && searched === q.trim() // #22: don't say "No customer found" when the search didn't run
+            ? "Too many searches. Wait a minute, then try again."
+            : q.trim().length >= 2 && searched === q.trim() && !hits.length
+              ? "No customer found. Register them under Customers first."
+              : shown[0]?.similar // #16: the list above holds close names, not exact matches
+                ? "No exact match. These are similar names: check the name and ID before you pick one."
+                : ""}
       </p>
     </div>
   );

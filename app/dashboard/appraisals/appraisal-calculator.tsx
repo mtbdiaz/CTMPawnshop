@@ -102,6 +102,15 @@ export function AppraisalCalculator({
   // C4: take a photo off this appraisal before saving
   function removePhoto(path: string) {
     setPhotos((prev) => prev.filter((p) => p.path !== path));
+    // #25: also delete the file, so it doesn't stay in storage forever. The database only lets you delete a photo
+    // you uploaded yourself that isn't saved with an appraisal. If this fails, nothing is lost: the server
+    // clean-up (lib/appraisal/photo-cleanup.ts) removes unused photos after 24 hours.
+    void createClient()
+      .storage.from("item-photos")
+      .remove([path])
+      .then(({ error }) => {
+        if (error) console.error("photo delete failed:", error.message); // details for the developers
+      });
   }
 
   // N2: the live valuation box. Maximum loan is the biggest number; value comes second.

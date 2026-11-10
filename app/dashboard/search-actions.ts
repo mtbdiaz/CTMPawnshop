@@ -6,6 +6,7 @@ import { appraisalNo, customerNo, parseRefNo } from "@/lib/ref-numbers"; // #18 
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 // checks the user is logged in and has one of the allowed roles
 import { requireRole } from "@/lib/auth/require-role";
+import { allowRequest } from "@/lib/rate-limit"; // #22: rate limiting
 // the SAME customer ranking the New loan search uses (already unit-tested), so results are consistent
 import { rankCustomers } from "@/lib/customers/search";
 // interest that piled up after the due date (same math as the Dashboard and loan page)
@@ -33,6 +34,7 @@ export type SearchResults = {
   loans: SearchHit[];
   appraisals: SearchHit[];
   payments: SearchHit[];
+  limited?: boolean; // #22: true = too many searches this minute, so the server didn't search
 };
 
 // Loan statuses that are still open (not redeemed, defaulted or forfeited)
@@ -77,6 +79,7 @@ export async function quickSearch(query: string): Promise<SearchResults> {
   // clean the text: trim the ends and turn repeated spaces into one
   const q = query.trim().replace(/\s+/g, " ");
   if (q.length < 2) return empty; // too short to be useful
+  if (!(await allowRequest("search"))) return { ...empty, limited: true }; // #22: at most 60 searches a minute per account
   // remove characters that have a special meaning in the database filter, and cap the length
   const safe = q.replace(/[%,()*\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
   if (safe.length < 2) return empty;

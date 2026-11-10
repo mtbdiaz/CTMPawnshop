@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
+import { allowRequest, TOO_MANY } from "@/lib/rate-limit"; // #22: rate limiting
 import type { FieldErrors } from "@/lib/validation/errors";
 import { validationFailure } from "@/lib/validation/errors";
 import { manilaToday } from "@/lib/format"; // today in Manila (business day)
@@ -48,6 +49,7 @@ function revalidateLoan(id?: string) {
 // PB-17: create a pawn loan against an available appraisal.
 export async function createLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["cashier", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const parsed = createSchema.safeParse({
     customer_id: formData.get("customer_id"),
     appraisal_item_id: formData.get("appraisal_item_id"),
@@ -83,6 +85,7 @@ const paymentSchema = z.object({
 // PB-18: interest owed (including any accrued past maturity) is settled first.
 export async function recordPayment(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["cashier", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const parsed = paymentSchema.safeParse({
     loan_id: formData.get("loan_id"),
     amount: formData.get("amount"),
@@ -122,6 +125,7 @@ function expectedMaturityFrom(formData: FormData): string | undefined {
 // PB-19: pay-and-renew.
 export async function processExtension(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["cashier", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const id = loanIdFrom(formData);
   if (!id) return { error: "Loan not found. Reload the page." };
   const supabase = await createClient();
@@ -135,6 +139,7 @@ export async function processExtension(_prev: ActionState, formData: FormData): 
 // Item 8: capitalize unpaid interest and extend one term.
 export async function capitalizeLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["cashier", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const id = loanIdFrom(formData);
   if (!id) return { error: "Loan not found. Reload the page." };
   const supabase = await createClient();
@@ -148,6 +153,7 @@ export async function capitalizeLoan(_prev: ActionState, formData: FormData): Pr
 // Item 7: reinstate a defaulted loan.
 export async function reinstateLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["cashier", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const id = loanIdFrom(formData);
   if (!id) return { error: "Loan not found. Reload the page." };
   const supabase = await createClient();
@@ -161,6 +167,7 @@ export async function reinstateLoan(_prev: ActionState, formData: FormData): Pro
 // Admin confirms a default as final (the item now belongs to the shop).
 export async function forfeitLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const id = loanIdFrom(formData);
   if (!id) return { error: "Loan not found. Reload the page." };
   const supabase = await createClient();
@@ -173,6 +180,7 @@ export async function forfeitLoan(_prev: ActionState, formData: FormData): Promi
 // PB-20: redeem a fully paid loan.
 export async function redeemLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["cashier", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const id = loanIdFrom(formData);
   if (!id) return { error: "Loan not found. Reload the page." };
   const supabase = await createClient();
@@ -197,6 +205,7 @@ const adminLoanSchema = z.object({
 // Item 5: Admin correction with a written reason; before/after goes to the audit trail.
 export async function adminEditLoan(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const parsed = adminLoanSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return validationFailure(parsed.error);
   const supabase = await createClient();
@@ -221,6 +230,7 @@ const adminPaymentSchema = z.object({
 
 export async function adminEditPayment(_prev: ActionState, formData: FormData): Promise<ActionState> {
   await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const parsed = adminPaymentSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return validationFailure(parsed.error);
   const supabase = await createClient();
@@ -242,6 +252,7 @@ export type DefaultCheckState = { error?: string; success?: boolean; message?: s
 export async function checkDefaultsNow(_prev: DefaultCheckState, formData: FormData): Promise<DefaultCheckState> {
   void _prev; // not used: every check starts fresh
   await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const supabase = await createClient();
 
   // L30: work out the list again right now with the same rule the preview used (read-only)
