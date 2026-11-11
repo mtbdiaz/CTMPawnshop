@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { allowRequest, TOO_MANY } from "@/lib/rate-limit"; // #22: rate limiting
+import { parsePeso, reserveProblem, saleProblems } from "@/lib/inventory/auction"; // AP1: the auction typing checks
 import { AUDIT_RESULTS, auditResultProblem, followupProblems, type AuditResult } from "@/lib/inventory/audit"; // AS1: the audit results and their checks
 
 export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; id?: string };
@@ -140,7 +141,11 @@ export async function auditItemPhotos(appraisalItemId: string): Promise<{ urls: 
   return ok.length || !urls.length ? { urls: ok } : { urls: [], error: "Could not load the photos." };
 }
 
-// PB-26 + UC18: batch forfeited items together for the next auction cycle, each with an optional minimum price.
+// PB-26 + UC18 + AP1 (migration 0052): put forfeited items in an auction batch.
+// Before: an empty minimum price quietly meant "no minimum". Now every ticked item needs a reserve price OR a
+// deliberate "No reserve" tick. Also new: an optional auction date and place, and a one-time request id so a
+// double click makes one batch. The database checks everything again (forfeited by an Admin, not already in a
+// batch, not "Not located" in the last physical audit) at the moment of saving.
 export async function createAuctionBatch(
   _prevState: ActionState,
   formData: FormData,
@@ -148,42 +153,72 @@ export async function createAuctionBatch(
   await requireRole(["operator", "admin"]);
   if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const itemIds = formData.getAll("item_id").map(String);
-  const notes = String(formData.get("notes") ?? "");
+  const notes = String(formData.get("notes") ?? "").trim();
+  const place = String(formData.get("auction_place") ?? "").trim();
+  const date = String(formData.get("auction_date") ?? "").trim(); // "2026-11-30" or ""
+  const requestId = String(formData.get("request_id") ?? "");
   if (itemIds.length === 0) return { error: "Select at least one forfeited item" };
+  if (itemIds.some((id) => !UUID.test(id)) || new Set(itemIds).size !== itemIds.length) return { error: "Reload the page and select the items again." };
+  if (itemIds.length > 200) return { error: "A batch can have at most 200 items. Make a second batch for the rest." };
 
-  // UC18 step 2: the minimum price box next to each ticked item (empty = no minimum)
+  // each ticked item: a reserve price, or the "No reserve" tick (never both, never neither)
   const fieldErrors: FieldErrors = {};
-  const minPrices = itemIds.map((id) => {
-    const raw = String(formData.get(`min_price_${id}`) ?? "").replace(/,/g, "").trim();
-    if (!raw) return null;
-    const n = Number(raw);
-    if (!Number.isFinite(n) || n <= 0 || n > 10_000_000 || !/^\d+(\.\d{1,2})?$/.test(raw)) {
-      fieldErrors[`min_price_${id}`] = "Enter an amount in pesos, like 5000 or 5000.50.";
-      return null;
-    }
-    return n;
-  });
-  if (Object.keys(fieldErrors).length) return { error: "Check the minimum prices: use pesos only, like 5000 or 5000.50.", fieldErrors };
+  const minPrices: (number | null)[] = [];
+  const noReserve: boolean[] = [];
+  for (const id of itemIds) {
+    const raw = String(formData.get(`min_price_${id}`) ?? "");
+    const none = formData.get(`no_reserve_${id}`) === "on";
+    const problem = reserveProblem(raw, none);
+    if (problem) fieldErrors[`min_price_${id}`] = problem;
+    minPrices.push(none ? null : parsePeso(raw));
+    noReserve.push(none);
+  }
+  if (notes.length > 500) fieldErrors.notes = "Keep the batch note to 500 characters or less.";
+  if (place.length > 120) fieldErrors.auction_place = "Keep the auction place to 120 characters or less.";
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) fieldErrors.auction_date = "Pick a date from the calendar.";
+  if (Object.keys(fieldErrors).length) return { error: "Check the reserve prices: each selected item needs a price or \"No reserve\".", fieldErrors };
 
-  // One database call: only items an Admin has forfeited are accepted, and the batch, its items (with their
-  // minimum prices) and the status change are saved together, or not at all.
+  // One database call: the batch, its items (with their reserves) and the status change are saved together, or not at all.
   const supabase = await createClient();
   const { data: batchId, error } = await supabase.rpc("create_auction_batch", {
     p_item_ids: itemIds,
-    p_notes: notes,
-    // only send the prices when at least one was typed (the database then checks each one)
-    p_min_prices: minPrices.some((n) => n !== null) ? (minPrices as number[]) : undefined,
+    p_notes: notes || undefined,
+    p_min_prices: minPrices,
+    p_no_reserve: noReserve,
+    p_auction_date: date || undefined,
+    p_auction_place: place || undefined,
+    p_request_id: UUID.test(requestId) ? requestId : undefined, // the same Create sent twice = one batch
   });
   if (error || !batchId) return { error: error?.message ?? "Could not create the batch" };
 
-  revalidatePath("/dashboard/inventory/auction");
+  revalidatePath("/dashboard/inventory/auction", "layout"); // the page and the batch pages under it
   revalidatePath("/dashboard/inventory");
   return { success: true, id: batchId };
 }
 
-// #43 + UC16: record that a queued item was sold. The database (record_auction_sale, migration 0031) checks the
-// role, that the item is queued in an open batch and that the price is not below its minimum, then marks it
-// Sold and adds the money to the cash ledger, all together.
+// AP1: set the reserve of an item that is already queued. The 53 items queued before migration 0052 have
+// "Not set"; one of these must be saved before the item can be sold. An Operator can set it once;
+// changing a reserve that is already set is for an Admin (the database checks this).
+export async function setReserve(_prevState: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["operator", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY };
+  const lineId = String(formData.get("line_id") ?? "");
+  const raw = String(formData.get("min_price") ?? "");
+  const none = formData.get("no_reserve") === "on";
+  if (!UUID.test(lineId)) return { error: "Missing item. Reload the page and try again." };
+  const problem = reserveProblem(raw, none);
+  if (problem) return { fieldErrors: { min_price: problem } };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_auction_reserve", { p_line: lineId, p_min_price: none ? null : parsePeso(raw), p_no_reserve: none });
+  if (error) return { error: error.message }; // plain messages from the database ("Only an Admin can change it.")
+  revalidatePath("/dashboard/inventory/auction", "layout"); // the page and the batch pages under it
+  return { success: true };
+}
+
+// #43 + UC16 + AP1: record that a queued item was sold. Still ONE step, as Matt built it: the item becomes Sold
+// and the money goes in the cash ledger. New in 0052: the buyer's name is required, the person must tick (separately) that the
+// payment was received in full and that the item was handed over, and an item whose reserve is "Not set" is refused.
 export async function recordSale(
   _prevState: ActionState,
   formData: FormData,
@@ -191,33 +226,51 @@ export async function recordSale(
   await requireRole(["operator", "admin"]);
   if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const itemId = String(formData.get("item_id") ?? "");
-  const raw = String(formData.get("sale_price") ?? "").replace(/,/g, "").trim();
+  const raw = String(formData.get("sale_price") ?? "");
   const buyer = String(formData.get("buyer_name") ?? "").trim();
   const notes = String(formData.get("sale_notes") ?? "").trim();
   const requestId = String(formData.get("request_id") ?? "");
-  if (!/^[0-9a-f-]{36}$/i.test(itemId)) return { error: "Missing item. Reload the page and try again." };
+  if (!UUID.test(itemId)) return { error: "Missing item. Reload the page and try again." };
 
-  const fieldErrors: FieldErrors = {};
-  const price = Number(raw);
-  if (!raw || !Number.isFinite(price) || price <= 0 || price > 10_000_000 || !/^\d+(\.\d{1,2})?$/.test(raw))
-    fieldErrors.sale_price = "Enter the sale price in pesos, like 15000 or 15000.50.";
-  if (buyer.length > 120) fieldErrors.buyer_name = "Keep the buyer name to 120 characters or less.";
-  if (notes.length > 500) fieldErrors.sale_notes = "Keep the note to 500 characters or less.";
+  // the reserve is checked by the database (it knows the real one); here only the typing and the confirmation
+  // SR1: payment and handover are two different things, so they are two ticks. Both are needed, because "Sold" in this
+  // system means the money is in and the item has left the shop (there is no "paid but not released yet" state).
+  const confirmed = formData.get("confirm_payment") === "on" && formData.get("confirm_handover") === "on";
+  const fieldErrors: FieldErrors = saleProblems(raw, buyer, notes, confirmed, null);
   if (Object.keys(fieldErrors).length) return { fieldErrors };
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("record_auction_sale", {
     p_item_id: itemId,
-    p_sale_price: price,
-    p_buyer: buyer || undefined,
+    p_sale_price: parsePeso(raw) as number,
+    p_buyer: buyer,
     p_notes: notes || undefined,
-    p_request_id: /^[0-9a-f-]{36}$/i.test(requestId) ? requestId : undefined, // the same form sent twice = one sale
+    p_request_id: UUID.test(requestId) ? requestId : undefined, // the same form sent twice = one sale
   });
   if (error) return { error: error.message }; // the database's messages are plain ("below this item's minimum price (₱5,000.00)")
 
-  revalidatePath("/dashboard/inventory/auction");
+  revalidatePath("/dashboard/inventory/auction", "layout"); // the page and the batch pages under it
   revalidatePath("/dashboard/inventory");
   revalidatePath("/dashboard/finance"); // the sale shows in the cash ledger
+  return { success: true };
+}
+
+// AP1: the item did not sell. Before, it stayed "Queued" forever. Now it goes back to Forfeited (still in the
+// vault, ready for a later batch) and the old batch keeps the line with the reason. No money is recorded.
+export async function markUnsold(_prevState: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["operator", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY };
+  const itemId = String(formData.get("item_id") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!UUID.test(itemId)) return { error: "Missing item. Reload the page and try again." };
+  if (reason.length < 5) return { fieldErrors: { reason: "Write why it was not sold (at least 5 characters)." } };
+  if (reason.length > 300) return { fieldErrors: { reason: "Keep the reason to 300 characters or less." } };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("mark_auction_unsold", { p_item_id: itemId, p_reason: reason });
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/inventory/auction", "layout"); // the page and the batch pages under it
+  revalidatePath("/dashboard/inventory");
   return { success: true };
 }
 
