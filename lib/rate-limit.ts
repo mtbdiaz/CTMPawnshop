@@ -3,7 +3,9 @@
 // server answers the request. This file is only for server code (server actions).
 import { createClient } from "@/lib/supabase/server";
 
-export type RateKind = "search" | "save"; // search = the live searches; save = anything that changes or reveals data
+// search = the live searches; save = anything that changes or reveals data;
+// audit = one item checked in a physical audit (300 a minute: a person ticks items quickly while walking the vault; migration 0044)
+export type RateKind = "search" | "save" | "audit";
 
 // the message staff see when they are over the limit
 export const TOO_MANY = "Too many requests. Wait a minute, then try again.";

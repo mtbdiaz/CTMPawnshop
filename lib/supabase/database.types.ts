@@ -866,42 +866,114 @@ export type Database = {
           },
         ]
       }
+      physical_inventory_audit_followups: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          found_location: string | null
+          id: string
+          is_demo: boolean
+          line_id: string
+          notes: string
+          outcome: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          found_location?: string | null
+          id?: string
+          is_demo?: boolean
+          line_id: string
+          notes: string
+          outcome: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          found_location?: string | null
+          id?: string
+          is_demo?: boolean
+          line_id?: string
+          notes?: string
+          outcome?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "physical_inventory_audit_followups_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "physical_inventory_audit_followups_line_id_fkey"
+            columns: ["line_id"]
+            isOneToOne: false
+            referencedRelation: "physical_inventory_audit_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       physical_inventory_audit_items: {
         Row: {
           audit_id: string
+          checked_at: string | null
+          checked_by: string | null
           expected_status: Database["public"]["Enums"]["inventory_status"]
-          found: boolean
+          expected_vault: string | null
+          found: boolean | null
+          found_location: string | null
           id: string
           inventory_item_id: string
           is_demo: boolean
           notes: string | null
+          reason: string | null
           resolution_notes: string | null
+          resolution_outcome: string | null
           resolved_at: string | null
           resolved_by: string | null
+          result: string | null
+          version: number
         }
         Insert: {
           audit_id: string
+          checked_at?: string | null
+          checked_by?: string | null
           expected_status: Database["public"]["Enums"]["inventory_status"]
-          found: boolean
+          expected_vault?: string | null
+          found: boolean | null
+          found_location?: string | null
           id?: string
           inventory_item_id: string
           is_demo?: boolean
           notes?: string | null
+          reason?: string | null
           resolution_notes?: string | null
+          resolution_outcome?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
+          result?: string | null
+          version?: number
         }
         Update: {
           audit_id?: string
+          checked_at?: string | null
+          checked_by?: string | null
           expected_status?: Database["public"]["Enums"]["inventory_status"]
-          found?: boolean
+          expected_vault?: string | null
+          found?: boolean | null
+          found_location?: string | null
           id?: string
           inventory_item_id?: string
           is_demo?: boolean
           notes?: string | null
+          reason?: string | null
           resolution_notes?: string | null
+          resolution_outcome?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
+          result?: string | null
+          version?: number
         }
         Relationships: [
           {
@@ -909,6 +981,13 @@ export type Database = {
             columns: ["audit_id"]
             isOneToOne: false
             referencedRelation: "physical_inventory_audits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "physical_inventory_audit_items_checked_by_fkey"
+            columns: ["checked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -934,10 +1013,20 @@ export type Database = {
           archived_by: string | null
           created_at: string
           discrepancy_count: number
+          expected_count: number | null
           id: string
           is_demo: boolean
+          is_partial: boolean
           notes: string | null
+          overlap_reason: string | null
+          overlaps_with: string[] | null
           performed_by: string | null
+          request_id: string | null
+          scope_vault: string | null
+          started_at: string
+          status: string
+          submitted_at: string | null
+          submitted_by: string | null
         }
         Insert: {
           archive_reason?: string | null
@@ -945,10 +1034,20 @@ export type Database = {
           archived_by?: string | null
           created_at?: string
           discrepancy_count?: number
+          expected_count?: number | null
           id?: string
           is_demo?: boolean
+          is_partial?: boolean
           notes?: string | null
+          overlap_reason?: string | null
+          overlaps_with?: string[] | null
           performed_by?: string | null
+          request_id?: string | null
+          scope_vault?: string | null
+          started_at?: string
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
         }
         Update: {
           archive_reason?: string | null
@@ -956,12 +1055,29 @@ export type Database = {
           archived_by?: string | null
           created_at?: string
           discrepancy_count?: number
+          expected_count?: number | null
           id?: string
           is_demo?: boolean
+          is_partial?: boolean
           notes?: string | null
+          overlap_reason?: string | null
+          overlaps_with?: string[] | null
           performed_by?: string | null
+          request_id?: string | null
+          scope_vault?: string | null
+          started_at?: string
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "physical_inventory_audits_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "physical_inventory_audits_archived_by_fkey"
             columns: ["archived_by"]
@@ -1317,6 +1433,21 @@ export type Database = {
         Args: { p_id: string; p_reason: string; p_table: string }
         Returns: undefined
       }
+      audit_followup_list: { Args: { p_limit?: number }; Returns: Json }
+      audit_followups_for: { Args: { p_audit: string }; Returns: Json }
+      audit_open_overlaps: { Args: never; Returns: Json }
+      audit_scope_options: { Args: never; Returns: Json }
+      audit_session_page: {
+        Args: {
+          p_audit: string
+          p_page?: number
+          p_q?: string
+          p_size?: number
+          p_vault?: string
+          p_view?: string
+        }
+        Returns: Json
+      }
       capitalize_loan: {
         Args: {
           p_expected_maturity?: string
@@ -1511,11 +1642,19 @@ export type Database = {
         }[]
       }
       ctm_photo_in_use: { Args: { p_name: string }; Returns: boolean }
+      ctm_in_custody: {
+        Args: { s: Database["public"]["Enums"]["inventory_status"] }
+        Returns: boolean
+      }
       ctm_rate_check: { Args: { p_kind: string }; Returns: boolean }
       ctm_today: { Args: never; Returns: string }
       ctm_unused_photos: {
         Args: { p_older_than?: string }
         Returns: { name: string }[]
+      }
+      discard_audit_session: {
+        Args: { p_audit: string; p_confirm_checks?: boolean; p_reason: string }
+        Returns: undefined
       }
       forfeit_loan: { Args: { p_loan_id: string }; Returns: undefined }
       get_my_role: {
@@ -1588,6 +1727,17 @@ export type Database = {
         }
         Returns: Json
       }
+      record_audit_result: {
+        Args: {
+          p_found_location?: string
+          p_line: string
+          p_note?: string
+          p_reason?: string
+          p_result: string
+          p_version: number
+        }
+        Returns: number
+      }
       resolve_audit_item: {
         Args: { p_line_id: string; p_notes: string }
         Returns: undefined
@@ -1611,9 +1761,27 @@ export type Database = {
         }
         Returns: undefined
       }
-      submit_inventory_audit: {
-        Args: { p_items: Json; p_notes: string }
+      review_audit_discrepancy: {
+        Args: {
+          p_found_location?: string
+          p_line: string
+          p_notes: string
+          p_outcome: string
+          p_seen?: number
+        }
+        Returns: Json
+      }
+      start_inventory_audit: {
+        Args: {
+          p_overlap_reason?: string
+          p_request_id?: string
+          p_scope?: string
+        }
         Returns: string
+      }
+      submit_audit_session: {
+        Args: { p_audit: string; p_notes?: string; p_partial: boolean }
+        Returns: Json
       }
     }
     Enums: {

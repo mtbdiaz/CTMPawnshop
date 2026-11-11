@@ -1,117 +1,98 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { categoryLabel } from "@/lib/appraisal/valuation";
-import { Badge, Card, EmptyState, PageHeader, SectionTitle } from "@/components/ui";
-import { AuditForm } from "./audit-form";
-import { MarkFoundForm } from "./mark-found-form"; // #14: "Mark found" for items missing in an audit
+import { appraisalNo } from "@/lib/ref-numbers"; // 45 -> "A-0045"
+import { auditCoverage, auditProgress, followupLabel, followupStatus, reasonLabel, scopeLabel, type AuditPage, type FollowupRow } from "@/lib/inventory/audit"; // AS1: the audit rules and words
+import { Alert, Badge, buttonClasses, ButtonLink, Card, cx, EmptyState, PageHeader, SectionTitle } from "@/components/ui";
+import { StartAuditForm } from "./start-form";
+import { DiscardDraft } from "./discard-draft"; // DD1: "Discard draft" popup
+import { ReviewDiscrepancy } from "./review-discrepancy"; // AD1: the "Review discrepancy" popup
 
 export const metadata = { title: "Physical audit" };
 
-const VAULT_PAGE = 1000; // PA2: how many items one request to the database can return
+// #14: the item words used in the follow-up lists ("Ring, 18K, 2 g · A-0045")
+type ItemInfo = { appraisal_no: number | null; category: string; category_other: string | null; weight_grams: number; karat: number } | null;
+const itemWords = (a: ItemInfo) => (a ? `${categoryLabel(a.category, a.category_other)}, ${a.karat}K, ${a.weight_grams} g${a.appraisal_no ? ` · ${appraisalNo(a.appraisal_no)}` : ""}` : "Item");
 
-// #14: the item words used in the follow-up lists ("Ring, 18K, 2 g")
-type ItemInfo = { category: string; category_other: string | null; weight_grams: number; karat: number; customers?: { full_name: string } | null } | null;
-const itemWords = (a: ItemInfo) => (a ? `${categoryLabel(a.category, a.category_other)}, ${a.karat}K, ${a.weight_grams} g` : "Item");
-
-export default async function InventoryAuditPage() {
-  await requireRole(["operator", "admin"]);
+// AS1 (Nov 11): this page is now the START of an audit, not the audit itself.
+// Before: it loaded every item in the vault into one long form with "Found" already ticked on all of them.
+// Now: pick a location (or all), press Start, and the audit opens as its own saved page with 10 items at a time.
+// This page only lists: audits in progress, the follow-up list, and the finished audits.
+// AD1 (Nov 11): Start and In-progress sit side by side; "Mark found" became "Review discrepancy" (a popup).
+export default async function InventoryAuditPage({ searchParams }: { searchParams: Promise<{ audits?: string; drafts?: string }> }) {
+  const user = await requireRole(["operator", "admin"]);
+  const sp = await searchParams;
+  const showAll = sp.audits === "all"; // "View all" under Recent audits was pressed
+  const showAllDrafts = sp.drafts === "all"; // DD1: "View all" under In-progress audits was pressed
+  const DRAFTS = 3; // how many in-progress audits are listed at first, so the card doesn't keep growing
+  const RECENT = 5; // how many finished audits are listed at first
 
   const supabase = await createClient();
 
-  // PA1 + PA2: every item that is physically in the vault: pawned, renewed, and also forfeited or queued for
-  // auction (those are still on the shelf until they are sold). The database gives at most 1,000 rows per request,
-  // so the list is loaded in pages of 1,000 until a page comes back short. Before, anything past 1,000 was
-  // silently left out of the audit.
-  type VaultRow = { id: string; status: string; vault_location: string; appraisal_items: unknown };
-  const items: VaultRow[] = [];
-  for (let from = 0; ; from += VAULT_PAGE) {
-    const { data, error: pageError } = await supabase
-      .from("inventory_items")
-      .select("id, status, vault_location, appraisal_items(category, category_other, weight_grams, karat, customers(full_name))")
-      .in("status", ["pawned", "extended", "forfeited", "queued_for_auction"])
-      .is("archived_at", null)
-      .order("vault_location")
-      .order("id") // same location -> always the same order, so no item is skipped or shown twice between pages
-      .range(from, from + VAULT_PAGE - 1);
-    if (pageError) throw pageError;
-    items.push(...((data ?? []) as VaultRow[]));
-    if ((data?.length ?? 0) < VAULT_PAGE) break; // a short page = the last one
-  }
-
-  const [{ data: history }, { data: missing, count: missingTotal }, { data: found }, { data: openMissing }] = await Promise.all([
+  const [{ data: scopeData }, { data: openAudits }, { data: history, count: historyTotal }, { data: followData }, { data: found }, { data: overlapData }, { data: discarded }] = await Promise.all([
+    // the locations that have items in the vault now, with how many (from the database, nothing typed by hand)
+    supabase.rpc("audit_scope_options"),
+    // audits that were started and not submitted yet
     supabase
       .from("physical_inventory_audits")
-      .select("id, created_at, discrepancy_count, notes")
-      .order("created_at", { ascending: false })
-      .limit(5),
-    // #14: lines marked missing and not followed up yet (oldest audit first). Archived audits are left out
-    supabase
-      .from("physical_inventory_audit_items")
-      .select("id, notes, physical_inventory_audits!inner(created_at, archived_at), inventory_items(vault_location, appraisal_items(category, category_other, weight_grams, karat, customers(full_name)))", { count: "exact" }) // count = all of them, even past the 50 shown
-      .eq("found", false)
-      .is("resolved_at", null)
-      .is("physical_inventory_audits.archived_at", null)
-      .order("created_at", { referencedTable: "physical_inventory_audits", ascending: true })
+      .select("id, scope_vault, started_at, performed_by, overlap_reason, profiles!physical_inventory_audits_performed_by_fkey(full_name)")
+      .eq("status", "in_progress")
+      .is("archived_at", null)
+      .order("started_at", { ascending: false }) // newest first
       .limit(50),
-    // #14: the 5 newest follow-ups, with who marked them found
+    // the newest finished audits (5, or up to 100 after "View all"), with who submitted each
+    supabase
+      .from("physical_inventory_audits")
+      .select("id, started_at, submitted_at, created_at, discrepancy_count, notes, scope_vault, is_partial, expected_count, profiles!physical_inventory_audits_submitted_by_fkey(full_name)", { count: "exact" })
+      .eq("status", "submitted")
+      .is("archived_at", null)
+      .order("submitted_at", { ascending: false })
+      .limit(showAll ? 100 : RECENT),
+    // #14 + AD1: problems from SUBMITTED audits that are not closed yet (oldest audit first), with what is needed to
+    // recognise each item and every check done since. Lines of an audit still in progress are not here.
+    supabase.rpc("audit_followup_list", { p_limit: 50 }),
+    // the 5 newest closed follow-ups, with who closed them
     supabase
       .from("physical_inventory_audit_items")
-      .select("id, resolved_at, resolution_notes, profiles(full_name), inventory_items(appraisal_items(category, category_other, weight_grams, karat))")
+      .select("id, resolved_at, resolution_notes, resolution_outcome, profiles!physical_inventory_audit_items_resolved_by_fkey(full_name), inventory_items(appraisal_items(appraisal_no, category, category_other, weight_grams, karat))")
       .not("resolved_at", "is", null)
       .order("resolved_at", { ascending: false })
       .limit(5),
-    // PA3: every item that was missing in an audit and isn't marked found yet, with the date of that audit
-    supabase
-      .from("physical_inventory_audit_items")
-      .select("inventory_item_id, physical_inventory_audits!inner(created_at, archived_at)")
-      .eq("found", false)
-      .is("resolved_at", null)
-      .is("physical_inventory_audits.archived_at", null)
-      .limit(1000),
+    // 0049: for each audit in progress, how many of its items are at each location now (to warn about overlaps by item)
+    supabase.rpc("audit_open_overlaps"),
+    // DD1: drafts that were discarded (kept as history; listed only after "View all")
+    showAll
+      ? supabase
+          .from("physical_inventory_audits")
+          .select("id, scope_vault, started_at, archived_at, archive_reason, expected_count, profiles!physical_inventory_audits_archived_by_fkey(full_name)")
+          .eq("status", "discarded")
+          .order("archived_at", { ascending: false })
+          .limit(50)
+      : Promise.resolve({ data: null }),
   ]);
+  const overlaps = (overlapData as unknown as { audit_id: string; vault: string; n: number }[] | null) ?? [];
+  const follow = (followData as unknown as { total: number; rows: FollowupRow[] } | null) ?? { total: 0, rows: [] };
 
-  // PA3: item -> the newest audit it was missing in
-  const missingSince = new Map<string, string>();
-  for (const m of (openMissing ?? []) as unknown as { inventory_item_id: string; physical_inventory_audits: { created_at: string } }[]) {
-    const at = m.physical_inventory_audits.created_at;
-    if (!missingSince.has(m.inventory_item_id) || at > missingSince.get(m.inventory_item_id)!) missingSince.set(m.inventory_item_id, at);
-  }
+  const locations = ((scopeData ?? []) as { vault: string; n: number }[]).filter((l) => l.vault); // [{ vault: "Safe 1", n: 48 }, ...]
+  const total = locations.reduce((sum, l) => sum + l.n, 0); // every item in the vault
 
-  // PA4: what was missing in each of the 5 recent audits, so a row can be opened to see it
-  const auditIds = (history ?? []).filter((a) => a.discrepancy_count > 0).map((a) => a.id);
-  const { data: auditMissing } = auditIds.length
-    ? await supabase
-        .from("physical_inventory_audit_items")
-        .select("id, audit_id, notes, resolved_at, inventory_items(vault_location, appraisal_items(category, category_other, weight_grams, karat, customers(full_name)))")
-        .eq("found", false)
-        .in("audit_id", auditIds)
-        .limit(500)
-    : { data: [] };
-  type AuditLine = { id: string; audit_id: string; notes: string | null; resolved_at: string | null; inventory_items: { vault_location: string; appraisal_items: ItemInfo } | null };
-  const linesByAudit = new Map<string, AuditLine[]>();
-  for (const l of (auditMissing ?? []) as unknown as AuditLine[]) linesByAudit.set(l.audit_id, [...(linesByAudit.get(l.audit_id) ?? []), l]);
-
-  const rows = items.map((item) => {
-    const appraisal = (
-      item as unknown as {
-        appraisal_items: { category: string; category_other: string | null; weight_grams: number; karat: number; customers: { full_name: string } | null } | null;
-      }
-    ).appraisal_items;
-    return {
-      id: item.id,
-      status: item.status,
-      vault_location: item.vault_location,
-      missingSince: missingSince.has(item.id) ? formatDate(missingSince.get(item.id)!) : null, // PA3
-      label: `${appraisal?.customers?.full_name ?? ""}, ${appraisal ? categoryLabel(appraisal.category, appraisal.category_other) : ""}, ${appraisal?.karat}K, ${appraisal?.weight_grams} g`,
-    };
-  });
+  // the progress of each audit in progress (the same numbers its own page shows)
+  type OpenAudit = { id: string; scope_vault: string | null; started_at: string; performed_by: string | null; overlap_reason: string | null; profiles: { full_name: string } | null };
+  const open = await Promise.all(
+    ((openAudits ?? []) as unknown as OpenAudit[]).map(async (a) => {
+      const { data } = await supabase.rpc("audit_session_page", { p_audit: a.id, p_size: 5 }); // only the totals are used
+      const counts = (data as unknown as AuditPage | null)?.counts;
+      return { ...a, progress: counts ? auditProgress(counts) : null };
+    }),
+  );
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Physical audit" // B1: was "Physicalaudit" (missing space); now matches the menu and breadcrumb
-        description="Walk the vault and check each item against the system. Untick anything you cannot physically find, and add a note. Forfeited items and items queued for auction are listed too: they stay in the vault until they are sold."
+        title="Physical audit"
+        description="Check the vault against the system and follow up anything that was not where it should be. Every item starts as Not checked: mark it Found only after you have seen it."
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Inventory", href: "/dashboard/inventory" },
@@ -119,49 +100,140 @@ export default async function InventoryAuditPage() {
         ]}
       />
 
-      <Card padded={false}>
-        {rows.length ? (
-          <AuditForm items={rows} />
-        ) : (
-          <EmptyState icon="vault" title="Nothing to audit" description="There are no items in the vault right now." />
-        )}
-      </Card>
+      {/* 1 + 2. start a new audit, and continue one in progress, side by side (stacked on a phone) */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section aria-labelledby="start-audit">
+          <Card className="h-full">
+            <h2 id="start-audit" className="text-lg font-semibold text-slate-900">
+              Start or continue an audit
+            </h2>
+            <p className="mb-3 mt-0.5 text-sm text-slate-600">Pick a location. One location has one audit at a time: if it is already in progress you continue that one. Forfeited items and items queued for auction are included: they stay in the vault until they are sold.</p>
+            {total > 0 ? (
+              <StartAuditForm
+                locations={locations}
+                total={total}
+                open={open.map((a) => ({ id: a.id, scope: a.scope_vault ?? "", checked: a.progress?.checked ?? 0, total: a.progress?.total ?? 0, startedBy: a.profiles?.full_name ?? null, shared: Object.fromEntries(overlaps.filter((o) => o.audit_id === a.id).map((o) => [o.vault, o.n])) }))}
+              />
+            ) : (
+              <p className="text-sm text-slate-600">There are no items in the vault right now, so there is nothing to audit.</p>
+            )}
+          </Card>
+        </section>
 
-      {/* #14: items that were missing in an audit and still need a follow-up */}
-      <section>
-        {/* the real total; only the oldest 50 are listed */}
-        <SectionTitle>Missing items to follow up ({missingTotal ?? 0}{(missingTotal ?? 0) > 50 ? ", oldest 50 shown" : ""})</SectionTitle>
-        <Card padded={false}>
-          {missing && missing.length > 0 ? (
-            <ul className="divide-y divide-slate-100">
-              {(missing as unknown as { id: string; notes: string | null; physical_inventory_audits: { created_at: string }; inventory_items: { vault_location: string; appraisal_items: ItemInfo } | null }[]).map((m) => {
-                const label = itemWords(m.inventory_items?.appraisal_items ?? null);
-                return (
-                  <li key={m.id} className="grid gap-2 px-5 py-3 text-sm lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:items-start">
+        <section aria-labelledby="open-audits">
+          <Card padded={false} className="h-full">
+            <div className="px-5 pt-5">
+              <h2 id="open-audits" className="text-lg font-semibold text-slate-900">
+                In-progress audits{open.length > 0 ? ` (${open.length})` : ""}
+              </h2>
+              <p className="mt-0.5 text-sm text-slate-600">Continue a check that was started and not submitted yet.</p>
+            </div>
+            {open.length > 0 ? (
+              <ul className="mt-2 divide-y divide-slate-100">
+                {(showAllDrafts ? open : open.slice(0, DRAFTS)).map((a) => (
+                  <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm">
                     <span className="min-w-0">
                       <span className="flex flex-wrap items-center gap-2 font-medium text-slate-900">
-                        {label} <Badge tone="danger" icon>Missing</Badge>
+                        {scopeLabel(a.scope_vault)}
+                        {/* the audit's short id: the first 8 characters of its database id */}
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-medium text-slate-700">{a.id.slice(0, 8)}</span>
                       </span>
                       <span className="block text-xs text-slate-600">
-                        {m.inventory_items?.appraisal_items?.customers?.full_name ?? ""} · {m.inventory_items?.vault_location} · audit of {formatDateTime(m.physical_inventory_audits.created_at)}
+                        Started {formatDateTime(a.started_at)}
+                        {a.profiles?.full_name ? ` by ${a.profiles.full_name}` : ""}
                       </span>
-                      {m.notes && <span className="block break-words text-xs italic text-slate-600">Audit note: &ldquo;{m.notes}&rdquo;</span>}
+                      {/* 0049: started on purpose while another audit listed some of the same items */}
+                      {a.overlap_reason && <span className="block break-words text-xs text-amber-900">Separate audit (overlaps another): &ldquo;{a.overlap_reason}&rdquo;</span>}
+                      {a.progress && (
+                        <span className="block text-xs text-slate-700">
+                          {a.progress.checked.toLocaleString("en-PH")} checked · {(a.progress.total - a.progress.checked).toLocaleString("en-PH")} left
+                        </span>
+                      )}
                     </span>
-                    <MarkFoundForm lineId={m.id} label={label} />
+                    {/* gap-4 on touch sizes keeps Discard and Continue apart; each is 40px tall there */}
+                    <span className="flex flex-wrap items-center gap-4 lg:gap-2">
+                      {/* DD1: only the person who started the draft, or an Admin (the database checks it again) */}
+                      {(user.profile.role === "admin" || a.performed_by === user.id) && (
+                        <DiscardDraft auditId={a.id} location={scopeLabel(a.scope_vault)} checked={a.progress?.checked ?? 0} total={a.progress?.total ?? 0} />
+                      )}
+                      {/* Continue only opens the audit that exists; it never makes a new one */}
+                      <Link href={`/dashboard/inventory/audit/${a.id}`} aria-label={`Continue the audit of ${scopeLabel(a.scope_vault)}`} className={cx(buttonClasses("primary", "sm"), "min-h-10 lg:min-h-0")}>
+                        Continue
+                      </Link>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="px-5 pb-5 pt-3 text-sm text-slate-600">No audit is in progress.</p>
+            )}
+            {/* DD1: the list shows 3 at first */}
+            {open.length > DRAFTS && (
+              <p className="border-t border-slate-100 px-5 py-2 text-sm">
+                {showAllDrafts ? (
+                  <Link href="/dashboard/inventory/audit" className="font-medium text-navy-700 underline">Show the newest {DRAFTS}</Link>
+                ) : (
+                  <Link href="/dashboard/inventory/audit?drafts=all" className="font-medium text-navy-700 underline">View all ({open.length})</Link>
+                )}
+              </p>
+            )}
+          </Card>
+        </section>
+      </div>
+
+      {/* 3. #14 + AD1: problems from finished audits that are not closed yet */}
+      <section>
+        <SectionTitle
+          description="The finding is what the audit recorded and never changes. The status is where the follow-up stands now."
+          actions={follow.total > 0 ? <Badge tone="danger" icon>{follow.total} unresolved</Badge> : <Badge tone="success">None unresolved</Badge>}
+        >
+          Items to follow up
+        </SectionTitle>
+        <Card padded={false}>
+          {follow.rows.length > 0 ? (
+            <ul className="divide-y divide-slate-100">
+              {follow.rows.map((m) => {
+                const status = followupStatus(m.followups, m.result); // Pending verification / Under investigation / Escalated
+                const last = m.followups[m.followups.length - 1]; // the newest check, if any
+                return (
+                  <li key={m.id} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-5 py-3 text-sm">
+                    <span className="min-w-0 flex-1 basis-72">
+                      <span className="flex flex-wrap items-center gap-2 font-medium text-slate-900">
+                        {itemWords({ appraisal_no: m.appraisal_no, category: m.category ?? "", category_other: m.category_other, weight_grams: m.weight_grams ?? 0, karat: m.karat ?? 0 })}
+                      </span>
+                      <span className="block text-xs text-slate-600">
+                        {m.customer_name ?? ""} · {m.expected_vault} · audit of {formatDateTime(m.audit_at)}
+                      </span>
+                      <span className="mt-1 block break-words text-xs text-slate-700">
+                        Finding: {m.result === "found_elsewhere" ? `found elsewhere${m.found_location ? ` (${m.found_location})` : ""}` : `not located${m.reason ? `, ${reasonLabel(m.reason).toLowerCase()}` : ""}`}
+                        {m.notes && <span className="italic"> · &ldquo;{m.notes}&rdquo;</span>}
+                      </span>
+                      {last && (
+                        <span className="block break-words text-xs text-slate-700">
+                          Last check: {followupLabel(last.outcome).toLowerCase()} · {formatDateTime(last.at)} · {last.by ?? "staff"}
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex flex-wrap items-center gap-2">
+                      {m.result === "found_elsewhere" ? <Badge tone="warning">Found elsewhere</Badge> : <Badge tone="danger" icon>Not located</Badge>}
+                      <Badge tone={status.tone} icon={status.tone === "danger"}>{status.label}</Badge>
+                      <ReviewDiscrepancy row={m} />
+                    </span>
                   </li>
                 );
               })}
             </ul>
           ) : (
-            <EmptyState icon="clipboard" title="Nothing missing" description="Items you untick in an audit show here until someone marks them found." />
+            <EmptyState icon="clipboard" title="Nothing to follow up" description="Items marked Not located or Found elsewhere in a submitted audit show here until someone finds them." />
           )}
+          {follow.total > follow.rows.length && <p className="border-t border-slate-100 px-5 py-2 text-xs text-slate-600">Showing the oldest {follow.rows.length} of {follow.total}.</p>}
         </Card>
-        {/* the newest follow-ups, so the Admin can see who found what */}
+        {/* the newest closed follow-ups, so the Admin can see who did what */}
         {found && found.length > 0 && (
           <ul className="mt-3 space-y-1 text-xs text-slate-600">
-            {(found as unknown as { id: string; resolved_at: string; resolution_notes: string | null; profiles: { full_name: string } | null; inventory_items: { appraisal_items: ItemInfo } | null }[]).map((f) => (
+            {(found as unknown as { id: string; resolved_at: string; resolution_notes: string | null; resolution_outcome: string | null; profiles: { full_name: string } | null; inventory_items: { appraisal_items: ItemInfo } | null }[]).map((f) => (
               <li key={f.id}>
-                <Badge tone="success">Found</Badge> {itemWords(f.inventory_items?.appraisal_items ?? null)} · {formatDateTime(f.resolved_at)} · {f.profiles?.full_name ?? "staff"}
+                <Badge tone="success">Resolved</Badge> {itemWords(f.inventory_items?.appraisal_items ?? null)} · {followupLabel(f.resolution_outcome ?? "found_expected").toLowerCase()} · {formatDateTime(f.resolved_at)} · {f.profiles?.full_name ?? "staff"}
                 {f.resolution_notes && <span className="italic"> · &ldquo;{f.resolution_notes}&rdquo;</span>}
               </li>
             ))}
@@ -169,59 +241,88 @@ export default async function InventoryAuditPage() {
         )}
       </section>
 
+      {/* 4. finished audits: open one to see every item and its result (read only) */}
       <section>
-        <SectionTitle>Recent audits</SectionTitle>
+        <SectionTitle
+          actions={
+            (historyTotal ?? 0) > RECENT ? (
+              showAll ? (
+                <Link href="/dashboard/inventory/audit" className="text-sm font-medium text-navy-700 underline">Show the newest {RECENT}</Link>
+              ) : (
+                <Link href="/dashboard/inventory/audit?audits=all" className="text-sm font-medium text-navy-700 underline">View all ({historyTotal})</Link>
+              )
+            ) : undefined
+          }
+        >
+          {showAll ? "All audits" : "Recent audits"}
+        </SectionTitle>
         <Card padded={false}>
           {history && history.length > 0 ? (
             <ul className="divide-y divide-slate-100">
-              {history.map((audit) => {
-                const lines = linesByAudit.get(audit.id) ?? [];
-                const summary = (
-                  <>
-                    <span>
-                      {formatDateTime(audit.created_at)}
-                      {audit.notes && <span className="block text-xs text-slate-500">{audit.notes}</span>}
+              {history.map((audit) => (
+                <li key={audit.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm">
+                  <span className="min-w-0">
+                    <span className="flex flex-wrap items-center gap-2 font-medium text-slate-900">
+                      {formatDateTime(audit.submitted_at ?? audit.created_at)}
+                      {/* AV1: how much of ITS list was checked. Not "Full": a short list fully checked is not a whole-vault count */}
+                      {audit.is_partial ? <Badge tone="warning">Partial</Badge> : <Badge tone="neutral">All listed items checked</Badge>}
+                      {audit.discrepancy_count > 0 ? (
+                        <Badge tone="danger" icon>
+                          {audit.discrepancy_count} {audit.discrepancy_count === 1 ? "discrepancy" : "discrepancies"}
+                        </Badge>
+                      ) : (
+                        <Badge tone="success">No discrepancies</Badge>
+                      )}
                     </span>
-                    {audit.discrepancy_count > 0 ? (
-                      <Badge tone="danger" icon>
-                        {audit.discrepancy_count} discrepanc{audit.discrepancy_count === 1 ? "y" : "ies"}
-                      </Badge>
-                    ) : (
-                      <Badge tone="success">All accounted for</Badge>
-                    )}
-                  </>
-                );
-                return (
-                  <li key={audit.id} className="text-sm">
-                    {lines.length ? (
-                      // PA4: an audit with missing items opens to show which ones
-                      <details className="group">
-                        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-5 py-3 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500 [&::-webkit-details-marker]:hidden">
-                          {summary}
-                          <span className="w-full text-xs font-medium text-navy-700 underline group-open:hidden">Show the missing items</span>
-                        </summary>
-                        <ul className="space-y-1 border-t border-slate-100 bg-slate-50 px-5 py-3 text-xs text-slate-700">
-                          {lines.map((l) => (
-                            <li key={l.id}>
-                              <span className="font-medium text-slate-900">{itemWords(l.inventory_items?.appraisal_items ?? null)}</span> · {l.inventory_items?.appraisal_items?.customers?.full_name ?? ""} ·{" "}
-                              {l.inventory_items?.vault_location} · {l.resolved_at ? `found ${formatDate(l.resolved_at)}` : "still missing"}
-                              {l.notes && <span className="italic"> · &ldquo;{l.notes}&rdquo;</span>}
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    ) : (
-                      <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3">{summary}</div>
-                    )}
-                  </li>
-                );
-              })}
+                    <span className="block text-xs text-slate-600">
+                      {auditCoverage({ ...audit, started_at: audit.started_at, submitted_at: audit.submitted_at }).scope}
+                      {(audit as unknown as { profiles: { full_name: string } | null }).profiles?.full_name ? ` · by ${(audit as unknown as { profiles: { full_name: string } | null }).profiles!.full_name}` : ""}
+                      {audit.notes ? ` · ${audit.notes}` : ""}
+                    </span>
+                  </span>
+                  <ButtonLink href={`/dashboard/inventory/audit/${audit.id}`} variant="secondary" size="sm">
+                    View
+                  </ButtonLink>
+                </li>
+              ))}
             </ul>
           ) : (
             <EmptyState icon="clipboard" title="No audits recorded yet" />
           )}
         </Card>
       </section>
+
+      {/* DD1: discarded drafts stay as history (not deleted). Shown after "View all"; each opens read only */}
+      {showAll && discarded && discarded.length > 0 && (
+        <section>
+          <SectionTitle description="Drafts that were thrown away. They are kept with their checks, who discarded them and why.">Discarded drafts ({discarded.length})</SectionTitle>
+          <Card padded={false}>
+            <ul className="divide-y divide-slate-100">
+              {(discarded as unknown as { id: string; scope_vault: string | null; started_at: string; archived_at: string | null; archive_reason: string | null; expected_count: number | null; profiles: { full_name: string } | null }[]).map((d) => (
+                <li key={d.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm">
+                  <span className="min-w-0">
+                    <span className="flex flex-wrap items-center gap-2 font-medium text-slate-900">
+                      {scopeLabel(d.scope_vault)} <Badge tone="neutral">Discarded</Badge>
+                    </span>
+                    <span className="block break-words text-xs text-slate-600">
+                      Started {formatDateTime(d.started_at)}
+                      {d.archived_at ? ` · discarded ${formatDateTime(d.archived_at)}` : ""}
+                      {d.profiles?.full_name ? ` by ${d.profiles.full_name}` : ""}
+                      {d.archive_reason ? ` · ${d.archive_reason}` : ""}
+                    </span>
+                  </span>
+                  <ButtonLink href={`/dashboard/inventory/audit/${d.id}`} variant="secondary" size="sm">
+                    View
+                  </ButtonLink>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </section>
+      )}
+
+      {/* shown only when the lists could not be read (should not happen for an Operator or Admin) */}
+      {!scopeData && <Alert tone="warning">The vault locations could not be loaded. Reload the page.</Alert>}
     </div>
   );
 }
