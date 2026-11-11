@@ -18,6 +18,7 @@ const TABLES = [
   "cash_flow_entries",
   "physical_inventory_audits",
   "physical_inventory_audit_items",
+  "physical_inventory_audit_followups", // AD1: the checks done after an audit (migration 0046)
   "auction_batches",
   "auction_batch_items",
   "suspicious_activity_flags",
