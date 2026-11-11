@@ -160,10 +160,16 @@ export type Database = {
           inventory_item_id: string
           is_demo: boolean
           min_price: number | null
+          no_reserve: boolean
+          reserve_set_at: string | null
+          reserve_set_by: string | null
           sale_notes: string | null
           sale_price: number | null
           sold_at: string | null
           sold_by: string | null
+          unsold_at: string | null
+          unsold_by: string | null
+          unsold_reason: string | null
         }
         Insert: {
           batch_id: string
@@ -172,10 +178,16 @@ export type Database = {
           inventory_item_id: string
           is_demo?: boolean
           min_price?: number | null
+          no_reserve?: boolean
+          reserve_set_at?: string | null
+          reserve_set_by?: string | null
           sale_notes?: string | null
           sale_price?: number | null
           sold_at?: string | null
           sold_by?: string | null
+          unsold_at?: string | null
+          unsold_by?: string | null
+          unsold_reason?: string | null
         }
         Update: {
           batch_id?: string
@@ -184,10 +196,16 @@ export type Database = {
           inventory_item_id?: string
           is_demo?: boolean
           min_price?: number | null
+          no_reserve?: boolean
+          reserve_set_at?: string | null
+          reserve_set_by?: string | null
           sale_notes?: string | null
           sale_price?: number | null
           sold_at?: string | null
           sold_by?: string | null
+          unsold_at?: string | null
+          unsold_by?: string | null
+          unsold_reason?: string | null
         }
         Relationships: [
           {
@@ -218,31 +236,43 @@ export type Database = {
           archive_reason: string | null
           archived_at: string | null
           archived_by: string | null
+          auction_date: string | null
+          auction_place: string | null
+          batch_no: number
           created_at: string
           created_by: string | null
           id: string
           is_demo: boolean
           notes: string | null
+          request_id: string | null
         }
         Insert: {
           archive_reason?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          auction_date?: string | null
+          auction_place?: string | null
+          batch_no?: number
           created_at?: string
           created_by?: string | null
           id?: string
           is_demo?: boolean
           notes?: string | null
+          request_id?: string | null
         }
         Update: {
           archive_reason?: string | null
           archived_at?: string | null
           archived_by?: string | null
+          auction_date?: string | null
+          auction_place?: string | null
+          batch_no?: number
           created_at?: string
           created_by?: string | null
           id?: string
           is_demo?: boolean
           notes?: string | null
+          request_id?: string | null
         }
         Relationships: [
           {
@@ -1433,6 +1463,11 @@ export type Database = {
         Args: { p_id: string; p_reason: string; p_table: string }
         Returns: undefined
       }
+      auction_lines: {
+        Args: { p_batch?: string; p_kind: string; p_page?: number; p_q?: string; p_size?: number }
+        Returns: Json
+      }
+      auction_prepare_list: { Args: never; Returns: Json }
       audit_followup_list: { Args: { p_limit?: number }; Returns: Json }
       audit_followups_for: { Args: { p_audit: string }; Returns: Json }
       audit_open_overlaps: { Args: never; Returns: Json }
@@ -1457,7 +1492,15 @@ export type Database = {
         Returns: Json
       }
       create_auction_batch: {
-        Args: { p_item_ids: string[]; p_min_prices?: number[]; p_notes: string }
+        Args: {
+          p_auction_date?: string
+          p_auction_place?: string
+          p_item_ids: string[]
+          p_min_prices?: (number | null)[]
+          p_no_reserve?: boolean[]
+          p_notes?: string
+          p_request_id?: string
+        }
         Returns: string
       }
       create_pawn_loan:
@@ -1681,6 +1724,7 @@ export type Database = {
           redeem_on_time: number
         }[]
       }
+      mark_auction_unsold: { Args: { p_item_id: string; p_reason: string }; Returns: undefined }
       record_auction_sale: {
         Args: {
           p_buyer?: string
@@ -1770,6 +1814,10 @@ export type Database = {
           p_seen?: number
         }
         Returns: Json
+      }
+      set_auction_reserve: {
+        Args: { p_line: string; p_min_price: number | null; p_no_reserve: boolean }
+        Returns: undefined
       }
       start_inventory_audit: {
         Args: {
