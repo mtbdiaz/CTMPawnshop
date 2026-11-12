@@ -8,47 +8,48 @@ import { requireRole } from "@/lib/auth/require-role";
 import { allowRequest, TOO_MANY } from "@/lib/rate-limit"; // #22: rate limiting
 // R3: the allowed contact methods and results (same lists as the database enums)
 import { isMethod, isOutcome, type ReminderMethod, type ReminderOutcome } from "@/lib/compliance/reminder-outcomes";
+import { cleanNote, reasonProblem } from "@/lib/compliance/flags"; // SA7: the reason rule (same as the database)
 
 export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean };
 
-// PB-32: Admin reviews a suspicious activity flag.
+// PB-32 + SA6 (migration 0060): an Admin decides a suspicious activity flag.
+// Before: two separate saves from here (blacklist the customer, then update the flag), and nothing checked that the
+// flag was still open, so a second Admin on an older screen could overwrite a decision.
+// Now: one database function (review_suspicious_flag) checks the role and the step, refuses a flag that was already
+// decided (and says who decided it), and blacklists the customer and closes the flag together or not at all.
 export async function resolveSuspiciousFlag(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const user = await requireRole(["admin"]);
+  await requireRole(["admin"]);
   if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const flagId = String(formData.get("flag_id") ?? "");
   const decision = String(formData.get("decision") ?? "");
-  if (!flagId || !["dismissed", "investigating", "blacklisted"].includes(decision)) {
-    return { error: "Invalid decision" };
+  if (!/^[0-9a-f-]{36}$/i.test(flagId) || !["dismissed", "investigating", "blacklisted"].includes(decision)) {
+    return { error: "Invalid decision. Reload the page and try again." };
   }
-  // #14: an optional note saying why (shown in the Resolved tab), 500 characters at most like the database
-  const notes = String(formData.get("resolution_notes") ?? "").trim();
-  if (notes.length > 500) return { fieldErrors: { resolution_notes: "Keep the note to 500 characters or less." } };
+  // SA7 (migration 0062): the status the popup showed. If another Admin changed the flag since, the database refuses
+  // and says what it is now, so nobody decides on something they haven't seen.
+  const expected = String(formData.get("expected_status") ?? "");
+  if (!["open", "investigating"].includes(expected)) return { error: "Reload the page and try again." };
+  // the note: optional for Mark investigating, a real reason for Dismiss and Blacklist (SAD UC25, same rule as the
+  // database). Extra spaces are squeezed out.
+  const notes = cleanNote(String(formData.get("resolution_notes") ?? ""));
+  const problem = decision === "investigating" ? (notes.length > 500 ? "Keep the note to 500 characters or less." : null) : reasonProblem(notes);
+  if (problem) return { fieldErrors: { resolution_notes: problem } };
 
   const supabase = await createClient();
-  // Blacklist first: if that fails, the flag stays as it was and the Admin sees the error.
-  if (decision === "blacklisted") {
-    const { data: target, error: readError } = await supabase.from("suspicious_activity_flags").select("customer_id").eq("id", flagId).single();
-    if (readError) return { error: readError.message };
-    if (target?.customer_id) {
-      const { error: blError } = await supabase
-        .from("customers")
-        .update({ is_blacklisted: true, blacklist_reason: "Blacklisted following suspicious activity review" })
-        .eq("id", target.customer_id);
-      if (blError) return { error: `Could not blacklist the customer: ${blError.message}` };
-    }
-  }
-
-  const { error } = await supabase
-    .from("suspicious_activity_flags")
-    .update({ status: decision as never, resolved_by: user.id, resolved_at: new Date().toISOString(), resolution_notes: notes || null })
-    .eq("id", flagId);
-  if (error) return { error: error.message };
-  revalidatePath("/dashboard/customers");
+  const { error } = await supabase.rpc("review_suspicious_flag", {
+    p_flag: flagId,
+    p_decision: decision,
+    p_notes: notes || undefined,
+    p_expected_status: expected,
+  });
+  if (error) return { error: error.message }; // plain messages from the database ("This flag was already decided: ...")
 
   revalidatePath("/dashboard/compliance");
+  revalidatePath("/dashboard/customers", "layout"); // the customer list and profile show the blacklist
+  revalidatePath("/dashboard"); // the Dashboard's open-flag count
   return { success: true };
 }
 

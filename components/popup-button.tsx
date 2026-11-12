@@ -9,7 +9,29 @@ import { Icon } from "./icons";
 // primary (CL1): draw the button as the page's main action (navy, like "New loan") instead of the small row button.
 // ariaLabel (CL2): what a screen reader says for the button when the short label alone is not enough, e.g. ten
 // "Details" buttons in a list: "Details of Payment received, Nov 11, PT-2026...".
-export function PopupButton({ label, title, children, className, primary, ariaLabel }: { label: string; title: string; children: ReactNode; className?: string; primary?: boolean; ariaLabel?: string }) {
+// dataAttr (SA6): marks the button (data-<name>) so a page can find it again, e.g. to move the keyboard focus to the
+// next "Review flag" after a row leaves the list.
+// wide (SA7): a wider popup (40rem instead of 28rem) for popups with a lot to read, e.g. Review flag, so it is
+// less tall. On a phone it is still the screen width minus a small margin.
+export function PopupButton({
+  label,
+  title,
+  children,
+  className,
+  primary,
+  ariaLabel,
+  dataAttr,
+  wide,
+}: {
+  label: string;
+  title: string;
+  children: ReactNode;
+  className?: string;
+  primary?: boolean;
+  ariaLabel?: string;
+  dataAttr?: string;
+  wide?: boolean;
+}) {
   const ref = useRef<HTMLDialogElement>(null); // the <dialog>
   const [open, setOpen] = useState(false); // true while the popup shows
   useEffect(() => {
@@ -22,6 +44,7 @@ export function PopupButton({ label, title, children, className, primary, ariaLa
         type="button"
         onClick={() => setOpen(true)}
         aria-label={ariaLabel}
+        {...(dataAttr ? { [`data-${dataAttr}`]: "" } : {})}
         className={cx(
           primary
             ? buttonClasses("primary") + " whitespace-nowrap"
@@ -39,9 +62,13 @@ export function PopupButton({ label, title, children, className, primary, ariaLa
           onClose={(e) => e.target === e.currentTarget && setOpen(false)}
           onCancel={(e) => e.stopPropagation()}
           onClick={(e) => e.target === e.currentTarget && ref.current?.close()} // a click on the dark area closes it
-          className="m-auto max-h-[calc(100dvh-2rem)] w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-slate-200 p-0 text-left shadow-2xl backdrop:bg-navy-950/50"
+          className={cx(
+            "m-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-md border border-slate-200 p-0 text-left shadow-2xl backdrop:bg-navy-950/50",
+            wide ? "w-[min(40rem,calc(100vw-2rem))]" : "w-[min(28rem,calc(100vw-2rem))]",
+          )}
         >
-          <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          {/* SA7: the title row stays at the top while a long popup scrolls, so Close is always in reach */}
+          <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
             <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
             <button type="button" onClick={() => ref.current?.close()} aria-label="Close" className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800">
               <Icon name="x" className="h-5 w-5" />

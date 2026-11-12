@@ -9,8 +9,9 @@ export function BlacklistForm({ customer }: { customer: Tables<"customers"> }) {
     return (
       <ActionForm action={setBlacklistStatus} successMessage="Customer removed from the blacklist." className="space-y-3">
         <input type="hidden" name="customer_id" value={customer.id} />
+        {/* BL1 (Nov 12): the words match what the database does (migrations 0063 and create_pawn_loan) */}
         <p className="text-sm text-slate-600">
-          Removing the flag lets this customer receive new appraisals and loans again.
+          Removing the blacklist lets this customer get new appraisals and loans again.
         </p>
         <SubmitButton
           variant="secondary"
@@ -45,7 +46,9 @@ export function BlacklistForm({ customer }: { customer: Tables<"customers"> }) {
         pendingLabel="Updating"
         confirm={{
           title: "Blacklist this customer?",
-          message: `${customer.full_name} will be blocked from all new appraisals and loans until an Admin removes the flag.`,
+          // BL1 (Nov 12): before, it said "until an Admin removes the flag", which is not how it is lifted, and didn't
+          // say what happens to the loans they already have
+          message: `${customer.full_name} can't get new appraisals or new loans until an Admin presses Remove from blacklist here. Loans they already have don't change: they can still pay, renew and redeem them. The reason is shown to staff when a loan or appraisal is refused.`,
           confirmLabel: "Blacklist customer",
         }}
       >

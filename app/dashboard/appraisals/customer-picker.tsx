@@ -87,6 +87,7 @@ export function CustomerPicker({
           <span>
             <span className="font-medium text-slate-900">{picked.full_name}</span>
             <span className="ml-1.5 font-mono text-xs text-slate-500">{customerNo(picked.customer_no)}</span>
+            {picked.blacklisted && <span className="ml-2 rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-800">Blacklisted: a new appraisal will be refused</span>}
             <span className="ml-2 text-xs text-slate-600">{picked.id_hint}</span>
           </span>
           <button type="button" onClick={() => pick(null)} className="rounded-sm text-sm font-medium text-navy-700 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500">
@@ -126,6 +127,8 @@ export function CustomerPicker({
                 <span>
                   <span className="font-medium text-slate-900">{c.full_name}</span>
                   <span className="ml-1.5 font-mono text-xs text-slate-500">{customerNo(c.customer_no)}</span>
+                  {/* BL1: a new appraisal for this customer is refused, so say it before they are picked */}
+                  {c.blacklisted && <span className="ml-2 rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-800">Blacklisted</span>}
                 </span>
                 <span className="text-xs text-slate-600">{c.id_hint}</span>
               </li>
