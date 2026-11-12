@@ -42,7 +42,8 @@ function parseNew(formData: FormData) {
 }
 
 // #38: one customer in the "Customer" picker on New appraisal and "Change customer"
-export type CustomerOption = { id: string; customer_no: number; full_name: string; id_hint: string }; // id_hint = "UMID •••• 0418"
+export type CustomerOption = { id: string; customer_no: number; full_name: string; id_hint: string; blacklisted: boolean }; // id_hint = "UMID •••• 0418"
+// blacklisted (BL1, migration 0063): shown as a red tag in the picker, because a new appraisal for them is refused
 
 // #38: finds customers for the picker by name, phone or C-number. It gives back only what is needed to pick the
 // right person: the name, the C-number and the last 4 of the ID (to tell two people with the same name apart).
@@ -57,7 +58,7 @@ export async function findCustomersForAppraisal(query: string): Promise<Customer
   const ref = parseRefNo(q); // a typed customer number finds exactly that customer
   let find = createAdminClient() // id_number is not readable with a staff login; the server reads it and masks it below
     .from("customers")
-    .select("id, customer_no, full_name, id_type, id_number")
+    .select("id, customer_no, full_name, id_type, id_number, is_blacklisted")
     .is("archived_at", null);
   const digits = safe.replace(/[\s-]/g, "");
   find =
@@ -69,7 +70,13 @@ export async function findCustomersForAppraisal(query: string): Promise<Customer
     console.error("findCustomersForAppraisal failed:", error.message); // details for the developers
     return [];
   }
-  return (data ?? []).map((c) => ({ id: c.id, customer_no: c.customer_no, full_name: c.full_name, id_hint: `${c.id_type} ${maskId(c.id_number)}` }));
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    customer_no: c.customer_no,
+    full_name: c.full_name,
+    id_hint: `${c.id_type} ${maskId(c.id_number)}`,
+    blacklisted: Boolean(c.is_blacklisted),
+  }));
 }
 
 async function valuationFor(karat: number, weight: number) {
@@ -99,8 +106,13 @@ export async function createAppraisal(_prev: ActionState, formData: FormData): P
   if ("error" in v) return { error: v.error };
 
   // #38: the customer must exist and not be archived (the database checks this too since migration 0040)
-  const { data: owner } = await v.supabase.from("customers").select("id").eq("id", d.customer_id).is("archived_at", null).maybeSingle();
+  const { data: owner } = await v.supabase.from("customers").select("id, is_blacklisted, blacklist_reason").eq("id", d.customer_id).is("archived_at", null).maybeSingle();
   if (!owner) return { error: "Choose the customer this item belongs to.", fieldErrors: { customer_id: "Customer not found. Choose the customer again." } };
+  // BL1 (migration 0063, SAD UC5): a blacklisted customer can't start a new appraisal (the database checks it too)
+  if (owner.is_blacklisted) {
+    const msg = `This customer is blacklisted, so a new appraisal can't be saved.${owner.blacklist_reason ? ` Reason: ${owner.blacklist_reason}` : ""}`;
+    return { error: msg, fieldErrors: { customer_id: "This customer is blacklisted." } };
+  }
 
   const { data, error } = await v.supabase
     .from("appraisal_items")
@@ -124,6 +136,7 @@ export async function createAppraisal(_prev: ActionState, formData: FormData): P
     .select("id, appraisal_no") // AN1: also the new A-number, so New Loan can show "· A-1370" right away
     .single();
   if (error) {
+    if (error.code === "P0001") return { error: error.message }; // BL1: the database said why in plain words (e.g. blacklisted since the page loaded)
     console.error("createAppraisal failed:", error.message); // A5: details stay in the server log
     return { error: `Couldn't save the appraisal, so nothing was saved. ${TRY_AGAIN}` }; // A5: plain message
   }

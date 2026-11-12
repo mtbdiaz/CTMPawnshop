@@ -1752,6 +1752,10 @@ export type Database = {
         }
         Returns: Json
       }
+      review_suspicious_flag: {
+        Args: { p_decision: string; p_expected_status?: string; p_flag: string; p_notes?: string }
+        Returns: Json
+      }
       record_cash_entry: {
         Args: { p_amount: number; p_description: string; p_request_id?: string; p_type: string }
         Returns: string
@@ -1839,6 +1843,10 @@ export type Database = {
       set_auction_reserve: {
         Args: { p_line: string; p_min_price: number | null; p_no_reserve: boolean }
         Returns: undefined
+      }
+      suspicious_flag_page: {
+        Args: { p_page?: number; p_q?: string; p_size?: number; p_status?: string; p_view?: string }
+        Returns: Json
       }
       start_inventory_audit: {
         Args: {
