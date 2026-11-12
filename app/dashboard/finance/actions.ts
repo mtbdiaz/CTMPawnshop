@@ -10,31 +10,35 @@ import { cashEntrySchema } from "@/lib/validation/cashflow";
 
 export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean };
 
-// PB-29: Operator records non-loan operating expenses/revenue.
+// PB-29 + CL1 (migration 0055): record a manual Expense or Revenue (money not tied to a loan).
+// Before: the row was inserted straight into the ledger table, with no protection against being saved twice.
+// Now: one database function (record_cash_entry) checks the role, the type, the amount and the description again,
+// and a one-time request id makes the same Save sent twice (a retry, a second click) one entry.
 export async function recordCashEntry(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const user = await requireRole(["operator", "cashier", "admin"]);
+  await requireRole(["operator", "cashier", "admin"]);
   if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
   const parsed = cashEntrySchema.safeParse({
     entry_type: formData.get("entry_type"),
-    amount: formData.get("amount"),
+    amount: String(formData.get("amount") ?? ""),
     description: formData.get("description"),
   });
   if (!parsed.success) return validationFailure(parsed.error);
+  const requestId = String(formData.get("request_id") ?? "");
 
   const supabase = await createClient();
-  const { error } = await supabase.from("cash_flow_entries").insert({
-    entry_type: parsed.data.entry_type,
-    direction: parsed.data.entry_type === "revenue" ? "in" : "out",
-    amount: parsed.data.amount,
-    description: parsed.data.description,
-    created_by: user.id,
+  const { error } = await supabase.rpc("record_cash_entry", {
+    p_type: parsed.data.entry_type,
+    p_amount: parsed.data.amount,
+    p_description: parsed.data.description,
+    p_request_id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId) ? requestId : undefined,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: error.message }; // the database's messages are plain ("Amount must be greater than 0")
 
   revalidatePath("/dashboard/finance");
+  revalidatePath("/dashboard"); // today's cash on the Dashboard
   return { success: true };
 }
 
