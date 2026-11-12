@@ -1,12 +1,15 @@
 "use client"; // runs in the browser: it opens a popup
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { cx } from "./ui";
+import { buttonClasses, cx } from "./ui";
 import { Icon } from "./icons";
 
 // RH2 (Nov 11): a small button that opens its form in a popup on the same page. Used inside table rows instead of a
 // fold-out (<details>), which made the row taller and pushed the other columns around (Matt: "ma guba ang columns").
-export function PopupButton({ label, title, children, className }: { label: string; title: string; children: ReactNode; className?: string }) {
+// primary (CL1): draw the button as the page's main action (navy, like "New loan") instead of the small row button.
+// ariaLabel (CL2): what a screen reader says for the button when the short label alone is not enough, e.g. ten
+// "Details" buttons in a list: "Details of Payment received, Nov 11, PT-2026...".
+export function PopupButton({ label, title, children, className, primary, ariaLabel }: { label: string; title: string; children: ReactNode; className?: string; primary?: boolean; ariaLabel?: string }) {
   const ref = useRef<HTMLDialogElement>(null); // the <dialog>
   const [open, setOpen] = useState(false); // true while the popup shows
   useEffect(() => {
@@ -18,7 +21,13 @@ export function PopupButton({ label, title, children, className }: { label: stri
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={cx("whitespace-nowrap rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500", className)}
+        aria-label={ariaLabel}
+        className={cx(
+          primary
+            ? buttonClasses("primary") + " whitespace-nowrap"
+            : "whitespace-nowrap rounded-md border border-slate-300 bg-white px-2.5 py-1 text-sm text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500",
+          className,
+        )}
       >
         {label}
       </button>

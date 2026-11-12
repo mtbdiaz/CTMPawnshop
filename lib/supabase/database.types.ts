@@ -342,6 +342,7 @@ export type Database = {
           is_demo: boolean
           is_memo: boolean
           related_loan_id: string | null
+          request_id: string | null
         }
         Insert: {
           amount: number
@@ -357,6 +358,7 @@ export type Database = {
           is_demo?: boolean
           is_memo?: boolean
           related_loan_id?: string | null
+          request_id?: string | null
         }
         Update: {
           amount?: number
@@ -372,6 +374,7 @@ export type Database = {
           is_demo?: boolean
           is_memo?: boolean
           related_loan_id?: string | null
+          request_id?: string | null
         }
         Relationships: [
           {
@@ -1483,6 +1486,20 @@ export type Database = {
         }
         Returns: Json
       }
+      cash_ledger_page: {
+        Args: {
+          p_check?: boolean
+          p_flow?: string
+          p_from?: string
+          p_page?: number
+          p_q?: string
+          p_size?: number
+          p_source?: string
+          p_to?: string
+          p_type?: string
+        }
+        Returns: Json
+      }
       capitalize_loan: {
         Args: {
           p_expected_maturity?: string
@@ -1734,6 +1751,10 @@ export type Database = {
           p_sale_price: number
         }
         Returns: Json
+      }
+      record_cash_entry: {
+        Args: { p_amount: number; p_description: string; p_request_id?: string; p_type: string }
+        Returns: string
       }
       record_payment: {
         Args: {
