@@ -1473,6 +1473,20 @@ export type Database = {
       auction_prepare_list: { Args: never; Returns: Json }
       audit_followup_list: { Args: { p_limit?: number }; Returns: Json }
       audit_followups_for: { Args: { p_audit: string }; Returns: Json }
+      audit_log_page: {
+        Args: {
+          p_action?: string
+          p_by?: string
+          p_find?: string
+          p_find_kind?: string
+          p_from?: string
+          p_page?: number
+          p_size?: number
+          p_table?: string
+          p_to?: string
+        }
+        Returns: Json
+      }
       audit_open_overlaps: { Args: never; Returns: Json }
       audit_scope_options: { Args: never; Returns: Json }
       audit_session_page: {
@@ -1779,6 +1793,16 @@ export type Database = {
         Returns: undefined
       }
       reinstate_loan: { Args: { p_loan_id: string }; Returns: undefined }
+      report_cash_breakdown: { Args: { p_from: string; p_to: string }; Returns: Json }
+      report_inventory_aging: {
+        Args: { p_band?: string; p_custody?: string; p_page?: number; p_size?: number }
+        Returns: Json
+      }
+      report_loan_analytics: { Args: never; Returns: Json }
+      report_loans: {
+        Args: { p_filter?: string; p_page?: number; p_q?: string; p_report: string; p_size?: number }
+        Returns: Json
+      }
       reminder_queue: {
         Args: { p_lead_days?: number }
         Returns: {

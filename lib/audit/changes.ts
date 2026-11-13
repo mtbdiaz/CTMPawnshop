@@ -3,6 +3,7 @@
 // Since Matt's fix #12 (migration 0021) every update saves the row before (old_data) and after (changed_data).
 // Pure functions only (no database), so they're easy to test.
 import { formatDate, formatDateTime, formatPeso, humanize } from "@/lib/format";
+import { maskId } from "@/lib/customers/id-privacy"; // AT5: the same ID rule as the rest of the app
 
 export type FieldChange = {
   key: string; // the column name, e.g. "principal_balance"
@@ -85,4 +86,57 @@ export function allFields(oldRow: unknown, newRow: unknown, names?: Map<string, 
       after: showValue(k, newRow[k], names),
       changed: !!old && JSON.stringify(old[k] ?? null) !== JSON.stringify(newRow[k] ?? null),
     }));
+}
+
+// AT3 (Nov 12): fields a staff login can't read from the customer record, masked before an audit entry is shown.
+// The database stops every staff login (Admins too) from reading customers.id_number, but saved customer rows in
+// the audit log have it in full (470 entries), and the Audit trail's View data showed it. The stored audit log
+// itself is not changed.
+// AT5 (Nov 13): the database already masks these (audit_log_page, migrations 0066 + 0067); this is the second layer.
+// Before: only the top level of an entry was masked, with its own "last 4 characters" rule. 2 Admin corrections
+// keep the row inside "before" / "after", so their full numbers got through, and an ID of 4 characters or less
+// was shown in full. Now: every level (objects and lists), with the app's own rule (lib/customers/id-privacy.ts:
+// letters and digits only, "•••• 0418", 4 or less -> "••••").
+const MASKED_FIELDS = new Set(["id_number"]);
+export function maskSensitive<T>(row: T): T {
+  if (Array.isArray(row)) return row.map((x) => maskSensitive(x)) as T; // a list: mask each item
+  if (!row || typeof row !== "object") return row; // text, numbers, null: as they are
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
+    if (MASKED_FIELDS.has(k) && (typeof v === "string" || typeof v === "number") && v !== "")
+      out[k] = String(v).startsWith("••••") ? v : maskId(String(v)); // already masked by the database: keep its last 4
+    else out[k] = maskSensitive(v); // look inside (e.g. "before" / "after")
+  }
+  return out as T;
+}
+
+// AT3: which customer, loan, item or entry an audit entry is about, in words, from the saved row itself
+// ("Juan Dela Cruz · C-0012", "PT-2026…", "A-0036"). Empty when the row has nothing readable.
+const pad4 = (n: unknown) => String(n).padStart(4, "0");
+export function affectedLabel(table: string, row: unknown): string {
+  if (!row || typeof row !== "object") return "";
+  const r = row as Record<string, unknown>;
+  const has = (k: string) => r[k] !== null && r[k] !== undefined && r[k] !== "";
+  switch (table) {
+    case "customers":
+      return [r.full_name, has("customer_no") ? `C-${pad4(r.customer_no)}` : ""].filter(Boolean).join(" · ");
+    case "loans":
+      return has("ticket_number") ? String(r.ticket_number) : "";
+    case "appraisal_items":
+      return has("appraisal_no") ? `A-${pad4(r.appraisal_no)}` : "";
+    case "loan_payments":
+      return has("receipt_number") ? `Receipt ${r.receipt_number}` : "";
+    case "cash_flow_entries":
+      return has("description") ? String(r.description) : "";
+    case "inventory_items":
+      return has("vault_location") ? `Vault: ${r.vault_location}` : "";
+    case "profiles":
+      return has("full_name") ? String(r.full_name) : "";
+    case "suspicious_activity_flags":
+      return has("reason") ? String(r.reason) : "";
+    case "auction_batches":
+      return has("batch_no") ? `AB-${pad4(r.batch_no)}` : "";
+    default:
+      return "";
+  }
 }

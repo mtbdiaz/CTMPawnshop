@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allFields, changedFields, showValue } from "./changes";
+import { affectedLabel, allFields, changedFields, maskSensitive, showValue } from "./changes";
 
 // C10: the audit trail's "what changed" list
 describe("changedFields (C10)", () => {
@@ -68,5 +68,27 @@ describe("allFields (AT2)", () => {
   });
   it("nothing saved: no rows", () => {
     expect(allFields(null, null)).toEqual([]);
+  });
+});
+
+// AT3: masking and the "affected record" words
+describe("audit trail: masking and affected record (AT3)", () => {
+  it("shows only the last 4 of an ID number and leaves everything else as it was", () => {
+    expect(maskSensitive({ id_number: "1234-5678-9012", full_name: "Juan" })).toEqual({ id_number: "•••• 9012", full_name: "Juan" });
+    expect(maskSensitive({ id_number: null })).toEqual({ id_number: null });
+    expect(maskSensitive(null)).toBeNull();
+  });
+  it("AT5: masks an ID number at any level, with the app's rule, and changes nothing else", () => {
+    const entry = { admin_edit: true, reason: "Typo", before: { id_number: "0000-000418", full_name: "Juan" }, after: { id_number: "12" }, list: [{ id_number: 1234567 }, "plain"], e: { id_number: "" } };
+    expect(maskSensitive(entry)).toEqual({ admin_edit: true, reason: "Typo", before: { id_number: "•••• 0418", full_name: "Juan" }, after: { id_number: "••••" }, list: [{ id_number: "•••• 4567" }, "plain"], e: { id_number: "" } });
+    expect(entry.before.id_number).toBe("0000-000418"); // the original object is not changed
+    expect(maskSensitive({ id_number: "•••• 0418" })).toEqual({ id_number: "•••• 0418" }); // already masked by the database: stays the same
+  });
+  it("names the customer, loan, item or payment", () => {
+    expect(affectedLabel("customers", { full_name: "Juan Dela Cruz", customer_no: 12 })).toBe("Juan Dela Cruz · C-0012");
+    expect(affectedLabel("loans", { ticket_number: "PT-1" })).toBe("PT-1");
+    expect(affectedLabel("appraisal_items", { appraisal_no: 36 })).toBe("A-0036");
+    expect(affectedLabel("loan_payments", { receipt_number: "RC-9" })).toBe("Receipt RC-9");
+    expect(affectedLabel("reminder_log", { id: "x" })).toBe("");
   });
 });
