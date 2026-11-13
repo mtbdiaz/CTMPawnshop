@@ -1480,6 +1480,7 @@ export type Database = {
           p_find?: string
           p_find_kind?: string
           p_from?: string
+          p_kind?: string
           p_page?: number
           p_size?: number
           p_table?: string
