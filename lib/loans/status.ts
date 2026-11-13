@@ -1,14 +1,15 @@
 // F3: ONE place that decides "paid" vs "overdue", so the Dashboard, Loans, the customer profile and the
 // customer score all use the same rule. Before this, a loan that was fully paid but whose item wasn't released
 // yet still counted as "Overdue" in some places (and cost the customer 10 score points).
-import { accruedInterest, type AccrualLoan } from "./accrual"; // the same interest math the loan page uses
+import { accruedDamages, accruedInterest, type AccrualLoan } from "./accrual"; // the same interest math the loan page uses
 
 // loans that are still running (not redeemed, defaulted or forfeited)
 export const OPEN_STATUSES = new Set(["active", "extended", "reinstated"]);
 
 // what the customer owes today: principal left + interest, including interest after the due date (same as the Dashboard)
+// LD (0073): + liquidated damages after the grace days (the database's owed_now() adds them the same way)
 export function owedNow(loan: AccrualLoan, today: string): number {
-  const total = Number(loan.principal_balance) + accruedInterest(loan, today).interestOwed; // principal + interest
+  const total = Number(loan.principal_balance) + accruedInterest(loan, today).interestOwed + accruedDamages(loan, today).damagesOwed;
   return Math.round(total * 100) / 100; // rounded to centavos, so tiny decimal leftovers don't count
 }
 

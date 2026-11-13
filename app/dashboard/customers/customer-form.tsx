@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"; // F5: remembers the chosen ID type
 import { useRouter } from "next/navigation"; // lets us go to another page after saving
 import { ActionForm, CheckboxField, Field, SelectField, SubmitButton, TextareaField } from "@/components/form"; // shared form parts (C6: added CheckboxField)
 import { Alert, buttonClasses } from "@/components/ui"; // C6: the red/yellow message box; F1: button look for Cancel
+import { formatDate } from "@/lib/format"; // MF4: "Mar 5, 1990" in the Register confirmation
 import { adminEditCustomer, checkCustomerDuplicate, type ActionState, type DuplicateHit } from "./actions"; // server actions + the result type; LV2: the live duplicate check
 import { customerNo } from "@/lib/ref-numbers"; // LV2: "C-0012"
 import { z } from "zod"; // LV1: the email rule
@@ -228,8 +229,9 @@ export function CustomerForm({
         inputMode="tel"
         liveError={live("contact_number")} // LV1: checked when leaving the box, then while typing
         {...watch("contact_number")}
-        // F2: +63 and 63 numbers are accepted too (saved as 09...). LV2: plus what the live check found
-        hint={phoneNow?.state === "checking" ? "Checking if another customer uses this number..." : phoneNow?.state === "free" ? "Not used by another customer." : "+63 numbers work too."}
+        // F2: +63 and 63 numbers are accepted too (saved as 09...). LV2: "Checking..." while the live check runs.
+        // MF1 (Matt, Nov 14): no "Not used by another customer." line when the number is free (only a problem is worth a line)
+        hint={phoneNow?.state === "checking" ? "Checking if another customer uses this number..." : "+63 numbers work too."}
       />
       {/* LV2: the number is already used. A warning, not a block: family members can share a phone */}
       {phoneNow?.state === "used" && (
@@ -257,6 +259,9 @@ export function CustomerForm({
         min={!customer?.date_of_birth || customer.date_of_birth >= "1900-01-01" ? "1900-01-01" : undefined}
         max={!customer?.date_of_birth || customer.date_of_birth <= adultCutoff() ? adultCutoff() : undefined}
         defaultValue={customer?.date_of_birth ?? ""}
+        // MF2 (Matt, Nov 14): the box starts empty on Register; autoComplete off so the browser's saved birthday
+        // (autofill) isn't put in for a new customer either
+        autoComplete={customer ? undefined : "off"}
         liveError={live("date_of_birth")} // LV1
         {...watch("date_of_birth")}
         hint={`Customers must be ${MIN_AGE} or older.`}
@@ -285,13 +290,13 @@ export function CustomerForm({
             // LV2: an ID that is already registered is an error here, because the server refuses it
             liveError={idNow?.state === "used" ? `This ID is already registered to ${who(idNow.hit)}.` : live("id_number")}
             {...watch("id_number")}
-            // F10: the expected format for the chosen type (the server blocks a wrong one) + why it matters. F13: says who can correct it later
+            // F10: the expected format for the chosen type (the server blocks a wrong one) + why it matters.
+            // MF3 (Matt, Nov 14): no "Not registered yet. After registration, only an Admin can correct it." (the Register
+            // confirmation already says the record is locked after saving)
             hint={
               idNow?.state === "checking"
                 ? "Checking if this ID is already registered..."
-                : idNow?.state === "free"
-                  ? "Not registered yet. After registration, only an Admin can correct it."
-                  : `${ID_RULES[idType] ? `Format: ${ID_RULES[idType].example}.` : "Pick the ID type first."} Used to verify identity if the pawn ticket is lost. After registration, only an Admin can correct it.`
+                : `${ID_RULES[idType] ? `Format: ${ID_RULES[idType].example}.` : "Pick the ID type first."} Used to verify identity if the pawn ticket is lost.`
             }
           />
           {/* LV2: the person is already registered. On New Loan the Cashier can use that customer straight away */}
@@ -366,8 +371,17 @@ export function CustomerForm({
               ? undefined
               : {
                   title: "Register this customer?",
-                  message: "Check the name and ID against the physical ID card.",
-                  details: savedName ? [["Name", savedName]] : undefined, // NP: the name exactly as it will be saved
+                  message: "Check every detail below against the customer and the physical ID card.",
+                  // MF4 (Matt, Nov 14): everything that was typed, exactly as it will be saved (was the name only)
+                  details: [
+                    ["Name", savedName || "—"],
+                    ["Contact number", vals.contact_number.trim() || "—"],
+                    ["Email", vals.email.trim() || "None"],
+                    ["Address", vals.address.trim() || "—"],
+                    ["Date of birth", vals.date_of_birth ? formatDate(vals.date_of_birth) : "—"],
+                    ["ID type", idType || "—"],
+                    ["ID number", vals.id_number.trim() || "—"],
+                  ],
                   confirmLabel: "Register",
                   tone: "primary",
                   locked: true,

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { businessRulesSchema } from "./settings";
 
 describe("businessRulesSchema (PB-6 AC2, item 3)", () => {
-  const valid = { interest_rate_percent: "5", price_24k: "3550", price_21k: "3106.25", price_18k: "2662.50", ltv_percent: "70", grace_period_days: "7" };
+  const valid = { interest_rate_percent: "5", price_24k: "3550", price_21k: "3106.25", price_18k: "2662.50", ltv_percent: "70", grace_period_days: "7", liquidated_damages_percent: "2" };
 
   it("accepts valid input and coerces to numbers", () => {
     expect(businessRulesSchema.parse(valid)).toEqual({
@@ -12,6 +12,7 @@ describe("businessRulesSchema (PB-6 AC2, item 3)", () => {
       price_18k: 2662.5,
       ltv_percent: 70,
       grace_period_days: 7,
+      liquidated_damages_percent: 2,
     });
   });
 
@@ -25,5 +26,11 @@ describe("businessRulesSchema (PB-6 AC2, item 3)", () => {
     expect(businessRulesSchema.safeParse({ ...valid, ltv_percent: "0" }).success).toBe(false);
     expect(businessRulesSchema.safeParse({ ...valid, ltv_percent: "101" }).success).toBe(false);
     expect(businessRulesSchema.safeParse({ ...valid, grace_period_days: "1.5" }).success).toBe(false);
+  });
+
+  it("LD: liquidated damages from 0% to 100% only", () => {
+    expect(businessRulesSchema.safeParse({ ...valid, liquidated_damages_percent: "0" }).success).toBe(true);
+    expect(businessRulesSchema.safeParse({ ...valid, liquidated_damages_percent: "-1" }).success).toBe(false);
+    expect(businessRulesSchema.safeParse({ ...valid, liquidated_damages_percent: "101" }).success).toBe(false);
   });
 });

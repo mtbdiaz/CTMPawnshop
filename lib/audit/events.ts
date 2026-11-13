@@ -75,7 +75,7 @@ export function eventChanges(e: AuditEvent, names?: Map<string, string>): FieldC
 }
 
 // the changes an Admin cares about most, first (status before amounts before dates before the rest)
-const IMPORTANT = ["status", "is_blacklisted", "aml_status", "principal_balance", "interest_owed", "maturity_date", "vault_location", "archived_at", "batch_no", "role", "is_active", "result", "resolution_outcome"];
+const IMPORTANT = ["status", "is_blacklisted", "aml_status", "principal_balance", "interest_owed", "damages_owed", "maturity_date", "vault_location", "archived_at", "batch_no", "role", "is_active", "result", "resolution_outcome"];
 function ranked(changes: FieldChange[]): FieldChange[] {
   const rank = (k: string) => (IMPORTANT.includes(k) ? IMPORTANT.indexOf(k) : IMPORTANT.length);
   return [...changes].sort((a, b) => rank(a.key) - rank(b.key));

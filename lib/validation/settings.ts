@@ -10,6 +10,11 @@ export const businessRulesSchema = z.object({
   price_18k: price("18K"),
   ltv_percent: z.coerce.number().gt(0, "LTV% must be greater than 0").max(100, "LTV% can't exceed 100"),
   grace_period_days: z.coerce.number().int("Grace period must be a whole number of days").min(0, "Grace period can't be negative"),
+  // LD (0073, Matt): liquidated damages, % of the unpaid principal per 30 days after the grace days (the database allows 0 to 100)
+  liquidated_damages_percent: z.coerce
+    .number({ message: "Enter the liquidated damages %" })
+    .min(0, "Liquidated damages can't be negative")
+    .max(100, "Liquidated damages can't be more than 100%"),
 });
 
 export type BusinessRulesInput = z.infer<typeof businessRulesSchema>;

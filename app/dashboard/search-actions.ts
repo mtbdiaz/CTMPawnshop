@@ -10,7 +10,7 @@ import { allowRequest } from "@/lib/rate-limit"; // #22: rate limiting
 // the SAME customer ranking the New loan search uses (already unit-tested), so results are consistent
 import { rankCustomers } from "@/lib/customers/search";
 // interest that piled up after the due date (same math as the Dashboard and loan page)
-import { accruedInterest } from "@/lib/loans/accrual";
+import { owedNow } from "@/lib/loans/status"; // LD (0073): principal + interest + liquidated damages
 // "how many days until this date" (negative = in the past)
 import { daysUntilDue } from "@/lib/compliance/reminders";
 // turns "ring" into "Ring", and the list of item categories
@@ -114,7 +114,7 @@ export async function quickSearch(query: string): Promise<SearchResults> {
     // loans whose ticket number contains the text
     supabase
       .from("loans")
-      .select("id, ticket_number, status, maturity_date, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, customers(full_name)")
+      .select("id, ticket_number, status, maturity_date, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, grace_period_days, liquidated_damages_percent, damages_owed, damages_accrued_through, customers(full_name)")
       .is("archived_at", null)
       .ilike("ticket_number", `%${ref}%`)
       .order("created_at", { ascending: false })
@@ -152,7 +152,7 @@ export async function quickSearch(query: string): Promise<SearchResults> {
     customerIds.length
       ? supabase
           .from("loans")
-          .select("id, ticket_number, status, maturity_date, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, customer_id, customers(full_name)")
+          .select("id, ticket_number, status, maturity_date, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, grace_period_days, liquidated_damages_percent, damages_owed, damages_accrued_through, customer_id, customers(full_name)")
           .is("archived_at", null)
           .in("customer_id", customerIds)
           .order("created_at", { ascending: false })
@@ -170,6 +170,11 @@ export async function quickSearch(query: string): Promise<SearchResults> {
     interest_owed: number;
     interest_rate_percent: number;
     interest_accrued_through: string | null;
+    // LD (0073): liquidated damages, so owed amounts include them
+    grace_period_days: number;
+    liquidated_damages_percent: number;
+    damages_owed: number;
+    damages_accrued_through: string | null;
     customer_id?: string;
     customers: { full_name: string } | null;
   };
@@ -196,7 +201,7 @@ export async function quickSearch(query: string): Promise<SearchResults> {
 
   const loans: SearchHit[] = loanRows.map((l) => {
     // what the customer owes today (0 once it is closed)
-    const owed = OPEN.has(l.status) || l.status === "defaulted" ? Number(l.principal_balance) + accruedInterest(l, today).interestOwed : 0;
+    const owed = OPEN.has(l.status) || l.status === "defaulted" ? owedNow(l, today) : 0;
     const s = loanStatus(l, owed, today);
     return {
       id: l.id,
@@ -269,4 +274,4 @@ export async function quickSearch(query: string): Promise<SearchResults> {
   }));
 
   return { customers: customerHits, loans, appraisals, payments };
-}
+}

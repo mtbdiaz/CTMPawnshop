@@ -144,13 +144,13 @@ export default async function LoansPage({
   type Filterable<T> = {
     in(column: "status", values: Enums<"loan_status">[]): T;
     lt(column: "maturity_date", value: string): T;
-    eq(column: "principal_balance" | "interest_owed", value: number): T;
+    eq(column: "principal_balance" | "interest_owed" | "damages_owed", value: number): T;
     or(filters: string): T;
   };
   const forTab = <T extends Filterable<T>>(query: T, t: Tab, withSearch: boolean): T => {
     let r = query;
     if (TABS[t].statuses.length) r = r.in("status", [...TABS[t].statuses]);
-    if (t === "ready") r = r.eq("principal_balance", 0).eq("interest_owed", 0); // L2: owes ₱0
+    if (t === "ready") r = r.eq("principal_balance", 0).eq("interest_owed", 0).eq("damages_owed", 0); // L2: owes ₱0 (LD: no liquidated damages either)
     const search = withSearch ? searchOr : null;
     if (t === "overdue") {
       r = r.lt("maturity_date", today); // L1: past the due date...

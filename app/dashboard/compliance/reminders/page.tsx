@@ -139,6 +139,11 @@ export default async function RemindersPage({
     interest_owed: number;
     interest_rate_percent: number;
     interest_accrued_through: string | null;
+    // LD (0073): liquidated damages, so owed amounts include them
+    grace_period_days: number;
+    liquidated_damages_percent: number;
+    damages_owed: number;
+    damages_accrued_through: string | null;
     status: string;
     customers: { id: string; full_name: string; contact_number: string | null } | null;
   };
@@ -149,7 +154,7 @@ export default async function RemindersPage({
     const [{ data: details, error: detailError }, { data: staff }] = await Promise.all([
       supabase
         .from("loans")
-        .select("id, ticket_number, maturity_date, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, status, customers(id, full_name, contact_number)")
+        .select("id, ticket_number, maturity_date, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, grace_period_days, liquidated_damages_percent, damages_owed, damages_accrued_through, status, customers(id, full_name, contact_number)")
         .in("id", pageItems.map((i) => i.id)),
       staffIds.length ? supabase.from("profiles").select("id, full_name").in("id", staffIds) : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
     ]);

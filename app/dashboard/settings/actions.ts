@@ -25,6 +25,7 @@ export async function updateBusinessRules(
     price_18k: formData.get("price_18k"),
     ltv_percent: formData.get("ltv_percent"),
     grace_period_days: formData.get("grace_period_days"),
+    liquidated_damages_percent: formData.get("liquidated_damages_percent"), // LD (0073)
   });
 
   if (!parsed.success) {

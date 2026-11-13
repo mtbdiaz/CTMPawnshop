@@ -13,7 +13,7 @@ export async function loadCustomerScores(
   const [{ data: loans }, { data: weightRows }] = await Promise.all([
     supabase
       .from("loans")
-      .select("customer_id, status, loan_date, maturity_date, extension_count, late_payment_count, defaulted_at, reinstated_at, redeemed_at, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through") // F3: balances too, so a paid loan isn't counted as overdue
+      .select("customer_id, status, loan_date, maturity_date, extension_count, late_payment_count, defaulted_at, reinstated_at, redeemed_at, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, grace_period_days, liquidated_damages_percent, damages_owed, damages_accrued_through") // F3: balances too, so a paid loan isn't counted as overdue
       .in("customer_id", customerIds),
     supabase.from("score_weights").select("key, value"),
   ]);

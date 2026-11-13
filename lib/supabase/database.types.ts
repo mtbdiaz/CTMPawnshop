@@ -701,6 +701,7 @@ export type Database = {
           archived_by: string | null
           created_at: string
           created_by: string | null
+          damages_portion: number
           id: string
           interest_portion: number
           is_demo: boolean
@@ -716,6 +717,7 @@ export type Database = {
           archived_by?: string | null
           created_at?: string
           created_by?: string | null
+          damages_portion?: number
           id?: string
           interest_portion?: number
           is_demo?: boolean
@@ -731,6 +733,7 @@ export type Database = {
           archived_by?: string | null
           created_at?: string
           created_by?: string | null
+          damages_portion?: number
           id?: string
           interest_portion?: number
           is_demo?: boolean
@@ -772,6 +775,8 @@ export type Database = {
           created_at: string
           created_by: string | null
           customer_id: string
+          damages_accrued_through: string | null
+          damages_owed: number
           defaulted_at: string | null
           extension_count: number
           forfeited_at: string | null
@@ -783,6 +788,7 @@ export type Database = {
           inventory_item_id: string | null
           is_demo: boolean
           late_payment_count: number
+          liquidated_damages_percent: number
           loan_date: string
           lost_ticket_used: boolean
           maturity_date: string
@@ -802,6 +808,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id: string
+          damages_accrued_through?: string | null
+          damages_owed?: number
           defaulted_at?: string | null
           extension_count?: number
           forfeited_at?: string | null
@@ -813,6 +821,7 @@ export type Database = {
           inventory_item_id?: string | null
           is_demo?: boolean
           late_payment_count?: number
+          liquidated_damages_percent?: number
           loan_date?: string
           lost_ticket_used?: boolean
           maturity_date: string
@@ -832,6 +841,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id?: string
+          damages_accrued_through?: string | null
+          damages_owed?: number
           defaulted_at?: string | null
           extension_count?: number
           forfeited_at?: string | null
@@ -843,6 +854,7 @@ export type Database = {
           inventory_item_id?: string | null
           is_demo?: boolean
           late_payment_count?: number
+          liquidated_damages_percent?: number
           loan_date?: string
           lost_ticket_used?: boolean
           maturity_date?: string
@@ -1329,6 +1341,7 @@ export type Database = {
           grace_period_days: number
           id: number
           interest_rate_percent: number
+          liquidated_damages_percent: number
           ltv_percent: number
           price_18k: number
           price_21k: number
@@ -1341,6 +1354,7 @@ export type Database = {
           grace_period_days: number
           id?: number
           interest_rate_percent: number
+          liquidated_damages_percent?: number
           ltv_percent: number
           price_18k?: number
           price_21k?: number
@@ -1353,6 +1367,7 @@ export type Database = {
           grace_period_days?: number
           id?: number
           interest_rate_percent?: number
+          liquidated_damages_percent?: number
           ltv_percent?: number
           price_18k?: number
           price_21k?: number

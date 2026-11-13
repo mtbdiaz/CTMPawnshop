@@ -52,6 +52,18 @@ export function SettingsForm({ settings }: { settings: Tables<"system_settings">
         defaultValue={settings.grace_period_days}
         hint="Days after maturity before default."
       />
+      {/* LD (0073, Matt): the pawn ticket's liquidated damages clause, so the % can change later without new code */}
+      <Field
+        name="liquidated_damages_percent"
+        label="Liquidated damages (% per 30 days)"
+        type="number"
+        step="0.01"
+        min="0"
+        max="100"
+        required
+        defaultValue={settings.liquidated_damages_percent}
+        hint="Of the unpaid principal, after the grace days. Part of 30 days counts as full. Fixed on each loan when it is issued."
+      />
       <div className="sm:col-span-3">
         <SubmitButton
           pendingLabel="Saving"

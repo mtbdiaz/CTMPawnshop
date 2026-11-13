@@ -4,7 +4,7 @@ import { isFullyPaid, isOverdueUnpaid, owedNow } from "./status";
 
 const TODAY = "2026-11-04";
 // a loan with ₱10,000 principal at 3% per 30 days, due Oct 15 (so it is past due today)
-const base = { status: "active", maturity_date: "2026-10-15", principal_balance: 10000, interest_owed: 300, interest_rate_percent: 3, interest_accrued_through: "2026-10-15" };
+const base = { status: "active", maturity_date: "2026-10-15", principal_balance: 10000, interest_owed: 300, interest_rate_percent: 3, interest_accrued_through: "2026-10-15", grace_period_days: 7, liquidated_damages_percent: 0, damages_owed: 0, damages_accrued_through: null as string | null }; // LD: 0% here, so these older tests keep testing interest only
 
 describe("F3: paid vs overdue", () => {
   it("partial payment, past due: still owes money, so it is overdue", () => {

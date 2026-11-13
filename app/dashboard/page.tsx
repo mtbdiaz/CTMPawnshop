@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { computeCashPosition } from "@/lib/finance/ledger";
 import { daysUntilDue } from "@/lib/compliance/reminders";
 import { formatDate, formatPeso, manilaDayStart, manilaToday } from "@/lib/format";
-import { accruedInterest } from "@/lib/loans/accrual";
+import { owedNow as sharedOwedNow } from "@/lib/loans/status"; // LD (0073): principal + interest + liquidated damages
 // categoryLabel turns "ring" into "Ring" (or the custom name for "others")
 import { categoryLabel } from "@/lib/appraisal/valuation";
 // isDueForReminder = due within the next 3 days (same rule the Reminders page uses)
@@ -58,6 +58,11 @@ type LoanRow = {
   interest_owed: number;
   interest_rate_percent: number;
   interest_accrued_through: string | null;
+  // LD (0073): liquidated damages, so owed amounts include them
+  grace_period_days: number;
+  liquidated_damages_percent: number;
+  damages_owed: number;
+  damages_accrued_through: string | null;
   status: string;
   customers: { full_name: string } | null;
 };
@@ -80,7 +85,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     await Promise.all([
       supabase
         .from("loans")
-        .select("id, ticket_number, maturity_date, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, status, customers(full_name)")
+        .select("id, ticket_number, maturity_date, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, grace_period_days, liquidated_damages_percent, damages_owed, damages_accrued_through, status, customers(full_name)")
         .in("status", ["active", "extended", "reinstated"])
         .is("archived_at", null)
         .order("maturity_date")
@@ -106,7 +111,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // What the customer owes today: principal left + interest
   // (including interest that piled up after the due date).
   // Moved to the top so the lines below can use it.
-  const owedNow = (l: LoanRow) => Number(l.principal_balance) + accruedInterest(l, today).interestOwed;
+  const owedNow = (l: LoanRow) => sharedOwedNow(l, today);
  
   // D1: a loan with nothing left to pay is "paid, ready to release".
   // We check "less than 1 centavo" instead of "equals 0" because
@@ -144,7 +149,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     role === "admin"
       ? await supabase
           .from("loans") // the loans table
-          .select("id, ticket_number, maturity_date, defaulted_at, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, status, customers(full_name)") // columns we need, plus the customer's name
+          .select("id, ticket_number, maturity_date, defaulted_at, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, grace_period_days, liquidated_damages_percent, damages_owed, damages_accrued_through, status, customers(full_name)") // columns we need, plus the customer's name
           .eq("status", "defaulted") // only defaulted loans
           .is("archived_at", null) // skip archived ones
           .order("defaulted_at") // oldest default first (waiting longest = review first)

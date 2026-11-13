@@ -30,6 +30,8 @@ export default async function ReceiptPrint({ params }: { params: Promise<{ payme
       <SlipRow label="Ticket">{loan?.ticket_number ?? ""}</SlipRow>
       <SlipRow label="From">{loan?.customers?.full_name ?? ""}</SlipRow>
       <SlipRule />
+      {/* LD (0073): the liquidated damages part, only when the payment paid some */}
+      {Number(payment.damages_portion) > 0 && <SlipRow label="To liq. damages">{formatPeso(payment.damages_portion)}</SlipRow>}
       <SlipRow label="To interest">{formatPeso(payment.interest_portion)}</SlipRow>
       <SlipRow label="To principal">{formatPeso(payment.principal_portion)}</SlipRow>
       <SlipRow label="AMOUNT PAID" strong>

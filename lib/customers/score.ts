@@ -42,6 +42,11 @@ export type ScoreLoan = {
   interest_owed?: number;
   interest_rate_percent?: number;
   interest_accrued_through?: string | null;
+  // LD (0073): liquidated damages (optional like the balances above; missing = none)
+  grace_period_days?: number;
+  liquidated_damages_percent?: number;
+  damages_owed?: number;
+  damages_accrued_through?: string | null;
   loan_date: string;
   maturity_date: string;
   extension_count: number;
@@ -86,6 +91,10 @@ function paidInFull(loan: ScoreLoan, today: string): boolean {
       interest_owed: Number(loan.interest_owed),
       interest_rate_percent: Number(loan.interest_rate_percent),
       interest_accrued_through: loan.interest_accrued_through ?? null,
+      grace_period_days: Number(loan.grace_period_days ?? 0),
+      liquidated_damages_percent: Number(loan.liquidated_damages_percent ?? 0),
+      damages_owed: Number(loan.damages_owed ?? 0),
+      damages_accrued_through: loan.damages_accrued_through ?? null,
     },
     today,
   );

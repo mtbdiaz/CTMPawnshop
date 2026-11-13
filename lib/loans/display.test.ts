@@ -3,7 +3,7 @@ import { owedDisplay, pastGracePeriod, renewBlocked, renewGraceEnd, situationBad
 import { accruedInterest } from "./accrual";
 
 const today = "2026-11-05";
-const base = { principal_balance: 8300, interest_owed: 415, interest_rate_percent: 5, maturity_date: "2026-11-20", interest_accrued_through: "2026-11-20", status: "active" };
+const base = { principal_balance: 8300, interest_owed: 415, interest_rate_percent: 5, maturity_date: "2026-11-20", interest_accrued_through: "2026-11-20", status: "active", grace_period_days: 7, liquidated_damages_percent: 0, damages_owed: 0, damages_accrued_through: null as string | null }; // LD: 0% here (interest-only tests)
 
 describe("stateBadge", () => {
   it("names each stored state, renewed for extended", () => {

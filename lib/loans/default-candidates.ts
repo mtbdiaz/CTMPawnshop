@@ -12,6 +12,10 @@ export type DefaultCandidate = {
   interest_owed: number;
   interest_rate_percent: number;
   interest_accrued_through: string | null;
+  // LD (0073): liquidated damages, so owed amounts include them
+  liquidated_damages_percent: number;
+  damages_owed: number;
+  damages_accrued_through: string | null;
   status: string;
   loan_date: string;
   customers: { full_name: string } | null;
@@ -22,7 +26,7 @@ export async function loadDefaultCandidates(today: string) {
   // only running loans already past their due date can be past the grace period too, so ask for those
   const { data, error } = await supabase
     .from("loans")
-    .select("id, ticket_number, maturity_date, grace_period_days, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, status, loan_date, archived_at, customers(full_name)")
+    .select("id, ticket_number, maturity_date, grace_period_days, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, liquidated_damages_percent, damages_owed, damages_accrued_through, status, loan_date, archived_at, customers(full_name)")
     .in("status", ["active", "extended", "reinstated"]) // reinstated loans can default again (owner decision on Matt #3)
     .is("archived_at", null)
     .lt("maturity_date", today)

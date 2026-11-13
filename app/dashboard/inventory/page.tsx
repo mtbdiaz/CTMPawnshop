@@ -61,6 +61,11 @@ type Row = {
     interest_rate_percent: number;
     maturity_date: string;
     interest_accrued_through: string | null;
+    // LD (0073): liquidated damages, so owed amounts include them
+    grace_period_days: number;
+    liquidated_damages_percent: number;
+    damages_owed: number;
+    damages_accrued_through: string | null;
     customers: { id: string; full_name: string } | null;
   }[];
 };
