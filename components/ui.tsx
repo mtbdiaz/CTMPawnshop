@@ -397,14 +397,16 @@ export function TD({
   align = "left",
   className,
   mono,
+  colSpan,
 }: {
   children?: ReactNode;
   align?: "left" | "right";
   className?: string;
   mono?: boolean;
+  colSpan?: number; // RP3: a cell across several columns (e.g. "Total, all 304 matching loans")
 }) {
   return (
-    <td className={cx("px-3 py-2", align === "right" && "text-right tabular-nums", mono && "whitespace-nowrap font-mono text-xs", className)}>
+    <td colSpan={colSpan} className={cx("px-3 py-2", align === "right" && "text-right tabular-nums", mono && "whitespace-nowrap font-mono text-xs", className)}>
       {children}
     </td>
   );

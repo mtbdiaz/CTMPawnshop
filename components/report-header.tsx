@@ -20,6 +20,8 @@ export function ReportHeader({ title, description, subtitle }: { title: string; 
             <>
               {description}
               {subtitle && <span className="mt-1 block font-medium text-slate-700">{subtitle}</span>}
+              {/* RP1: when the numbers were read, on screen too (paper already shows "Generated ...") */}
+              <span className="mt-1 block text-xs text-slate-500">Data read {formatDateTime(new Date())}</span>
             </>
           }
           breadcrumbs={[

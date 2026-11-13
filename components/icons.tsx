@@ -1,6 +1,7 @@
 import type { NavIcon } from "@/lib/nav";
 
-type IconName =
+// RP2: exported so a page can type its own list of icons
+export type IconName =
   | NavIcon
   | "chevron-right"
   | "chevron-left"
