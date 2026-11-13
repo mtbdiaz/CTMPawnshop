@@ -1801,7 +1801,16 @@ export type Database = {
       }
       report_loan_analytics: { Args: never; Returns: Json }
       report_loans: {
-        Args: { p_filter?: string; p_page?: number; p_q?: string; p_report: string; p_size?: number }
+        Args: {
+          p_due_from?: string
+          p_due_to?: string
+          p_filter?: string
+          p_page?: number
+          p_q?: string
+          p_report: string
+          p_size?: number
+          p_sort?: string
+        }
         Returns: Json
       }
       reminder_queue: {
