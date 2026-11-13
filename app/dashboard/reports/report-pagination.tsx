@@ -15,6 +15,7 @@ export function ReportPagination({
   params,
   basePath = "/dashboard/reports",
   label = "Audit trail pages",
+  pageKey = "page",
 }: {
   page: number;
   pageSize: number;
@@ -22,6 +23,7 @@ export function ReportPagination({
   params: Record<string, string | undefined>;
   basePath?: string; // the page the links and the Go form open
   label?: string; // the name screen readers announce for this row
+  pageKey?: string; // CR5 (Nov 14): the address field for the page number, so one report can have two lists (default "page")
 }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   if (total === 0) return null;
@@ -31,7 +33,7 @@ export function ReportPagination({
   const kept = Object.entries(params).filter(([, v]) => v) as [string, string][]; // the filters to keep
   const href = (p: number) => {
     const q = new URLSearchParams(kept);
-    if (p > 1) q.set("page", String(p));
+    if (p > 1) q.set(pageKey, String(p));
     return q.toString() ? `${basePath}?${q.toString()}` : basePath;
   };
   const step = "inline-flex h-9 min-w-9 items-center justify-center rounded-md border px-2.5 text-sm font-medium";
@@ -81,12 +83,12 @@ export function ReportPagination({
             {kept.map(([k, v]) => (
               <input key={k} type="hidden" name={k} value={v} />
             ))}
-            <label htmlFor="go-to-page" className="whitespace-nowrap">
+            <label htmlFor={pageKey === "page" ? "go-to-page" : `go-to-${pageKey}`} className="whitespace-nowrap">
               Go to page
             </label>
             <input
-              id="go-to-page"
-              name="page"
+              id={pageKey === "page" ? "go-to-page" : `go-to-${pageKey}`}
+              name={pageKey}
               type="number"
               min={1}
               max={pages}
