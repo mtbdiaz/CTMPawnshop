@@ -1810,6 +1810,7 @@ export type Database = {
         Returns: Json
       }
       report_loan_analytics: { Args: never; Returns: Json }
+      report_loan_trends: { Args: { p_from?: string; p_to?: string }; Returns: Json }
       report_loans: {
         Args: {
           p_due_from?: string
