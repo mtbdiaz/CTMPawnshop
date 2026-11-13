@@ -168,3 +168,20 @@ export function dateParam(v: string | undefined): string | undefined {
 function round4(n: number) {
   return Math.round(n * 10000) / 10000;
 }
+
+// AT8 (Nov 13): which page links to show for a long list: the first, the last, and two on each side of the open
+// page, with "…" for the pages in between (1 … 4 5 [6] 7 8 … 1,139). A gap of one page shows that page instead.
+export function pageWindow(page: number, pages: number): (number | "gap")[] {
+  if (pages <= 1) return [1];
+  const p = Math.min(Math.max(1, page), pages);
+  const keep = new Set([1, pages, p - 2, p - 1, p, p + 1, p + 2].filter((n) => n >= 1 && n <= pages));
+  const sorted = [...keep].sort((a, b) => a - b);
+  const out: (number | "gap")[] = [];
+  for (const n of sorted) {
+    const prev = out.length ? (out[out.length - 1] as number) : 0;
+    if (n - prev === 2) out.push(n - 1); // skipping exactly one page: show it
+    else if (n - prev > 2) out.push("gap");
+    out.push(n);
+  }
+  return out;
+}

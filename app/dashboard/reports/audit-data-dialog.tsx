@@ -8,16 +8,22 @@ import type { FieldRow } from "@/lib/audit/changes";
 // AT2 (Matt, Nov 11): "View data" opened inside the table row, so the row became very tall and the When, Record
 // and By columns moved down out of sight. Now it opens a popup on the same page: one line per field with
 // Before and After, changed fields marked and listed first. The raw data is still there, folded, for developers.
+// AT7 (Nov 13): the button says what it opens ("View changes" when there is a before and after, otherwise
+// "View details"), and the popup shows the readable reference (PT-…, C-0012) and the full record ID.
 export function AuditDataButton({
+  label = "View details",
   title,
   subtitle,
+  record,
   reason,
   rows,
   raw,
 }: {
-  title: string; // "Loans · Updated"
-  subtitle: string; // "Nov 10, 2026, 12:05 AM · System / service · ID …000034"
-  reason?: string; // an Admin edit's reason
+  label?: "View changes" | "View details";
+  title: string; // "Loan status updated"
+  subtitle: string; // "Nov 13, 2026, 12:05 AM · System / service"
+  record: { ref: string; id: string }; // "PT-2026…-829B" and the record's full ID
+  reason?: string; // why: an Admin correction's reason, an ID view's reason
   rows: FieldRow[]; // from allFields()
   raw: { before: unknown; after: unknown }; // the stored rows, for the folded raw data
 }) {
@@ -36,8 +42,8 @@ export function AuditDataButton({
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className="text-xs font-medium text-navy-700 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500">
-        View data
+      <button type="button" onClick={() => setOpen(true)} className={cx(buttonClasses("secondary", "sm"), "focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500")}>
+        {label}
       </button>
       {open && (
         <dialog
@@ -55,7 +61,12 @@ export function AuditDataButton({
                   {title}
                 </h2>
                 <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>
-                {reason && <p className="mt-1 text-sm font-medium text-amber-900">Admin edit. Reason: {reason}</p>}
+                {/* WHICH record: the reference people use, and the full record ID (select-all, for searching) */}
+                <p className="mt-1 text-sm text-slate-700">
+                  {record.ref && <span className="font-medium">{record.ref} · </span>}
+                  Record ID <span className="select-all break-all font-mono text-xs text-slate-600">{record.id}</span>
+                </p>
+                {reason && <p className="mt-1 text-sm font-medium text-amber-900">Reason: {reason}</p>}
               </div>
               <button type="button" onClick={() => ref.current?.close()} aria-label="Close" className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800" autoFocus>
                 <Icon name="x" className="h-5 w-5" />

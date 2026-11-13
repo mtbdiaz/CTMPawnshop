@@ -49,7 +49,7 @@ export function PrintScope({ page, size, total, shown, all, totalRow = true, adv
     (total <= PRINT_LIMIT ? "To print every row, use “Show all on one page (for printing)”." : `One printout holds at most ${fmt(PRINT_LIMIT)} rows: print each page to get every row.`);
   return (
     <p className={cx("border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900", !(all && total > PRINT_LIMIT) && "hidden print:block")}>
-      <strong>Limited print view:</strong> rows {fmt(from)}–{fmt(from + shown - 1)} of {fmt(total)} (page {page} of {pages}).{" "}
+      <strong>Limited print view:</strong> rows {fmt(from)}–{fmt(from + shown - 1)} of {fmt(total)} (page {fmt(page)} of {fmt(pages)}).{" "}
       {totalRow && `The Total row covers all ${fmt(total)}. `}
       {howToGetAll}
     </p>
