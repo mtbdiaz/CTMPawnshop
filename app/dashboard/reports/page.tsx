@@ -15,7 +15,7 @@ const REPORTS: { href: string; label: string; category: string; icon: IconName; 
   { href: "/dashboard/reports/inventory-aging", label: "Inventory aging", category: "Inventory", icon: "vault", description: "Items still in the shop and how long each has been held." },
   { href: "/dashboard/reports/financial-summary", label: "Financial summary", category: "Finance", icon: "cash", description: "Cash in, cash out and the change for a date range, by entry type." },
   { href: "/dashboard/reports/compliance", label: "Compliance / AML", category: "Compliance", icon: "shield", description: "AML-flagged and blacklisted customers, and suspicious-activity flags." },
-  { href: "/dashboard/reports/analytics", label: "Trends & analytics", category: "Analytics", icon: "chart", description: "Redemption and forfeiture rates, average loan and monthly loan volume." },
+  { href: "/dashboard/reports/analytics", label: "Trends & analytics", category: "Analytics", icon: "chart", description: "Redemption and default & forfeiture rates, where loans stand, average loan and monthly loan volume, by period." }, // TA2: the rate's new name
 ];
 
 // Item 13: Reports and the Audit Trail share one page. Both are Admin-only

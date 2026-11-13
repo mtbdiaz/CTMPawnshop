@@ -202,6 +202,84 @@ export function portfolioRates(byStatus: Record<string, number>, total: number, 
   };
 }
 
+// ---------- trends by period (report_loan_trends, migration 0072) ----------
+
+export type TrendMonth = { month: string; count: number; totalPrincipal: number; in_range: boolean };
+export type ReportTrends = {
+  today: string;
+  current_month: string; // 'YYYY-MM'
+  first_month: string; // the month of the first loan that isn't archived
+  from_month: string;
+  to_month: string;
+  total: number; // loans made in the period (not archived)
+  principal_sum: number;
+  by_status: Record<string, number>;
+  months: TrendMonth[]; // at least the 12 months up to to_month, empty months included; in_range = inside the period
+  months_capped: boolean;
+};
+
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+/** A YYYY-MM month from the address, or undefined if it isn't one. */
+export function monthParam(v: string | undefined): string | undefined {
+  return v && MONTH_RE.test(v) ? v : undefined;
+}
+
+/** "2026-11" moved by n months ("2026-11", -11 → "2025-12"). */
+export function addMonths(ym: string, n: number): string {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Every month from a to b, both included, oldest first. */
+export function monthsBetween(a: string, b: string): string[] {
+  const out: string[] = [];
+  for (let m = a; m <= b && out.length < 600; m = addMonths(m, 1)) out.push(m);
+  return out;
+}
+
+/** "Nov 2026" (or "Nov" with short). */
+export function monthLabel(ym: string, short = false): string {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-PH", { month: "short", ...(short ? {} : { year: "numeric" }), timeZone: "UTC" });
+}
+
+/** The top of the chart's money axis and the step between its lines: a round number (1, 2, 2.5 or 5 × 10ⁿ), 4 steps or fewer. */
+export function niceAxis(max: number): { top: number; step: number } {
+  if (!(max > 0)) return { top: 4, step: 1 };
+  const raw = max / 4;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const norm = raw / mag;
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
+  return { top: step * Math.ceil(max / step - 1e-9), step };
+}
+
+/** A short peso amount for the chart's axis and bar labels: ₱3.8M, ₱950K, ₱800, ₱0. The full amount is in the table. */
+export function compactPeso(n: number): string {
+  const trim = (x: number) => String(Math.round(x * 10) / 10).replace(/\.0$/, "");
+  if (Math.abs(n) >= 1e6) return `₱${trim(n / 1e6)}M`;
+  if (Math.abs(n) >= 1e3) return `₱${trim(n / 1e3)}K`;
+  return `₱${Math.round(n)}`;
+}
+
+/**
+ * The monthly loan volume figures for the months of the period. Months with no loans count as ₱0 (they are not
+ * dropped), so the average per full month is not made bigger by leaving quiet months out. The current month is not
+ * over yet (month to date), so it is in the total but not in the average.
+ */
+export function monthlySummary(months: Pick<TrendMonth, "month" | "count" | "totalPrincipal">[], currentMonth: string) {
+  const full = months.filter((m) => m.month < currentMonth);
+  const fullPrincipal = full.reduce((s, m) => s + Number(m.totalPrincipal), 0);
+  return {
+    count: months.reduce((s, m) => s + Number(m.count), 0),
+    principal: Math.round(months.reduce((s, m) => s + Number(m.totalPrincipal), 0) * 100) / 100,
+    fullMonths: full.length,
+    emptyMonths: months.filter((m) => Number(m.count) === 0 && m.month < currentMonth).length,
+    averagePerFullMonth: full.length ? Math.round((fullPrincipal / full.length) * 100) / 100 : null,
+    hasMonthToDate: months.some((m) => m.month === currentMonth),
+  };
+}
+
 // ---------- cash (report_cash_breakdown) ----------
 
 export type ReportCash = {
