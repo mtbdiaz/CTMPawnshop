@@ -57,8 +57,21 @@ export const LOAN_SORTS: Record<LoanSort, string> = {
 export type OverdueStage = "in_grace" | "past_grace" | "defaulted";
 export const OVERDUE_STAGES: Record<OverdueStage, string> = {
   in_grace: "In grace period",
-  past_grace: "Past grace (not marked Defaulted yet)",
+  past_grace: "Past grace, pending default", // OV2 (Nov 13): was "Past grace (not marked Defaulted yet)"
   defaulted: "Defaulted",
+};
+
+// OV5 (Nov 13): the Overdue report's sort orders. They use the same database sorts as Outstanding loans (p_sort,
+// migration 0069): "most days overdue" is the earliest due date first, so no new database work was needed.
+export type OverdueSort = "due" | "due_desc" | "owed_desc" | "owed" | "customer" | "ticket";
+export const OVERDUE_SORTS: Record<OverdueSort, string> = {
+  // short words so the chosen sort shows in full in the Sort by box on a 1366px laptop
+  due: "Most days overdue",
+  due_desc: "Fewest days overdue",
+  owed_desc: "Highest owed now",
+  owed: "Lowest owed now",
+  customer: "Customer (A to Z)",
+  ticket: "Ticket number",
 };
 
 /** One loan row from report_loans (worked out by the database for today's Manila date). */

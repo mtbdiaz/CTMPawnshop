@@ -184,7 +184,7 @@ export function DetailGrid({ items }: { items: { label: string; value: ReactNode
 
 /* ---------- Status ---------- */
 
-export type BadgeTone = "neutral" | "info" | "success" | "warning" | "danger" | "gold";
+export type BadgeTone = "neutral" | "info" | "success" | "warning" | "alert" | "danger" | "gold"; // OV4: "alert" added (Nov 13)
 
 export function Badge({ tone = "neutral", children, icon }: { tone?: BadgeTone; children: ReactNode; icon?: boolean }) {
   return (
@@ -195,7 +195,12 @@ export function Badge({ tone = "neutral", children, icon }: { tone?: BadgeTone; 
         tone === "info" && "bg-navy-50 text-navy-700 ring-navy-200",
         tone === "success" && "bg-emerald-50 text-emerald-800 ring-emerald-300",
         tone === "warning" && "bg-amber-50 text-amber-900 ring-amber-400",
-        tone === "danger" && "bg-red-700 text-white ring-red-800", // CT1: darker red, so the small white words read better (was red-600)
+        // OV4 (Nov 13): light red with dark red words, between amber (warning) and solid red (danger); used for
+        // "Past grace, pending default" on the Overdue loans report
+        tone === "alert" && "bg-red-50 text-red-800 ring-red-300",
+        // OV9 (Nov 13): [print-color-adjust:exact] prints the red fill even when the browser's "Background graphics" is
+        // off. Before: the fill was dropped on paper and the white words were almost invisible (e.g. "Defaulted").
+        tone === "danger" && "bg-red-700 text-white ring-red-800 [print-color-adjust:exact]", // CT1: darker red, so the small white words read better (was red-600)
         tone === "gold" && "bg-gold-100 text-gold-700 ring-gold-400",
       )}
     >
