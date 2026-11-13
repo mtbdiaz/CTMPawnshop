@@ -1796,7 +1796,16 @@ export type Database = {
       reinstate_loan: { Args: { p_loan_id: string }; Returns: undefined }
       report_cash_breakdown: { Args: { p_from: string; p_to: string }; Returns: Json }
       report_inventory_aging: {
-        Args: { p_band?: string; p_custody?: string; p_page?: number; p_size?: number }
+        Args: {
+          p_band?: string
+          p_custody?: string
+          p_followup?: boolean
+          p_page?: number
+          p_q?: string
+          p_size?: number
+          p_sort?: string
+          p_vault?: string
+        }
         Returns: Json
       }
       report_loan_analytics: { Args: never; Returns: Json }
