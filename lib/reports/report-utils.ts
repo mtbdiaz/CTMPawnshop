@@ -31,6 +31,28 @@ export const LOAN_SITUATIONS: Record<LoanSituation, string> = {
   paid: "Paid, ready to release",
 };
 
+// OL2 (Nov 13): the Outstanding report's views. "Owes money" = Overdue + Due soon + Not due yet (database filter
+// 'owing', migration 0069); "Ready to release" = open loans that owe nothing yet (not redeemed, item not released).
+export type OutstandingView = LoanSituation | "owing";
+export const OUTSTANDING_VIEWS: Record<OutstandingView, string> = {
+  owing: "Owes money",
+  overdue: "Overdue",
+  due_soon: "Due soon",
+  not_due: "Not due yet",
+  paid: "Ready to release",
+};
+
+// OL3 (Nov 13): the sort orders the database understands (report_loans p_sort, migration 0069)
+export type LoanSort = "due" | "due_desc" | "owed_desc" | "owed" | "customer" | "ticket";
+export const LOAN_SORTS: Record<LoanSort, string> = {
+  due: "Due date (earliest first)",
+  due_desc: "Due date (latest first)",
+  owed_desc: "Owed now (highest first)",
+  owed: "Owed now (lowest first)",
+  customer: "Customer (A to Z)",
+  ticket: "Ticket number",
+};
+
 // Overdue loans: how far along each one is. A fully paid loan is never here (Loans page rule).
 export type OverdueStage = "in_grace" | "past_grace" | "defaulted";
 export const OVERDUE_STAGES: Record<OverdueStage, string> = {
@@ -50,6 +72,7 @@ export type ReportLoanRow = {
   grace_period_days: number;
   owed: number; // owed now: principal left + interest including after the due date (owed_now, same as the Loans page)
   interest_now: number; // owed minus principal left
+  customer_id: string | null; // OL4 (0069): so the customer's name can link to their page
   customer_name: string | null;
   customer_no: number | null;
   contact_number: string | null;
@@ -69,6 +92,7 @@ export type ReportLoans = {
   sums: Record<string, number> | null; // owed now per situation / stage
   all_count: number;
   all_owed: number;
+  all_totals?: { principal: number; balance: number; interest: number; owed: number }; // OL1 (0069): every loan in the report, before search and filters
   paid_past_due: number; // past the due date but fully paid (they are not overdue)
   total: number; // loans matching the search and filter
   totals: { principal: number; balance: number; interest: number; owed: number };

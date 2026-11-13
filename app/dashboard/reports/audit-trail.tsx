@@ -23,7 +23,7 @@ import {
   type RefLookups,
 } from "@/lib/audit/events"; // AT7: WHAT / WHICH / WHY in plain words
 import { AuditDataButton } from "./audit-data-dialog"; // AT2: the popup with one line per field
-import { AuditPagination } from "./audit-pagination"; // AT8: page numbers and Go to page
+import { ReportPagination } from "./report-pagination"; // AT8: page numbers and Go to page (shared with Outstanding loans)
 import { PrintScope } from "./report-parts"; // RP11: says on paper when only part of the list is printed
 
 // AT8 (Nov 13): 10 entries per page (was 50), so the page stays short and an entry is found by filtering, not scrolling.
@@ -309,7 +309,7 @@ export async function AuditTrail({ params }: { params: Record<string, string | u
               })}
             </TBody>
           </Table>
-          <AuditPagination page={shownPage} pageSize={PAGE_SIZE} total={count} params={listParams} />
+          <ReportPagination page={shownPage} pageSize={PAGE_SIZE} total={count} params={listParams} />
         </>
       ) : (
         <EmptyState

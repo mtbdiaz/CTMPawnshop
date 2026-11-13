@@ -6,7 +6,23 @@ import { pageWindow } from "@/lib/reports/report-utils";
 // Before: only Previous and Next (the shared Pagination), so reaching an entry on page 600 of 1,139 meant hundreds of clicks.
 // Now: First, Previous, page numbers around the open page, Next, Last, and "Go to page". Every link and the form
 // keep the filters and the search (they're all in the address), and the database still does the paging.
-export function AuditPagination({ page, pageSize, total, params }: { page: number; pageSize: number; total: number; params: Record<string, string | undefined> }) {
+// OL7 (Nov 13): shared by the Audit Trail and the Outstanding loans report (was AuditPagination): the page's own
+// address (basePath) and a name for screen readers (label) are passed in.
+export function ReportPagination({
+  page,
+  pageSize,
+  total,
+  params,
+  basePath = "/dashboard/reports",
+  label = "Audit trail pages",
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  params: Record<string, string | undefined>;
+  basePath?: string; // the page the links and the Go form open
+  label?: string; // the name screen readers announce for this row
+}) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
   if (total === 0) return null;
   const from = (page - 1) * pageSize + 1;
@@ -16,7 +32,7 @@ export function AuditPagination({ page, pageSize, total, params }: { page: numbe
   const href = (p: number) => {
     const q = new URLSearchParams(kept);
     if (p > 1) q.set("page", String(p));
-    return `/dashboard/reports?${q.toString()}`;
+    return q.toString() ? `${basePath}?${q.toString()}` : basePath;
   };
   const step = "inline-flex h-9 min-w-9 items-center justify-center rounded-md border px-2.5 text-sm font-medium";
   const link = (p: number, label: string, aria: string) =>
@@ -31,7 +47,7 @@ export function AuditPagination({ page, pageSize, total, params }: { page: numbe
     );
 
   return (
-    <nav aria-label="Audit trail pages" className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-600 print:hidden">
+    <nav aria-label={label} className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-600 print:hidden">
       <p aria-live="polite">
         Showing <span className="font-medium text-slate-900">{fmt(from)}</span>–<span className="font-medium text-slate-900">{fmt(to)}</span> of{" "}
         <span className="font-medium text-slate-900">{fmt(total)}</span>
@@ -61,15 +77,15 @@ export function AuditPagination({ page, pageSize, total, params }: { page: numbe
           {link(page + 1, "Next ›", "Next page")}
           {link(pages, "»", "Last page")}
           {/* jump straight to a page; the hidden fields keep the filters */}
-          <form action="/dashboard/reports" className="ml-1 flex items-center gap-1.5">
+          <form action={basePath} className="ml-1 flex items-center gap-1.5">
             {kept.map(([k, v]) => (
               <input key={k} type="hidden" name={k} value={v} />
             ))}
-            <label htmlFor="audit-page" className="whitespace-nowrap">
+            <label htmlFor="go-to-page" className="whitespace-nowrap">
               Go to page
             </label>
             <input
-              id="audit-page"
+              id="go-to-page"
               name="page"
               type="number"
               min={1}

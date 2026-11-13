@@ -10,10 +10,11 @@ export function pageSizeFor(all: boolean) {
 
 // "Show all on one page" so the whole list can be printed; only shown when there is more than one page.
 // RP9: one request holds at most 1,000 rows, so a bigger list prints 1,000 a page (the pages below still work).
-export function ShowAllLink({ all, total, href }: { all: boolean; total: number; href: string }) {
-  if (total <= REPORT_PAGE_SIZE) return null;
+// OL7 (Nov 13): pageSize = the report's normal page size (Outstanding loans uses 10; the others still 50).
+export function ShowAllLink({ all, total, href, pageSize = REPORT_PAGE_SIZE }: { all: boolean; total: number; href: string; pageSize?: number }) {
+  if (total <= pageSize) return null;
   const label = all
-    ? `Show ${REPORT_PAGE_SIZE} per page`
+    ? `Show ${pageSize} per page`
     : total <= PRINT_LIMIT
       ? `Show all ${total.toLocaleString("en-PH")} on one page (for printing)`
       : `Show ${PRINT_LIMIT.toLocaleString("en-PH")} per page (for printing)`;
