@@ -121,12 +121,26 @@ export type AgeBand = "0_30" | "31_60" | "61_90" | "over_90";
 export const AGE_BANDS: Record<AgeBand, string> = { "0_30": "0–30 days", "31_60": "31–60 days", "61_90": "61–90 days", over_90: "Over 90 days" };
 
 export type CustodyGroup = "vault" | "forfeited" | "auction";
+
+// IA5 (Nov 13): the Inventory aging report's sort orders (report_inventory_aging p_sort, migration 0070)
+export type InventorySort = "oldest" | "newest" | "vault" | "category" | "customer";
+export const INVENTORY_SORTS: Record<InventorySort, string> = {
+  oldest: "Oldest first",
+  newest: "Newest first",
+  vault: "Vault location (A to Z)",
+  category: "Item category",
+  customer: "Customer (A to Z)",
+};
+
 export type ReportInventory = {
   today: string;
   all_count: number; // every item still in the shop
   aged_count: number; // held over 60 days
   custody_counts: Partial<Record<CustodyGroup, number>> | null;
   band_counts: Partial<Record<AgeBand, number>> | null; // inside the custody filter picked
+  all_band_counts?: Partial<Record<AgeBand, number>> | null; // IA2 (0070): everything in the shop, before any filter
+  vaults?: { vault: string; n: number }[]; // IA3 (0070): each vault location in use, with its number of items
+  followup_count?: number; // IA6 (0070): items with an unresolved physical-audit finding
   total: number;
   page: number;
   size: number;
@@ -145,6 +159,13 @@ export type ReportInventory = {
     karat: number | null;
     weight_grams: number | null;
     customer_name: string | null;
+    // IA4 (0070): for the links and the audit follow-up flag
+    appraisal_item_id?: string | null;
+    customer_id?: string | null;
+    customer_no?: number | null;
+    loan_id?: string | null;
+    ticket_number?: string | null;
+    followup?: boolean;
   }[];
 };
 
