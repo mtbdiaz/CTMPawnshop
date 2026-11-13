@@ -153,8 +153,9 @@ export function ActionForm<S extends FormState>({
               <dl className="mt-4 divide-y divide-slate-100 rounded-md border border-slate-200 text-sm">
                 {confirmReq.details.map(([label, value]) => (
                   <div key={label} className="flex justify-between gap-4 px-3 py-1.5">
-                    <dt className="text-slate-500">{label}</dt>
-                    <dd className="text-right font-medium tabular-nums text-slate-900">{value}</dd>
+                    <dt className="shrink-0 text-slate-500">{label}</dt>
+                    {/* MF4: a long value (an address) wraps instead of pushing the box wider */}
+                    <dd className="min-w-0 break-words text-right font-medium tabular-nums text-slate-900">{value}</dd>
                   </div>
                 ))}
               </dl>

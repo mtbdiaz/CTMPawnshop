@@ -7,7 +7,6 @@ import { formatDate, formatPeso, manilaToday } from "@/lib/format";
 import { categoryLabel } from "@/lib/appraisal/valuation";
 import { computeCustomerScore, weightsFromRows } from "@/lib/customers/score";
 // C1: interest that piled up after the due date (same math as the Dashboard and loan page)
-import { accruedInterest } from "@/lib/loans/accrual";
 // C8: "how many days until this date" (negative = in the past), same helper as the Dashboard
 import { daysUntilDue } from "@/lib/compliance/reminders";
 import { ScoreBadge } from "@/components/score-badge";
@@ -40,7 +39,7 @@ import { BlacklistForm } from "./blacklist-form";
 import { IdReveal } from "../id-reveal";
 import { ID_REVEAL_ROLES, idEnding, maskId } from "@/lib/customers/id-privacy";
 // PR13: "nothing left to pay", to show "Paid, awaiting release" on an item
-import { isFullyPaid } from "@/lib/loans/status";
+import { isFullyPaid, owedNow } from "@/lib/loans/status"; // LD: owedNow includes liquidated damages
 
 type LoanHistoryRow = {
   id: string;
@@ -51,6 +50,11 @@ type LoanHistoryRow = {
   // C1: these two are needed to work out the late interest
   interest_rate_percent: number;
   interest_accrued_through: string | null;
+  // LD (0073): liquidated damages, so owed amounts include them
+  grace_period_days: number;
+  liquidated_damages_percent: number;
+  damages_owed: number;
+  damages_accrued_through: string | null;
   status: string;
   loan_date: string;
   maturity_date: string;
@@ -183,7 +187,7 @@ export default async function CustomerDetailPage({
     supabase
       .from("loans")
       .select(
-        "id, ticket_number, principal_amount, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, status, loan_date, maturity_date, extension_count, late_payment_count, defaulted_at, reinstated_at, redeemed_at, archived_at, appraisal_item_id",
+        "id, ticket_number, principal_amount, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, grace_period_days, liquidated_damages_percent, damages_owed, damages_accrued_through, status, loan_date, maturity_date, extension_count, late_payment_count, defaulted_at, reinstated_at, redeemed_at, archived_at, appraisal_item_id",
       )
       .eq("customer_id", id)
       .order("loan_date", { ascending: false })
@@ -411,7 +415,7 @@ export default async function CustomerDetailPage({
                 // C1: still owed = principal left + interest, INCLUDING interest that piled up
                 // after the due date (same as the loan page). Defaulted loans still owe money too.
                 const owes = loan.status === "active" || loan.status === "extended" || loan.status === "reinstated" || loan.status === "defaulted";
-                const owed = owes ? Number(loan.principal_balance) + accruedInterest(loan, today).interestOwed : 0;
+                const owed = owes ? owedNow(loan, today) : 0; // LD (0073): the shared rule (principal + interest + liquidated damages)
                 // the status word and colour, same as the Dashboard
                 const label = loanLabel(loan, owed, today);
                 // PR13: one summary line instead of listing every payment (the full list is on View loan)

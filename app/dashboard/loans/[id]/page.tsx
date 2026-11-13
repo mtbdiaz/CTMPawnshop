@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { hasRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
-import { accruedInterest, capitalizePreview, renewPreview, TERM_DAYS } from "@/lib/loans/accrual";
+import { accruedDamages, accruedInterest, addDaysIso, capitalizePreview, renewPreview, TERM_DAYS } from "@/lib/loans/accrual"; // LD: accruedDamages
 import { isOverdueUnpaid } from "@/lib/loans/status"; // F3: shared overdue rule
 import { pastGracePeriod, renewBlocked, renewGraceEnd, situationBadge, stateBadge } from "@/lib/loans/display"; // L3/L4: the same badges as the Loans list; L24: renew grace rule
 import { Icon } from "@/components/icons";
@@ -131,7 +131,11 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
   const accrual = accruedInterest(loan, today);
   const principal = Number(loan.principal_balance);
   const interest = accrual.interestOwed;
-  const owed = Math.round((principal + interest) * 100) / 100;
+  // LD (0073): liquidated damages (the pawn ticket clause), after the grace days, % of the unpaid principal per 30 days
+  const dmg = accruedDamages(loan, today);
+  const damages = dmg.damagesOwed;
+  const damagesFrom = addDaysIso(loan.maturity_date, Number(loan.grace_period_days)); // the grace days end here; damages count from the next day
+  const owed = Math.round((principal + interest + damages) * 100) / 100;
   const open = OPEN.has(loan.status);
   const canTransact = hasRole(role, ["cashier"]);
   const overdue = isOverdueUnpaid(loan, today); // F3: past due AND still owes money (a paid loan waiting for release isn't overdue)
@@ -153,7 +157,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
       key: "payment",
       title: "Record payment",
       // AR1: on an overdue loan, say that paying the interest also renews it
-      hint: `${formatPeso(owed)} owed now. Interest is paid first, then principal.${today > loan.maturity_date && !noRenew && principal > 0 ? ` Paying all the interest also renews the loan to ${formatDate(renew.newMaturity)}.` : ""}`,
+      hint: `${formatPeso(owed)} owed now. ${damages > 0 ? "Liquidated damages are paid first, then interest, then principal." : "Interest is paid first, then principal."}${today > loan.maturity_date && !noRenew && principal > 0 ? ` Paying all the ${damages > 0 ? "damages and interest" : "interest"} also renews the loan to ${formatDate(renew.newMaturity)}.` : ""}`,
       reason: owed > 0 ? undefined : "Nothing is owed. Use Redeem to release the item.",
       // AR1 (0043): past the due date and still renewable -> clearing the interest renews it (same date as Renew)
       body: (
@@ -161,6 +165,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
           loanId={loan.id}
           interestDue={interest}
           principalBalance={principal}
+          damagesDue={damages}
           renewOnClear={today > loan.maturity_date && !noRenew ? { newMaturity: renew.newMaturity, ratePercent: Number(loan.interest_rate_percent) } : null}
         />
       ),
@@ -168,7 +173,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
     {
       key: "renew",
       title: "Renew",
-      hint: `Collect ${formatPeso(renew.collectNow)} interest. New due date ${formatDate(renew.newMaturity)}.`,
+      hint: `Collect ${formatPeso(renew.collectNow)} ${renew.collectDamages > 0 ? "interest and liquidated damages" : "interest"}. New due date ${formatDate(renew.newMaturity)}.`,
       // renew_loan: "This loan is fully paid. Redeem the item instead." / "Grace period has expired." (L24)
       reason:
         principal <= 0
@@ -180,7 +185,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
       body: (
         <div className="space-y-3">
           <p className="text-sm text-slate-600">Collect the interest owed and extend by {TERM_DAYS} days.</p>
-          <ExtensionForm loanId={loan.id} currentMaturity={loan.maturity_date} collectNow={renew.collectNow} newInterest={renew.newInterestOwed} newMaturity={renew.newMaturity} />
+          <ExtensionForm loanId={loan.id} currentMaturity={loan.maturity_date} collectNow={renew.collectNow} collectDamages={renew.collectDamages} newInterest={renew.newInterestOwed} newMaturity={renew.newMaturity} />
         </div>
       ),
     },
@@ -189,7 +194,8 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
       title: "Capitalize and extend",
       hint: `Add ${formatPeso(cap.capitalized)} unpaid interest to the principal. No cash today.`,
       // capitalize_loan: "There is no unpaid interest to capitalize. Use Renew instead."
-      reason: principal <= 0 ? "Fully paid. Redeem the item instead." : interest <= 0 ? "No unpaid interest to capitalize. Use Renew instead." : pastGracePeriod(loan, today) ? "The grace period is over, so this loan can no longer be capitalized." : undefined, // owner decision on Matt #30
+      // LD: capitalize_loan refuses while liquidated damages are owed (only interest is ever added to the principal)
+      reason: principal <= 0 ? "Fully paid. Redeem the item instead." : interest <= 0 ? "No unpaid interest to capitalize. Use Renew instead." : pastGracePeriod(loan, today) ? "The grace period is over, so this loan can no longer be capitalized." : damages > 0 ? "Liquidated damages must be paid first (Record payment)." : undefined, // owner decision on Matt #30
       body: (
         <div className="space-y-3">
           <p className="text-sm text-slate-600">For a customer who cannot pay the interest today.</p>
@@ -216,7 +222,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
             hint: "Reopen the loan. The default stays on record.",
             // reinstate_loan: "The item is already queued for auction and cannot be reinstated."
             reason: vault?.status === "queued_for_auction" ? "The item is already queued for auction, so the loan can't be reinstated." : vault?.status === "sold" ? "The item was sold at auction, so the loan can't be reinstated." : undefined,
-            body: <ReinstateForm loanId={loan.id} interestOwed={interest} />,
+            body: <ReinstateForm loanId={loan.id} interestOwed={interest} damagesOwed={damages} />,
           },
         ]
       : []),
@@ -263,6 +269,11 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
       {overdue && (
         <Alert tone="warning" title="Past due">
           Matured {formatDate(loan.maturity_date)}. Interest keeps accruing every {TERM_DAYS} days until it is paid, renewed or capitalized.
+          {/* LD (0073) */}
+          {Number(loan.liquidated_damages_percent) > 0 &&
+            (today > damagesFrom
+              ? ` The grace days ended on ${formatDate(damagesFrom)}, so liquidated damages (${loan.liquidated_damages_percent}% of the unpaid principal) are added every ${TERM_DAYS} days too.`
+              : ` If it is not paid or renewed by ${formatDate(damagesFrom)} (the end of the grace days), liquidated damages of ${loan.liquidated_damages_percent}% of the unpaid principal are added every ${TERM_DAYS} days.`)}
         </Alert>
       )}
 
@@ -283,6 +294,8 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
                 { label: "Appraised value", value: item ? formatPeso(item.computed_value) : "" },
                 { label: "Original principal", value: formatPeso(loan.principal_amount) },
                 { label: "Interest rate", value: `${loan.interest_rate_percent}% per ${TERM_DAYS} days` },
+                // LD (0073): the pawn ticket clause, with this loan's own % (fixed when it was issued)
+                { label: "Liquidated damages", value: `${loan.liquidated_damages_percent}% of the unpaid principal per ${TERM_DAYS} days, after ${formatDate(damagesFrom)}` },
                 { label: "Loan date", value: formatDate(loan.loan_date) },
                 { label: "Due date", value: formatDate(loan.maturity_date), emphasize: true },
                 { label: "Renewals", value: String(loan.extension_count) },
@@ -314,6 +327,21 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
                       Interest added after {formatDate(accruedFrom)} ({accrual.extraTerms} × {TERM_DAYS} days)
                     </dt>
                     <dd className="tabular-nums">{formatPeso(interest - Number(loan.interest_owed))}</dd>
+                  </div>
+                )}
+                {/* LD (0073): liquidated damages already written down, then the months not written down yet */}
+                {Number(loan.damages_owed) > 0 && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-600">Liquidated damages billed</dt>
+                    <dd className="tabular-nums">{formatPeso(loan.damages_owed)}</dd>
+                  </div>
+                )}
+                {dmg.extraMonths > 0 && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-600">
+                      Liquidated damages after {formatDate(dmg.from)} ({dmg.extraMonths} × {TERM_DAYS} days at {loan.liquidated_damages_percent}%)
+                    </dt>
+                    <dd className="tabular-nums">{formatPeso(Math.round((damages - Number(loan.damages_owed)) * 100) / 100)}</dd>
                   </div>
                 )}
                 <div className="flex justify-between">
@@ -349,6 +377,8 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
                     <TH>Receipt</TH>
                     <TH>Date</TH>
                     <TH align="right">Amount</TH>
+                    {/* LD (0073): a Damages column only when a payment on this loan paid liquidated damages */}
+                    {payments.some((p) => Number(p.damages_portion) > 0) && <TH align="right">Damages</TH>}
                     <TH align="right">Interest</TH>
                     <TH align="right">Principal</TH>
                     <TH>
@@ -363,6 +393,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
                         <TD align="right" className="font-medium">
                           {formatPeso(p.amount)}
                         </TD>
+                        {payments.some((x) => Number(x.damages_portion) > 0) && <TD align="right">{formatPeso(p.damages_portion)}</TD>}
                         <TD align="right">{formatPeso(p.interest_portion)}</TD>
                         <TD align="right">{formatPeso(p.principal_portion)}</TD>
                         <ActionsCell>

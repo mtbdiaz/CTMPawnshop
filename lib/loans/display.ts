@@ -52,7 +52,8 @@ export function owedDisplay(loan: AccrualLoan, today: string): number | null {
 // Verified against the code: there are no fees or penalties, interest only grows while principal is above 0,
 // and the database's record_payment uses principal_balance + interest_owed as the total owed.
 // So a loan owes ₱0 exactly when both stored balances are 0.
-export const STILL_OWES_FILTER = "principal_balance.gt.0,interest_owed.gt.0"; // use with .or(...)
+// LD (0073): or liquidated damages written down and not paid
+export const STILL_OWES_FILTER = "principal_balance.gt.0,interest_owed.gt.0,damages_owed.gt.0"; // use with .or(...)
 
 /**
  * L24: the last day a loan can still be renewed, or null when the grace period doesn't apply.

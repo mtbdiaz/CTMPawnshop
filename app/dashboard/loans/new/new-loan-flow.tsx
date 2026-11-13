@@ -410,7 +410,7 @@ export function NewLoanFlow({
               value={vault}
               onChange={(e) => setVault(e.target.value)}
               required
-              hint={vaults.length ? "An Admin can add locations in Settings." : undefined}
+              // MF5 (Matt, Nov 14): no "An Admin can add locations in Settings." line under the list
             >
               {vaults.map((v) => (
                 <option key={v} value={v}>
