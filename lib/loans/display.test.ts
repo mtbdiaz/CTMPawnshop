@@ -82,6 +82,13 @@ describe("wouldBeDefaulted (L30, same rule as run_default_detection)", () => {
   it("defaults a reinstated loan past its grace period", () => {
     expect(wouldBeDefaulted({ ...loan, status: "reinstated" }, "2027-01-01")).toBe(true);
   });
+  // RW2 (Nov 14): matches the rolled-back database test on a real Defaulted loan (due Nov 6, 7 grace days, today Nov 14)
+  it("RW2: a loan reinstated today keeps its old due date, so tonight's check defaults it again unless renewed or paid in full", () => {
+    const reinstated = { ...loan, status: "reinstated", maturity_date: "2026-11-06", principal_balance: 15750, interest_owed: 1575 };
+    expect(wouldBeDefaulted(reinstated, "2026-11-14")).toBe(true); // reinstate only -> Defaulted again
+    expect(wouldBeDefaulted({ ...reinstated, status: "extended", maturity_date: "2027-01-05", interest_owed: 787.5 }, "2026-11-14")).toBe(false); // renewed
+    expect(wouldBeDefaulted({ ...reinstated, principal_balance: 0, interest_owed: 0 }, "2026-11-14")).toBe(false); // paid in full
+  });
   it("a missing grace period counts as 0 days", () => {
     expect(wouldBeDefaulted({ ...loan, grace_period_days: null }, "2026-10-30")).toBe(true);
   });

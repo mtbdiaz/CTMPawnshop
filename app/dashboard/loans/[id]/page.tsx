@@ -5,7 +5,7 @@ import { hasRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { accruedDamages, accruedInterest, addDaysIso, capitalizePreview, renewPreview, TERM_DAYS } from "@/lib/loans/accrual"; // LD: accruedDamages
 import { isOverdueUnpaid } from "@/lib/loans/status"; // F3: shared overdue rule
-import { pastGracePeriod, renewBlocked, renewGraceEnd, situationBadge, stateBadge } from "@/lib/loans/display"; // L3/L4: the same badges as the Loans list; L24: renew grace rule
+import { pastGracePeriod, renewBlocked, renewGraceEnd, situationBadge, stateBadge, wouldBeDefaulted } from "@/lib/loans/display"; // L3/L4: the same badges as the Loans list; L24: renew grace rule
 import { Icon } from "@/components/icons";
 import { categoryLabel } from "@/lib/appraisal/valuation";
 import { formatDate, formatDateTime, formatPeso, manilaToday } from "@/lib/format";
@@ -139,6 +139,8 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
   const open = OPEN.has(loan.status);
   const canTransact = hasRole(role, ["cashier"]);
   const overdue = isOverdueUnpaid(loan, today); // F3: past due AND still owes money (a paid loan waiting for release isn't overdue)
+  // RW2: a Reinstated loan that tonight's default check would mark Defaulted again (it keeps its old due date)
+  const redefaultTonight = loan.status === "reinstated" && wouldBeDefaulted(loan, today);
   const state = stateBadge(loan.status); // L3/L4: e.g. Renewed
   const situation = situationBadge(loan, today); // L3/L4: Paid, ready to release / Overdue / Due soon
   const paidAwaitingRelease = situation?.label === "Paid, ready to release"; // L16
@@ -222,7 +224,19 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
             hint: "Reopen the loan. The default stays on record.",
             // reinstate_loan: "The item is already queued for auction and cannot be reinstated."
             reason: vault?.status === "queued_for_auction" ? "The item is already queued for auction, so the loan can't be reinstated." : vault?.status === "sold" ? "The item was sold at auction, so the loan can't be reinstated." : undefined,
-            body: <ReinstateForm loanId={loan.id} interestOwed={interest} damagesOwed={damages} />,
+            // RW1: + the due date, grace end, what Renew would collect and give, and the full amount, for the warning
+            body: (
+              <ReinstateForm
+                loanId={loan.id}
+                interestOwed={interest}
+                damagesOwed={damages}
+                dueDate={loan.maturity_date}
+                graceEnd={damagesFrom}
+                principalLeft={principal}
+                renewDue={renew.newMaturity}
+                owedTotal={owed}
+              />
+            ),
           },
         ]
       : []),
@@ -266,7 +280,17 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
           {canTransact ? "Nothing is owed. Use Redeem in Loan actions to release the item to the customer and close the loan." : "Nothing is owed. A Cashier or Admin releases the item with Redeem."}
         </Alert>
       )}
-      {overdue && (
+      {/* RW2 (Nov 14): a Reinstated loan past its grace period that still owes money is Defaulted again by the next automatic
+          check (same rule as the database's default check, wouldBeDefaulted). Before: only the "Past due" note showed. */}
+      {redefaultTonight && (
+        <Alert tone="danger" title="Will be Defaulted again at 12:05 AM">
+          This loan was reinstated, but its due date ({formatDate(loan.maturity_date)}) and grace period ({formatDate(damagesFrom)}) have passed. Unless it is{" "}
+          {principal > 0 && renew.collectNow > 0 ? `renewed (collect ${formatPeso(renew.collectNow)}, new due date ${formatDate(renew.newMaturity)}) or ` : ""}paid in full (
+          {formatPeso(owed)}) before the next automatic default check (12:05 AM), it is marked Defaulted again.
+          {Number(loan.liquidated_damages_percent) > 0 && ` Liquidated damages (${loan.liquidated_damages_percent}% of the unpaid principal) keep being added every ${TERM_DAYS} days.`}
+        </Alert>
+      )}
+      {overdue && !redefaultTonight && (
         <Alert tone="warning" title="Past due">
           Matured {formatDate(loan.maturity_date)}. Interest keeps accruing every {TERM_DAYS} days until it is paid, renewed or capitalized.
           {/* LD (0073) */}
@@ -381,7 +405,10 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
                     {payments.some((p) => Number(p.damages_portion) > 0) && <TH align="right">Damages</TH>}
                     <TH align="right">Interest</TH>
                     <TH align="right">Principal</TH>
-                    <TH>
+                    {/* RW5 (Nov 14): "relative" keeps the screen-reader-only "Actions" label inside the table's sideways scroll box. Before, the
+                        hidden label (position: absolute) was measured against the whole page, so on a 390px phone the page became 553px
+                        wide and could be dragged sideways. Same fix as the Compliance report's table. Screen readers still read "Actions". */}
+                    <TH className="relative">
                       <span className="sr-only">Actions</span>
                     </TH>
                   </THead>

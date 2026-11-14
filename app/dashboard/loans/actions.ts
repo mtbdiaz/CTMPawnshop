@@ -269,7 +269,7 @@ export async function checkDefaultsNow(_prev: DefaultCheckState, formData: FormD
   if (readError) return { error: friendlyError("check the loans", readError) };
 
   // L30: nothing to do -> don't call the database at all
-  if (candidates.length === 0) return { success: true, message: "Nothing to change. No active or renewed loan that still owes money is past its grace period." };
+  if (candidates.length === 0) return { success: true, message: "Nothing to change. No active, renewed or reinstated loan that still owes money is past its grace period." /* RW4: + reinstated */ };
   // L30: the Admin confirmed the list shown on the page. If it changed since (a payment, a renewal, a new day),
   // stop, so nothing is defaulted that the Admin didn't see.
   if (String(formData.get("expected") ?? "") !== candidateKey(candidates)) {
