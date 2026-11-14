@@ -25,6 +25,8 @@ export function NewLoanFlow({
   prices,
   ltvPercent,
   interestRatePercent,
+  graceDays,
+  damagesPercent,
   initialCustomer = null,
   initialItemId,
   vaults,
@@ -33,6 +35,8 @@ export function NewLoanFlow({
   prices: KaratPrices;
   ltvPercent: number;
   interestRatePercent: number;
+  graceDays: number; // LDU4: Settings, the grace days after the due date (fixed on the loan when it is created)
+  damagesPercent: number; // LDU4: Settings, liquidated damages % per 30 days after the grace days (fixed on the loan when it is created)
   initialCustomer?: CustomerHit | null;
   initialItemId?: string;
   vaults: string[]; // #37: the active vault locations, from the database list
@@ -432,6 +436,15 @@ export function NewLoanFlow({
                   : fromDb
                     ? "Worked out by the database for this amount. The final terms are set when the loan is created."
                     : "Estimate. Checking with the database."}
+              </p>
+            )}
+            {/* LDU4 (Nov 14): what happens if the customer is late (liquidated damages, 0073), with today's Settings values so
+                the Cashier can explain it at the counter. One short line, under the summary */}
+            {damagesPercent > 0 && (
+              <p className="-mt-2 text-xs text-slate-600">
+                <span className="font-medium text-slate-700">If late:</span> if not paid or renewed by {formatDate(addDaysIso(due, graceDays))} (the
+                due date + {graceDays} grace day{graceDays === 1 ? "" : "s"}), liquidated damages of {damagesPercent}% of the unpaid principal are
+                added for every {TERM_DAYS} days. Any part of {TERM_DAYS} days counts as a full {TERM_DAYS} days.
               </p>
             )}
             {blocked && <Alert tone="danger">This customer is blacklisted. A loan cannot be issued.</Alert>}
