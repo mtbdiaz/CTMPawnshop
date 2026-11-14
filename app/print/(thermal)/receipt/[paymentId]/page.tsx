@@ -1,12 +1,21 @@
 import { notFound } from "next/navigation";
+import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatDateTime, formatPeso } from "@/lib/format";
 import { SlipHeader, SlipRow, SlipRule } from "../../slip";
 
 export const metadata = { title: "Receipt" };
 
+// RA1 (Nov 14): only a Cashier or an Admin (admin always passes) prints an official receipt. The check is here in the
+// page itself, not only in the print layout, because a layout and its page load at the same time.
+// Before: any signed-in role could open a receipt by its link (the print layout let all four roles in).
+// Operator: not allowed until the team confirms they need it. Signed out: sent to the login page.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function ReceiptPrint({ params }: { params: Promise<{ paymentId: string }> }) {
+  await requireRole(["cashier"]);
   const { paymentId } = await params;
+  if (!UUID.test(paymentId)) notFound(); // RA2: a made-up or broken link -> "not found", without asking the database
   const supabase = await createClient();
   const { data: payment } = await supabase
     .from("loan_payments")
