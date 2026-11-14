@@ -33,6 +33,9 @@ export const RECORD_TYPES: [string, string, string][] = [
   ["reminder_log", "Reminder", "Reminders"],
   ["profiles", "Staff account", "Staff accounts"],
   ["system_settings", "Shop settings", "Shop settings"],
+  // VL6 (Nov 15): Settings → Vault locations (adding, switching on or off). Before: not in the Record type list, so
+  // these entries could only be found under All records
+  ["vault_locations", "Vault location", "Vault locations"],
 ];
 const ONE = new Map(RECORD_TYPES.map(([t, one]) => [t, one]));
 export const recordName = (table: string) => ONE.get(table) ?? humanize(table);
@@ -262,6 +265,8 @@ export function recordRef(e: AuditEvent, lk: RefLookups): { main: string; sub: s
       return { main: str(r.full_name), sub: r.role ? humanize(str(r.role)) : "" };
     case "system_settings":
       return { main: "Shop settings", sub: "" };
+    case "vault_locations": // VL6: the location's own name (it can't be renamed, so it is the same in every entry)
+      return { main: str(r.name), sub: "" };
     default:
       return { main: "", sub: "" };
   }

@@ -8,8 +8,10 @@ import { requireRole } from "@/lib/auth/require-role";
 import { allowRequest, TOO_MANY } from "@/lib/rate-limit"; // #22: rate limiting
 import { z } from "zod";
 import { businessRulesSchema } from "@/lib/validation/settings";
+import { cleanLocationName, itemsLabel, IN_SHOP_STATUSES } from "@/lib/settings/vault-locations"; // VL (Nov 15)
 
-export type SettingsFormState = { error?: string; fieldErrors?: FieldErrors; success?: boolean };
+// message (VL, Nov 15): the success text worked out on the server (e.g. how many items are still recorded there)
+export type SettingsFormState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; message?: string };
 
 export async function updateBusinessRules(
   _prevState: SettingsFormState,
@@ -66,8 +68,10 @@ export async function updateBusinessRules(
 // ---- #37: the vault location list (migration 0038). New loans can only use a location that is switched on here.
 
 // 2 to 40 characters, and spaces at the ends are cut off (the database has the same rule)
+// VL8 (Nov 15): repeated spaces inside are made single too ("Vault  C" -> "Vault C"), so the unique rule (capitals
+// don't matter) also catches a name typed with an extra space. Before: "Vault  C" and "Vault C" were two places.
 const vaultNameSchema = z.object({
-  name: z.string().trim().min(2, "Use at least 2 characters").max(40, "Use 40 characters or fewer"),
+  name: z.string().transform(cleanLocationName).pipe(z.string().min(2, "Use at least 2 characters").max(40, "Use 40 characters or fewer")),
 });
 
 // Admin adds a location, e.g. "Vault C". The same name in other capitals ("vault c") counts as the same place.
@@ -85,7 +89,7 @@ export async function addVaultLocation(_prev: SettingsFormState, formData: FormD
 
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard/loans/new"); // the New Loan list shows it right away
-  return { success: true };
+  return { success: true, message: `${parsed.data.name} added. It is now on the New Loan list.` };
 }
 
 // Admin switches a location on or off. Off = not offered for new loans; items already stored there keep the name.
@@ -98,15 +102,33 @@ export async function setVaultLocationActive(_prev: SettingsFormState, formData:
   if (!/^[0-9a-f-]{36}$/i.test(id)) return { error: "Location not found. Reload the page." };
 
   const supabase = await createClient();
+  // VL2 (Nov 15): check the location as it is NOW, not as the page showed it. Before: a second click from an old tab
+  // (or another Admin) just saved again without saying the location had already been changed.
+  const { data: now } = await supabase.from("vault_locations").select("name, is_active").eq("id", id).maybeSingle();
+  if (!now) return { error: "Location not found. Reload the page." };
+  if (now.is_active === makeActive) {
+    return { error: `${now.name} is already switched ${makeActive ? "on" : "off"}. Someone changed it after this page was opened. Reload the page to see the current list.` };
+  }
   if (!makeActive) {
     // don't switch off the last one: New Loan would have nothing to choose and no loan could be made
     const { count } = await supabase.from("vault_locations").select("id", { count: "exact", head: true }).eq("is_active", true).neq("id", id);
     if (!count) return { error: "This is the only location that is switched on. Add or switch on another one first." };
   }
-  const { error } = await supabase.from("vault_locations").update({ is_active: makeActive }).eq("id", id);
+  // only changes the row if it is still in the state checked above (two Admins at the same moment: one wins, the other is told)
+  const { data: changed, error } = await supabase.from("vault_locations").update({ is_active: makeActive }).eq("id", id).eq("is_active", !makeActive).select("id");
   if (error) return { error: "Couldn't change the location, so nothing was changed. Try again." };
+  if (!changed?.length) return { error: `${now.name} was changed by someone else just now. Reload the page to see the current list.` };
 
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard/loans/new");
-  return { success: true };
+  if (makeActive) return { success: true, message: `${now.name} switched on. It is offered for new loans again.` };
+  // VL2: counted again after saving (the number in the popup was from when the page was opened). Exact count in the
+  // database (no 1,000-row limit); capitals don't matter, like the list. Nothing is moved.
+  const { count: stored } = await supabase
+    .from("inventory_items")
+    .select("id", { count: "exact", head: true })
+    .is("archived_at", null)
+    .in("status", [...IN_SHOP_STATUSES])
+    .ilike("vault_location", now.name.replace(/[\\%_]/g, (c) => `\\${c}`));
+  return { success: true, message: `${now.name} switched off. ${itemsLabel(stored ?? 0)} still recorded there, unchanged.` };
 }

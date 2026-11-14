@@ -6,7 +6,9 @@ import { SettingsForm } from "./settings-form";
 import { listAccounts } from "../users/actions";
 import { CreateAccountForm } from "../users/create-account-form";
 import { AccountRow } from "../users/account-row";
-import { AddVaultLocationForm, VaultLocationRow, type VaultRow } from "./vault-locations"; // #37
+import Link from "next/link";
+import { AddVaultLocationForm, OtherLocations, VaultLocationCard, VaultLocationRow, type OtherLocationRow, type VaultRow } from "./vault-locations"; // #37
+import { countByLocation, inventoryTabFor, itemsLabel, locationKey, readItemsInShop } from "@/lib/settings/vault-locations"; // VL (Nov 15)
 
 export const metadata = { title: "Settings" };
 
@@ -51,49 +53,115 @@ async function RatesTab() {
 }
 
 // #37: the list of vault locations a new loan may use (migration 0038)
+// VL (Nov 15, Phase 2): accurate counts (VL4), the other names items are still recorded under (VL3), phone cards
+// (VL5), the item count in the Switch off popup (VL2) and where changes are recorded (VL6). Read only: opening this tab
+// changes nothing.
 async function VaultsTab() {
   const supabase = await createClient();
-  const [{ data: locations, error }, { data: stored }] = await Promise.all([
+  const [{ data: locations, error }, items, { data: history }] = await Promise.all([
     supabase.from("vault_locations").select("id, name, is_active").order("name"),
-    // items that are in the vault right now (pawned, renewed, or forfeited and waiting to be sold)
-    supabase.from("inventory_items").select("vault_location").in("status", ["pawned", "extended", "forfeited", "queued_for_auction"]).limit(5000),
+    // VL4: every item in the shop (same rule as Inventory: pawned, renewed, forfeited, queued; not archived), read
+    // 1,000 at a time. Before: one request, which the database cuts at 1,000 rows
+    readItemsInShop(supabase),
+    // VL6: how many changes to vault locations the audit trail has (Admins only, the same function as the Audit trail)
+    supabase.rpc("audit_log_page", { p_table: "vault_locations", p_page: 1, p_size: 1 }),
   ]);
   if (error) throw error;
-  // count the stored items per location name (capitals don't matter)
-  const counts = new Map<string, number>();
-  for (const i of stored ?? []) {
-    const key = (i.vault_location ?? "").trim().toLowerCase();
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  const rows: VaultRow[] = (locations ?? []).map((l) => ({ ...l, stored: counts.get(l.name.toLowerCase()) ?? 0 }));
+  const counts = countByLocation(items, (locations ?? []).map((l) => l.name));
+  const rows: VaultRow[] = (locations ?? []).map((l) => ({ ...l, stored: counts.listed.get(locationKey(l.name)) ?? 0 }));
   const on = rows.filter((r) => r.is_active).length;
+  const changes = Number((history as { total?: number } | null)?.total ?? 0);
+  // VL3: each other name opens Inventory filtered to exactly that name, on the tab that shows its items
+  const others: OtherLocationRow[] = counts.others.map((o) => ({
+    name: o.name,
+    count: o.count,
+    href: `/dashboard/inventory?${new URLSearchParams({ status: inventoryTabFor(o.statuses), loc: o.name }).toString()}`,
+  }));
+
   return (
     <div className="space-y-5">
+      {/* VL: a short summary of what is in the shop and where (counted like the Inventory tabs) */}
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Summary label="Locations switched on" value={`${on} of ${rows.length}`} hint="Offered for new loans" />
+        <Summary label="Items in listed locations" value={counts.listedTotal.toLocaleString("en-PH")} hint={`of ${itemsLabel(counts.total)} in the shop`} />
+        <Summary label="Items under other names" value={counts.otherTotal.toLocaleString("en-PH")} hint={counts.otherTotal ? "Older names, listed below" : "None"} warn={counts.otherTotal > 0} />
+      </dl>
+
       <Card>
         <SectionTitle description="New loans can only be stored in a location on this list.">Add a location</SectionTitle>
         <AddVaultLocationForm />
       </Card>
+
       <section>
         <SectionTitle description={`${on} switched on of ${rows.length}`}>Locations</SectionTitle>
         <Card padded={false}>
-          <Table minWidth="560px">
-            <THead>
-              <TH>Name</TH>
-              <TH>New loans</TH>
-              <TH align="right">Items stored now</TH>
-              <TH align="right">Change</TH>
-            </THead>
-            <TBody>
-              {rows.map((row) => (
-                <VaultLocationRow key={row.id} row={row} />
-              ))}
-            </TBody>
-          </Table>
+          {/* tablets and computers: the table (same as before) */}
+          <div className="hidden sm:block">
+            <Table minWidth="560px">
+              <THead>
+                <TH>Name</TH>
+                <TH>New loans</TH>
+                <TH align="right">Items stored now</TH>
+                <TH align="right">Change</TH>
+              </THead>
+              <TBody>
+                {rows.map((row) => (
+                  <VaultLocationRow key={row.id} row={row} />
+                ))}
+              </TBody>
+            </Table>
+          </div>
+          {/* VL5: phones: one compact card per location, everything visible without sideways scrolling */}
+          <ul className="divide-y divide-slate-100 sm:hidden">
+            {rows.map((row) => (
+              <VaultLocationCard key={row.id} row={row} />
+            ))}
+          </ul>
         </Card>
         <p className="mt-2 text-xs text-slate-500">
-          A location can be switched off but not deleted or renamed, so older records always show a name that is still on this list.
+          A location can be switched off but not deleted or renamed, so older records always show a name that is still on this list. Items stored
+          now = items in the shop (in vault, forfeited or queued for auction), the same as the Inventory tabs.
         </p>
       </section>
+
+      {/* VL3: read only. Shown only when some items are still recorded under a name that isn't on the list */}
+      {others.length > 0 && (
+        <section>
+          <SectionTitle
+            description={`${itemsLabel(counts.otherTotal)} in the shop ${counts.otherTotal === 1 ? "is" : "are"} recorded under ${others.length === 1 ? "a location name" : "location names"} that ${others.length === 1 ? "isn't" : "aren't"} on the list above (typed before the list existed). Nothing was changed or merged. Keep them visible until their physical places are checked; items can't be moved to another location in the app yet.`}
+          >
+            Other recorded locations
+          </SectionTitle>
+          <Card padded={false}>
+            <OtherLocations rows={others} total={counts.otherTotal} />
+          </Card>
+        </section>
+      )}
+
+      {/* VL6: where changes are recorded. The link only shows when there is something to see (no made-up history) */}
+      <p className="text-xs text-slate-600">
+        {changes > 0 ? (
+          <>
+            {`${changes.toLocaleString("en-PH")} ${changes === 1 ? "change" : "changes"} to vault locations recorded · `}
+            <Link href="/dashboard/reports?tab=audit&table=vault_locations" className="font-medium text-navy-700 underline underline-offset-2 hover:text-navy-900">
+              See change history
+            </Link>
+          </>
+        ) : (
+          "No changes to vault locations recorded yet. Adding a location or switching one on or off is recorded in the Audit trail, with who did it and when."
+        )}
+      </p>
+    </div>
+  );
+}
+
+// one small summary box (the same look as the report summaries)
+function Summary({ label, value, hint, warn = false }: { label: string; value: string; hint: string; warn?: boolean }) {
+  return (
+    <div className={`rounded-md border bg-white px-4 py-3 ${warn ? "border-amber-200" : "border-slate-200"}`}>
+      <dt className="text-xs font-medium text-slate-600">{label}</dt>
+      <dd className="mt-0.5 font-display text-xl font-semibold tabular-nums text-navy-900">{value}</dd>
+      <dd className="text-xs text-slate-500">{hint}</dd>
     </div>
   );
 }
