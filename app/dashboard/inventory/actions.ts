@@ -305,3 +305,38 @@ export async function reviewDiscrepancy(_prevState: ActionState, formData: FormD
   revalidatePath("/dashboard/inventory/audit");
   return { success: true, id: outcome }; // the popup uses the outcome for its message
 }
+
+// ---------- Move an item to another vault location (VL1, migration 0075) ----------
+// Before: an item's location was typed once when the loan was made and could never be changed in the app (the 8 items
+// under old names like "123" or "Vault A - Shelf 2" stayed there for ever).
+// Now: an Operator or Admin picks a location from the list (switched on) and writes why. The database checks everything
+// again: the role, that the item is in the shop, that nobody moved it since the page was opened, the destination, the
+// reason, and that the item is not in an open Physical audit. The move is saved with who, when, from, to and why.
+export async function moveItem(_prevState: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["operator", "admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
+  const item = String(formData.get("item_id") ?? "");
+  const to = String(formData.get("to") ?? "").trim();
+  const reason = String(formData.get("reason") ?? "").trim();
+  const expectedFrom = String(formData.get("expected_from") ?? ""); // the location the popup showed (kept exactly)
+  const requestId = String(formData.get("request_id") ?? ""); // the same Move pressed twice = one move
+  if (!UUID.test(item)) return { error: "This item could not be found. Reload the page." };
+  if (!to || to.length > 40) return { fieldErrors: { to: "Choose the location the item is moved to." } };
+  if (reason.length < 5) return { fieldErrors: { reason: "Write why the item is moved (at least 5 characters)." } };
+  if (reason.length > 300) return { fieldErrors: { reason: "Keep the reason to 300 characters or less." } };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("move_inventory_item", {
+    p_item: item,
+    p_to: to,
+    p_reason: reason,
+    p_expected_from: expectedFrom,
+    p_request_id: UUID.test(requestId) ? requestId : undefined,
+  });
+  // e.g. "This item is in an open Physical audit (c574a807). Submit or discard that audit first, then move the item."
+  if (error) return { error: error.message || "Could not move the item." };
+
+  revalidatePath("/dashboard/inventory");
+  revalidatePath("/dashboard/settings"); // the item counts on Settings → Vault locations
+  return { success: true };
+}

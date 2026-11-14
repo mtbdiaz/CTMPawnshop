@@ -79,6 +79,18 @@ describe("record references", () => {
     expect(recordRef(ev({ table_name: "auction_batches", record_id: BATCH, changed_data: { notes: "" } }), lk).main).toBe("AB-0007");
     expect(recordRef(ev({ table_name: "cash_flow_entries", record_id: "x", action: "INSERT", changed_data: { related_loan_id: null } }), lk)).toEqual({ main: "", sub: "Not linked to a loan" });
   });
+  it("shows an item move as the item, from where to where, and why (VL1)", () => {
+    const move = ev({
+      table_name: "inventory_location_moves",
+      record_id: "m",
+      action: "INSERT",
+      changed_data: { inventory_item_id: ITEM, from_location: "123", to_location: "Vault A", reason: "Found in Vault A during the count" },
+    });
+    expect(eventTitle(move)).toBe("Item moved");
+    expect(eventSummary(move)).toBe("123 → Vault A");
+    expect(eventReason(move)).toBe("Found in Vault A during the count");
+    expect(recordRef(move, lk)).toEqual({ main: "A-0036", sub: "123 → Vault A" });
+  });
   it("collects only real record IDs to look up", () => {
     const ids = refIds([
       ev({ changed_data: { customer_id: CUST, appraisal_item_id: APPR } }),

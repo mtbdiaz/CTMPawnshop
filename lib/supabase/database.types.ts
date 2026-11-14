@@ -588,6 +588,57 @@ export type Database = {
           },
         ]
       }
+      inventory_location_moves: {
+        Row: {
+          from_location: string
+          id: string
+          inventory_item_id: string
+          is_demo: boolean
+          moved_at: string
+          moved_by: string
+          reason: string
+          request_id: string | null
+          to_location: string
+        }
+        Insert: {
+          from_location: string
+          id?: string
+          inventory_item_id: string
+          is_demo?: boolean
+          moved_at?: string
+          moved_by: string
+          reason: string
+          request_id?: string | null
+          to_location: string
+        }
+        Update: {
+          from_location?: string
+          id?: string
+          inventory_item_id?: string
+          is_demo?: boolean
+          moved_at?: string
+          moved_by?: string
+          reason?: string
+          request_id?: string | null
+          to_location?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_location_moves_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_location_moves_moved_by_fkey"
+            columns: ["moved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_status_history: {
         Row: {
           changed_at: string
@@ -1772,6 +1823,10 @@ export type Database = {
         }[]
       }
       mark_auction_unsold: { Args: { p_item_id: string; p_reason: string }; Returns: undefined }
+      move_inventory_item: {
+        Args: { p_expected_from: string; p_item: string; p_reason: string; p_request_id?: string; p_to: string }
+        Returns: Json
+      }
       record_auction_sale: {
         Args: {
           p_buyer?: string

@@ -128,7 +128,7 @@ async function VaultsTab() {
       {others.length > 0 && (
         <section>
           <SectionTitle
-            description={`${itemsLabel(counts.otherTotal)} in the shop ${counts.otherTotal === 1 ? "is" : "are"} recorded under ${others.length === 1 ? "a location name" : "location names"} that ${others.length === 1 ? "isn't" : "aren't"} on the list above (typed before the list existed). Nothing was changed or merged. Keep them visible until their physical places are checked; items can't be moved to another location in the app yet.`}
+            description={`${itemsLabel(counts.otherTotal)} in the shop ${counts.otherTotal === 1 ? "is" : "are"} recorded under ${others.length === 1 ? "a location name" : "location names"} that ${others.length === 1 ? "isn't" : "aren't"} on the list above (typed before the list existed). Nothing was changed or merged. Once an item's real place is checked, an Operator or Admin can record it there with Move on the Inventory page.`}
           >
             Other recorded locations
           </SectionTitle>
