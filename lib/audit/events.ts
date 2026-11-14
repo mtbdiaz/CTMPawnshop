@@ -36,6 +36,8 @@ export const RECORD_TYPES: [string, string, string][] = [
   // VL6 (Nov 15): Settings → Vault locations (adding, switching on or off). Before: not in the Record type list, so
   // these entries could only be found under All records
   ["vault_locations", "Vault location", "Vault locations"],
+  // VL1 (Nov 15, 0075): an item moved to another location (Inventory → Move)
+  ["inventory_location_moves", "Item move", "Item moves"],
 ];
 const ONE = new Map(RECORD_TYPES.map(([t, one]) => [t, one]));
 export const recordName = (table: string) => ONE.get(table) ?? humanize(table);
@@ -104,6 +106,7 @@ export function eventTitle(e: AuditEvent): string {
     if (e.table_name === "inventory_status_history") return "Inventory status recorded";
     if (e.table_name === "cash_flow_entries") return "Cash entry recorded";
     if (e.table_name === "customers") return "Customer registered";
+    if (e.table_name === "inventory_location_moves") return "Item moved"; // VL1
     return `${name} created`;
   }
   if (e.action === "DELETE") return `${name} deleted`;
@@ -141,6 +144,8 @@ export function eventSummary(e: AuditEvent, names?: Map<string, string>): string
       return `${r.old_status ? statusWord(e.table_name, r.old_status) : "New item"} → ${statusWord(e.table_name, r.new_status)}`;
     case "inventory_items":
       return r.vault_location ? `Received into ${str(r.vault_location)}` : "Received";
+    case "inventory_location_moves": // VL1: from where to where
+      return `${str(r.from_location) || "(no name)"} → ${str(r.to_location)}`;
     case "appraisal_items":
       return [r.karat ? `${r.karat}K` : "", r.weight_grams ? `${r.weight_grams} g` : "", r.computed_value != null ? `value ${formatPeso(Number(r.computed_value))}` : ""].filter(Boolean).join(" · ") || "New appraisal";
     case "suspicious_activity_flags":
@@ -166,6 +171,7 @@ export function eventReason(e: AuditEvent): string {
   if (edit) return edit.reason;
   const r = rowOf(e);
   if (e.action === "VIEW") return str(r.reason);
+  if (e.action === "INSERT" && e.table_name === "inventory_location_moves") return str(r.reason); // VL1: why it was moved
   if (e.action === "UPDATE" && r.archived_at && !rowOfBefore(e).archived_at) return str(r.archive_reason);
   return "";
 }
@@ -265,6 +271,8 @@ export function recordRef(e: AuditEvent, lk: RefLookups): { main: string; sub: s
       return { main: str(r.full_name), sub: r.role ? humanize(str(r.role)) : "" };
     case "system_settings":
       return { main: "Shop settings", sub: "" };
+    case "inventory_location_moves": // VL1: the item, and where it went
+      return { main: appraisalOfItem(r.inventory_item_id), sub: `${str(r.from_location)} → ${str(r.to_location)}` };
     case "vault_locations": // VL6: the location's own name (it can't be renamed, so it is the same in every entry)
       return { main: str(r.name), sub: "" };
     default:

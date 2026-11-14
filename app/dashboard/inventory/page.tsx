@@ -29,6 +29,8 @@ import { NavSelect } from "@/components/nav-select"; // D2: the same dropdown as
 import { situationBadge, stateBadge } from "@/lib/loans/display"; // the same loan badges as the Loans page
 import { CHANGE_WORDS, CUSTODY, daysHeld, historySummary, manilaDateOf, parseInventorySearch, type InventoryStatus } from "@/lib/inventory/custody"; // V1
 import { InventorySearch } from "./inventory-search";
+import { MoveItemButton } from "./move-item"; // VL1: move an item to another location (0075)
+import { IN_SHOP_STATUSES } from "@/lib/settings/vault-locations";
 
 export const metadata = { title: "Inventory" };
 
@@ -219,6 +221,33 @@ export default async function InventoryPage({
     for (const i of items) historyById.set(i.id, historySummary(grouped.get(i.id) ?? [], i.status));
   }
 
+  // VL1 (Nov 15, 0075): the last move of each item on this page (shown under the location), and for Operators and
+  // Admins the switched-on locations to move to and the open Physical audits that list these items (those can't move)
+  const lastMove = new Map<string, { from_location: string; moved_at: string }>();
+  const openAuditOf = new Map<string, string>(); // item id -> open audit id
+  let activeLocations: string[] = [];
+  if (items.length) {
+    const ids = items.map((i) => i.id);
+    const [{ data: moves }, locs, lines] = await Promise.all([
+      supabase.from("inventory_location_moves").select("inventory_item_id, from_location, moved_at").in("inventory_item_id", ids).order("moved_at", { ascending: false }),
+      isOperator ? supabase.from("vault_locations").select("name").eq("is_active", true).order("name") : Promise.resolve({ data: [] as { name: string }[] }),
+      isOperator
+        ? supabase
+            .from("physical_inventory_audit_items")
+            .select("inventory_item_id, audit_id, physical_inventory_audits!inner(status, archived_at, started_at)")
+            .in("inventory_item_id", ids)
+            .eq("physical_inventory_audits.status", "in_progress")
+            .is("physical_inventory_audits.archived_at", null)
+        : Promise.resolve({ data: [] as { inventory_item_id: string; audit_id: string; physical_inventory_audits: { started_at: string } | null }[] }),
+    ]);
+    for (const m of moves ?? []) if (!lastMove.has(m.inventory_item_id)) lastMove.set(m.inventory_item_id, m); // newest first
+    activeLocations = (locs.data ?? []).map((l) => l.name).sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+    // the oldest open audit, the same one the database names when it refuses
+    const sortedLines = [...(lines.data ?? [])].sort((a, b) => String(a.physical_inventory_audits?.started_at).localeCompare(String(b.physical_inventory_audits?.started_at)));
+    for (const l of sortedLines) if (!openAuditOf.has(l.inventory_item_id)) openAuditOf.set(l.inventory_item_id, l.audit_id);
+  }
+  const canMove = (i: Row) => isOperator && (IN_SHOP_STATUSES as readonly string[]).includes(i.status);
+
   // pieces used by both the table (computers) and the cards (phones)
   const linkClass = "rounded-sm underline-offset-2 hover:text-navy-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500";
   const itemCell = (i: Row) =>
@@ -276,6 +305,19 @@ export default async function InventoryPage({
       </>
     );
   };
+  // VL1: the location, and "Moved Nov 15 from 123" under it when the item was moved (from the move history)
+  const movedLine = (i: Row) => {
+    const m = lastMove.get(i.id);
+    return m ? (
+      <span className="block whitespace-nowrap text-xs font-normal text-slate-500">
+        Moved {formatDate(manilaDateOf(m.moved_at))} from {m.from_location || "(no name)"}
+      </span>
+    ) : null;
+  };
+  const itemWords = (i: Row) =>
+    i.appraisal_items ? `${categoryLabel(i.appraisal_items.category, i.appraisal_items.category_other)}, ${i.appraisal_items.karat}K, ${i.appraisal_items.weight_grams} g` : "this item";
+  const moveButton = (i: Row) =>
+    canMove(i) ? <MoveItemButton target={{ id: i.id, from: i.vault_location, item: itemWords(i), openAudit: openAuditOf.get(i.id) ?? null }} locations={activeLocations} /> : null;
   const received = (i: Row) => formatDate(manilaDateOf(i.created_at)); // the Manila day the item came in
   const held = (i: Row) => {
     // released or sold items stop counting on the day they left the shop (#43)
@@ -360,6 +402,7 @@ export default async function InventoryPage({
                     <div className="shrink-0 text-right">
                       <span className="block text-xs text-slate-500">Vault location</span>
                       <span className="font-semibold text-navy-900">{i.vault_location}</span>
+                      {movedLine(i)}
                     </div>
                   </div>
                   {/* line 2: custody and the loan */}
@@ -372,7 +415,10 @@ export default async function InventoryPage({
                     <span>
                       Received {received(i)} · <span className="text-slate-900">{held(i)}</span> days held
                     </span>
-                    {i.loans?.[0] && <ViewButton href={`/dashboard/loans/${i.loans[0].id}`}>View loan</ViewButton>}
+                    <span className="flex shrink-0 items-center gap-2">
+                      {moveButton(i)}
+                      {i.loans?.[0] && <ViewButton href={`/dashboard/loans/${i.loans[0].id}`}>View loan</ViewButton>}
+                    </span>
                   </div>
                 </li>
               ))}
@@ -396,14 +442,22 @@ export default async function InventoryPage({
                 <TBody>
                   {items.map((i) => (
                     <TR key={i.id}>
-                      <TD className="whitespace-nowrap font-medium">{i.vault_location}</TD>
+                      <TD className="whitespace-nowrap font-medium">
+                        {i.vault_location}
+                        {movedLine(i)}
+                      </TD>
                       <TD>{itemCell(i)}</TD>
                       <TD>{pawner(i)}</TD>
                       <TD>{loanCell(i)}</TD>
                       <TD>{custodyCell(i)}</TD>
                       <TD className="whitespace-nowrap">{received(i)}</TD>
                       <TD align="right">{held(i)}</TD>
-                      <TD align="right">{i.loans?.[0] && <ViewButton href={`/dashboard/loans/${i.loans[0].id}`}>View loan</ViewButton>}</TD>
+                      <TD align="right">
+                        <span className="inline-flex items-center gap-2">
+                          {moveButton(i)}
+                          {i.loans?.[0] && <ViewButton href={`/dashboard/loans/${i.loans[0].id}`}>View loan</ViewButton>}
+                        </span>
+                      </TD>
                     </TR>
                   ))}
                 </TBody>
@@ -440,6 +494,14 @@ export default async function InventoryPage({
               <dd>
                 Received is the day the item came in (the day the loan was made). Days held counts calendar days from then; for a released item it stops
                 on the release day. Renewing doesn&apos;t restart it. The small date under Custody is when the item got its current status (e.g. Renewed Oct 12).
+              </dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-slate-800">Moving an item</dt>
+              <dd>
+                Operators and Admins can press Move on an item still in the shop to record it in another switched-on location, with a reason. The
+                move is kept (&quot;Moved Nov 15 from 123&quot; under the location) and shows in the Audit trail. An item in an open Physical audit
+                can&apos;t be moved until that audit is submitted or discarded.
               </dd>
             </div>
           </dl>
