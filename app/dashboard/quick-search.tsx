@@ -237,7 +237,15 @@ export function QuickSearch() {
                               <span className="min-w-0">
                                 {/* break-all on phones so long ticket numbers wrap; one line (truncate) on bigger screens */}
                                 <span className={cx("block break-all text-sm font-medium text-slate-900 sm:truncate", (g.key === "loans" || g.key === "payments") && "font-mono")}>{h.title}</span>
-                                <span className="block text-xs text-slate-500 sm:truncate">{h.subtitle}</span>
+                                {/* QS1: one line on bigger screens; the full text shows when you hover (long customer names) */}
+                                {h.subtitle && (
+                                  <span className="block text-xs text-slate-500 sm:truncate" title={h.subtitle}>
+                                    {h.subtitle}
+                                  </span>
+                                )}
+                                {/* QS1 (Page 11): loans only. Amount owed + full due date, never cut off (it wraps if it has to).
+                                    Before, they were at the end of the line above and the year got cut off at 1366px. */}
+                                {h.detail && <span className="block text-xs tabular-nums text-slate-700">{h.detail}</span>}
                               </span>
                               {/* right: status badge (words, not just colour) + what opening it does */}
                               <span className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end sm:gap-1">

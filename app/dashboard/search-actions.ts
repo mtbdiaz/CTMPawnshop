@@ -23,6 +23,8 @@ export type SearchHit = {
   id: string; // database id (used as the key)
   title: string; // main text (name, ticket, item, receipt)
   subtitle: string; // small text under it
+  // QS1 (Nov 14, Page 11): optional third line that is never cut off. Loans use it for "₱X owed · due <full date>".
+  detail?: string;
   href: string; // the page that opens when picked
   action: string; // what the row says it will do, e.g. "Review release"
   badge?: { status: string; label: string }; // optional status badge (status picks the colour, label is the word)
@@ -206,7 +208,10 @@ export async function quickSearch(query: string): Promise<SearchResults> {
     return {
       id: l.id,
       title: l.ticket_number,
-      subtitle: `${l.customers?.full_name ?? ""} · ${formatPeso(owed)} owed · due ${formatDate(l.maturity_date)}`,
+      // QS1: before, one line "Name · ₱X owed · due Nov 6, 2026" was cut to one row at 1366px ("due Nov 6, 2…").
+      // Now the name is the second line and the amount + full due date get their own third line.
+      subtitle: l.customers?.full_name ?? "",
+      detail: `${formatPeso(owed)} owed · due ${formatDate(l.maturity_date)}`,
       href: `/dashboard/loans/${l.id}`,
       action: s.action,
       badge: s.badge,
