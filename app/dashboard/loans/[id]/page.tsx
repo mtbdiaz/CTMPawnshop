@@ -397,7 +397,8 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
                         <TD align="right">{formatPeso(p.interest_portion)}</TD>
                         <TD align="right">{formatPeso(p.principal_portion)}</TD>
                         <ActionsCell>
-                          <ViewButton href={`/print/receipt/${p.id}`}>Print receipt</ViewButton>
+                          {/* RA3: only a Cashier or Admin can print a receipt (RA1), so the button is only shown to them */}
+                          {canTransact && <ViewButton href={`/print/receipt/${p.id}`}>Print receipt</ViewButton>}
                           {/* L19: payment corrections moved to Admin actions below (not inside the table row) */}
                         </ActionsCell>
                       </TR>
