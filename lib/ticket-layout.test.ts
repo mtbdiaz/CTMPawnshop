@@ -21,6 +21,27 @@ describe("pawn ticket layout", () => {
       expect(text).toContain(phrase);
     }
   });
+  // Nov 14, 2026 (Matt's review): corrections to the owner's printed wording, made in scripts/extract-ticket-layout.py
+  it("spells Thumbmark on both signature lines", () => {
+    const text = TICKET_WORDS.map((w) => w.t);
+    expect(text.filter((t) => t === "Thumbmark)")).toHaveLength(2);
+    expect(text).not.toContain("Thumbrark)");
+  });
+  it("has no stray %) after the interest blank, and the interest line stays evenly spaced", () => {
+    expect(TICKET_WORDS.some((w) => w.t === "%)")).toBe(false);
+    const blank = TICKET_WORDS.find((w) => w.t === "________%")!; // the interest blank with its % sign
+    const line = TICKET_WORDS.filter((w) => Math.abs(w.y - blank.y) < 1).sort((a, b) => a.x - b.x);
+    const after = line.filter((w) => w.x > blank.x); // P.M./P.A. has pledges to this Pawnee ...
+    expect(after.map((w) => w.t).slice(0, 3)).toEqual(["P.M./P.A.", "has", "pledges"]);
+    const gaps = after.map((w, i) => w.x - (i === 0 ? blank.x + blank.pw : after[i - 1].x + after[i - 1].pw));
+    for (const g of gaps) {
+      expect(g).toBeGreaterThan(3);
+      expect(g).toBeLessThan(9); // no big hole where the stray word was
+    }
+    const last = after[after.length - 1];
+    expect(last.t).toBe("article(s)");
+    expect(last.x + last.pw).toBeCloseTo(578.4, 0); // the right edge of the justified line did not move
+  });
   it("draws the NO box, description box, 4-row table and two signature lines", () => {
     expect(TICKET_RECTS.filter((r) => r.h === 0)).toHaveLength(2);
     expect(TICKET_RECTS.filter((r) => r.h > 0)).toHaveLength(8);
