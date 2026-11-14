@@ -164,6 +164,10 @@ function breakableEmail(email: string) {
   ));
 }
 
+// CP1 (Nov 14): what Owed now means on this page (the same words as the Loans list and the Dashboard)
+const OWED_NOW_HELP =
+  "The total amount the customer currently owes: unpaid principal, interest, and any liquidated damages after the grace period. The actions available depend on the loan's status.";
+
 export default async function CustomerDetailPage({
   params,
   searchParams,
@@ -389,7 +393,13 @@ export default async function CustomerDetailPage({
         <section className="min-w-0" aria-labelledby="loans-title">
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>
-              <h2 id="loans-title" className="text-lg font-semibold text-slate-900">Loans and transactions</h2>
+              {/* CP1 (Nov 14, page check): one "i" next to the heading explains Owed now for every loan card below (the same
+                  button as the Score above and on the Loans list / Dashboard: click, Enter or tap opens it, Esc closes it).
+                  Next to the heading, not inside it, so the heading's name stays "Loans and transactions". */}
+              <div className="flex items-center gap-1.5">
+                <h2 id="loans-title" className="text-lg font-semibold text-slate-900">Loans and transactions</h2>
+                <InfoTip label="Owed now">{OWED_NOW_HELP}</InfoTip>
+              </div>
               <p className="mt-0.5 text-sm text-slate-500">Loans that still owe money first, then the rest, newest first.</p>
             </div>
             {/* PR13: See all, with this customer already filled in on the Loans page */}
@@ -452,7 +462,9 @@ export default async function CustomerDetailPage({
                       </div>
                       {/* C1 + PR9: what's owed today, shown for open AND defaulted loans */}
                       {owes && (
-                        <div className="shrink-0 text-right" title="Unpaid principal + interest (including interest after the due date) + liquidated damages after the grace period, when they apply" /* LC6 (Nov 14): + damages. Before: "Principal left plus interest, including interest after the due date" */>
+                        // CP1: no more hover-only title here (it couldn't be opened with the keyboard or on a phone); the "i" next to
+                        // "Loans and transactions" explains Owed now. Before: title="Unpaid principal + interest (...) + liquidated damages ..."
+                        <div className="shrink-0 text-right">
                           <p className="text-xs text-slate-600">Owed now</p>
                           <p className="text-lg font-semibold leading-tight tabular-nums text-navy-900">{formatPeso(owed)}</p>
                         </div>
