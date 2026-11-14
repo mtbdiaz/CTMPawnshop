@@ -32,16 +32,34 @@ export async function updateBusinessRules(
     return validationFailure(parsed.error);
   }
 
+  // SR6 (Nov 14): save only if nobody saved Settings after this page was opened. Before: the last save always won, so a
+  // second Admin with an older page open could undo a newer change without knowing. Now the row must still have the
+  // "last updated" time the page was opened with; if not, nothing is saved and the Admin is told to reload.
+  const expected = String(formData.get("expected_updated_at") ?? "");
+  if (!expected || Number.isNaN(Date.parse(expected))) {
+    return { error: "This page is out of date. Reload the page (F5) and make your changes again. Nothing was saved." };
+  }
+
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: saved, error } = await supabase
     .from("system_settings")
     .update({ ...parsed.data, gold_price_per_gram: parsed.data.price_24k, updated_by: user.id })
-    .eq("id", 1);
+    .eq("id", 1)
+    .eq("updated_at", expected)
+    .select("id");
 
-  if (error) return { error: error.message };
+  // SR6: a plain message instead of the database's own error text (before: { error: error.message })
+  if (error) return { error: "Couldn't save the changes, so nothing was changed. Check your connection and try again." };
+  if (!saved || saved.length === 0) {
+    return {
+      error:
+        "Another Admin saved Settings after you opened this page, so your changes were not saved. Reload the page (F5) to see the latest values, then make your changes again.",
+    };
+  }
 
   revalidatePath("/dashboard/settings");
   revalidatePath("/dashboard/appraisals");
+  revalidatePath("/dashboard/loans/new"); // SR6: New Loan shows the interest, grace days and liquidated damages % from Settings
   return { success: true };
 }
 
