@@ -1,6 +1,5 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { formatDateTime } from "@/lib/format";
 import { Alert, Card, PageHeader, SectionTitle, Table, TBody, TH, THead } from "@/components/ui";
 import { ViewTabs } from "@/components/view-tabs"; // D2: the shared tab row (no "Viewing" here: each tab is a whole section, not a list)
 import { SettingsForm } from "./settings-form";
@@ -42,12 +41,13 @@ async function RatesTab() {
   if (!settings) {
     return <Alert tone="danger" title="Settings row missing">Re-run the database migrations to restore it.</Alert>;
   }
-  return (
-    <Card>
-      <SettingsForm settings={settings} />
-      <p className="mt-5 border-t border-slate-100 pt-3 text-xs text-slate-500">Last updated {formatDateTime(settings.updated_at)}</p>
-    </Card>
-  );
+  // SR7 (Nov 14): the name of the Admin who saved last, for the "Last updated ... by ..." line under the form
+  const { data: by } = settings.updated_by
+    ? await supabase.from("profiles").select("full_name").eq("id", settings.updated_by).maybeSingle()
+    : { data: null };
+  // Before: the form sat in one Card with "Last updated <time>" under it. Now the form has its own two cards (Gold
+  // pricing, Loan terms & charges) and a save row with the last update, so there is no outer Card.
+  return <SettingsForm settings={settings} updatedByName={by?.full_name ?? null} />;
 }
 
 // #37: the list of vault locations a new loan may use (migration 0038)
