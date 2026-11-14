@@ -296,13 +296,13 @@ The printed ticket reproduces the owner's pre-printed form exactly: half-letter 
 
 - **Built from the PDF itself, not by eye.** `scripts/extract-ticket-layout.py` reads every word, box and line position out of the owner's PDF into `lib/ticket-layout.ts`; the ticket page places them at those exact point positions and fills only the blanks. To change the form, replace the PDF and re-run the script (steps in the script header; `scripts/measure-ticket-spacing.cjs` and `scripts/calibrate-ticket-y.py` re-tune spacing).
 - **Measured match:** horizontal positions within 0.01 pt of the PDF, vertical within about 0.5 pt (Chrome snaps text to 0.75 pt steps), boxes and lines identical. The overlay is saved at `qa/ticket-form/overlay-vs-owner-pdf.png`.
-- **Wording is the PDF's, including "has pledges to this Pawnee"** and the stray "%)" after the interest blank. These look like typos in the template; they were kept because the form had to be exactly the same. Say the word to correct them.
+- **Wording is the PDF's, with two corrections (Nov 14, 2026, Matt's review).** "Thumbrark" is now "Thumbmark", and the stray "%)" after the interest blank is gone (the rest of that line is spaced evenly again). Both are made in `scripts/extract-ticket-layout.py` (`fix_wording`), so regenerating `lib/ticket-layout.ts` from the owner's PDF keeps them. ⚠ Still as the owner printed it, and still to confirm with the shop: "P.M./P.A." (the system always charges per 30 days, so P.M. is what applies) and "has pledges to this Pawnee". The interest is not restated as a yearly figure (60%) on purpose: the printed wording has to match the approved form.
 - **Interest blank:** prints the rate (e.g. 3) in front of the form's own "% P.M./P.A."; the form text is not edited. ⚠ Loans are charged per 30 days, so P.M. is the right choice. Staff can strike out P.A.
 - **Net Proceeds = Principal − Service Charge.** The system pays out the full principal and collects interest at redemption, so Interest shows the first 30-day term but is not deducted. ⚠ Confirm this is how CTM does it.
 - **Service Charge prints 0.00.** The system has no service charge field.
 - **Expiry Date of Redemption Period = due date + the loan's grace period.** ⚠ Confirm.
 - **Amount in words** is generated (TEN THOUSAND PESOS ONLY, or "... AND 50/100"); long amounts, names and addresses shrink to fit their blank.
-- **Reverse side (terms and conditions) is not built.** The PDF has only the front.
+- **Reverse side (terms and conditions) is not built, and the front sends the customer to read it.** ⚠ Needs the approved text from Matt before it can be built: the 2% per month liquidated damages clause (any part of a month counts as a full month, in the system since migration 0073), the grace period, how interest is counted per 30 days, the order payments are applied (damages, interest, principal), redemption, lost ticket and forfeiture. Do not print the new ticket as the final customer document until the back side says what the system does.
 
 ## Backend review fixes (from Wush's "System Fixes for Matt", 2026-11-06)
 
