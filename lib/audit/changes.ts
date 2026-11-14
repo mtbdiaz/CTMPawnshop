@@ -18,7 +18,9 @@ const SKIP = new Set(["updated_at"]);
 // columns that hold money (shown as ₱1,234.00)
 // AT7 (Nov 13): loan_min added (Suggested loan min showed as a plain number next to Suggested loan max in pesos)
 // LD (0073): damages_owed and damages_portion are pesos too (liquidated_damages_percent is not)
-const MONEY = /(amount|balance|principal|interest_owed|damages_owed|damages_portion|computed_value|loan_max|loan_min|price|capitalized)/;
+// AT10 (Nov 14, Page 14): + interest_portion. Before: a payment's popup showed "Interest portion 0" next to
+// "Damages portion ₱30.00" and "Principal portion ₱0.00" (it was the only peso column missing from this list)
+const MONEY = /(amount|balance|principal|interest_owed|interest_portion|damages_owed|damages_portion|computed_value|loan_max|loan_min|price|capitalized)/;
 
 // a database id, e.g. "4b0b7327-6f26-47ab-b2af-7a5dd031b948"
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

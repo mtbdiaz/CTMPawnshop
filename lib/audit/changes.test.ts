@@ -40,6 +40,20 @@ describe("showValue (C10)", () => {
     expect(showValue("karat", 18)).toBe("18");
   });
 
+  // AT10: the three parts of a payment are all pesos, also when a part is zero (the RC-…-785F test payment)
+  it("payment parts: damages, interest and principal portions in pesos, zero too", () => {
+    expect(showValue("amount", 30)).toBe("₱30.00");
+    expect(showValue("damages_portion", 30)).toBe("₱30.00");
+    expect(showValue("interest_portion", 0)).toBe("₱0.00");
+    expect(showValue("interest_portion", 1575.5)).toBe("₱1,575.50");
+    expect(showValue("interest_portion", "787.50")).toBe("₱787.50");
+    expect(showValue("principal_portion", 0)).toBe("₱0.00");
+    // percents and counts stay plain numbers
+    expect(showValue("interest_rate_percent", 5)).toBe("5");
+    expect(showValue("liquidated_damages_percent", 2)).toBe("2");
+    expect(showValue("grace_period_days", 7)).toBe("7");
+  });
+
   it("staff ids show as names; other ids are shortened", () => {
     const names = new Map([["4e174465-c7c2-4bc0-9b70-8285685493d0", "Test Admin"]]);
     expect(showValue("appraised_by", "4e174465-c7c2-4bc0-9b70-8285685493d0", names)).toBe("Test Admin");
