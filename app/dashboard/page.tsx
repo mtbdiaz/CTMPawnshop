@@ -70,8 +70,11 @@ type LoanRow = {
 };
  
 // DC2 (Nov 14): the "Owed now" help on the Dashboard lists (same words as the Loans list's "i" button)
+// LT1: same new wording as the Loans list. "It is the amount to redeem today" was removed: the Waiting for forfeit list is all
+// Defaulted loans, which can't simply be redeemed. Before: "Unpaid principal + interest (...) + liquidated damages, which are
+// added for each 30 days after the loan's grace period ends. It is the amount to redeem today."
 const OWED_NOW_HELP =
-  "Unpaid principal + interest (including interest added for each 30 days past the due date) + liquidated damages, which are added for each 30 days after the loan's grace period ends. It is the amount to redeem today.";
+  "The total amount the customer currently owes: unpaid principal, interest, and any liquidated damages after the grace period. The actions available depend on the loan's status.";
 
 // searchParams = the "?something=value" part of the address.
 // "denied" = the no-access message. Pagination: "na" = Needs attention page, "wf" = Waiting for forfeit page.
