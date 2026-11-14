@@ -35,6 +35,7 @@ import {
 import { Icon } from "@/components/icons";
 // QuickSearch = the search box with a live preview of matching customers and loans (quick-search.tsx)
 import { QuickSearch } from "./quick-search";
+import { InfoTip } from "./customers/info-tip"; // DC2: the same "i" help button as on Loans and Customers
 // ListPager = the Previous / Page 1 of N / Next / See all bar under each list (list-pager.tsx)
 import { ListPager } from "./list-pager";
  
@@ -68,6 +69,10 @@ type LoanRow = {
   customers: { full_name: string } | null;
 };
  
+// DC2 (Nov 14): the "Owed now" help on the Dashboard lists (same words as the Loans list's "i" button)
+const OWED_NOW_HELP =
+  "Unpaid principal + interest (including interest added for each 30 days past the due date) + liquidated damages, which are added for each 30 days after the loan's grace period ends. It is the amount to redeem today.";
+
 // searchParams = the "?something=value" part of the address.
 // "denied" = the no-access message. Pagination: "na" = Needs attention page, "wf" = Waiting for forfeit page.
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ denied?: string; na?: string; wf?: string }> }) {
@@ -243,12 +248,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Redesign: the 4 summary cards as one list, so the page draws them with one loop.
   // icon = small sidebar icon next to the label; tone = colour of the number.
   type IconName = Parameters<typeof Icon>[0]["name"];
-  type Kpi = { label: string; value: string; hint: string; detail?: string; href: string; icon: IconName; tone: "default" | "danger" | "warning" };
+  // DC1/DC3: rows = a small label | value breakdown under the hint (Open loans: principal / interest & charges; Overdue: the
+  // Defaulted loans waiting for forfeit). Before: one "detail" sentence that wrapped and left "charges" alone on a line.
+  type Kpi = { label: string; value: string; hint: string; rows?: [string, string][]; href: string; icon: IconName; tone: "default" | "danger" | "warning" };
   const kpis: Kpi[] = [
     // card 1: open loans and the total still owed
-    { label: "Open loans", value: String(loans.length), hint: `${formatPeso(outstanding)} outstanding`, detail: `${formatPeso(principalTotal)} principal, ${formatPeso(interestTotal)} interest and charges`, href: "/dashboard/loans?status=open", icon: "ticket", tone: "default" },
+    { label: "Open loans", value: String(loans.length), hint: `${formatPeso(outstanding)} outstanding`, rows: [["Principal", formatPeso(principalTotal)], ["Interest & charges", formatPeso(interestTotal)]], href: "/dashboard/loans?status=open", icon: "ticket", tone: "default" },
     // card 2: overdue loans (Admin goes to the Overdue report, others to the Loans list)
-    { label: "Overdue", value: String(overdue.length), hint: "Past due date, not yet defaulted", detail: waitingForfeit.length ? `+${waitingForfeit.length} past grace period (forfeit pending)` : undefined, href: role === "admin" ? "/dashboard/reports/overdue" : "/dashboard/loans?status=overdue", icon: "alert", tone: overdue.length ? "warning" : "default" }, // L26: amber, like the Overdue badge
+    // DC3: the hint and the row keep the two groups apart: past due but not Defaulted yet (the big number) vs. already
+    // Defaulted and waiting for an Admin's forfeit review (not in the big number). Same counts as before.
+    // Before: "Past due date, not yet defaulted" + "+148 past grace period (forfeit pending)".
+    { label: "Overdue", value: String(overdue.length), hint: "Past due, not Defaulted yet", rows: waitingForfeit.length ? [["Defaulted, waiting for forfeit", String(waitingForfeit.length)]] : undefined, href: role === "admin" ? "/dashboard/reports/overdue" : "/dashboard/loans?status=overdue", icon: "alert", tone: overdue.length ? "warning" : "default" }, // L26: amber, like the Overdue badge
     // card 3: loans due today up to 7 days from now (Cashier goes to Reminders)
     { label: "Due in 7 days", value: String(dueSoon.length), hint: "Due today up to 7 days from now", href: hasRole(role, ["cashier"]) ? "/dashboard/compliance/reminders" : "/dashboard/loans?status=open", icon: "bell", tone: dueSoon.length ? "warning" : "default" },
     // card 4: staff who handle cash see today's cash; everyone else sees the customer count
@@ -398,7 +408,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
  
       {/* Redesign: 4 summary cards in one row on wide screens (lg = 1024px and up),
           2 per row on smaller screens. Each card is a link to the matching list. */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* DC5: 1 card per row on phones (below 480px), 2 per row from 480px, 4 from 1024px (lg), so the breakdown rows never squeeze.
+          Before: 2 per row on every screen below 1024px. Cards in the same row stretch to the same height. */}
+      <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-4">
         {/* one card per number */}
         {kpis.map((k) => (
           // the whole card is a link; hover makes the border darker so you know it's clickable
@@ -416,9 +428,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <span className={cx("mt-1 block text-2xl font-semibold tabular-nums", toneClass(k.tone))}>{k.value}</span>
             {/* the explanation line under the number */}
             <span className="mt-0.5 block text-sm text-slate-500">{k.hint}</span>
-            {/* second line: principal vs interest on Open loans; forfeit-pending count on Overdue (Admin) */}
-            {/* Viewport fit: text-xs for the extra detail line, so it rarely wraps */}
-            {k.detail && <span className="mt-0.5 block text-xs text-slate-500">{k.detail}</span>}
+            {/* DC1/DC3: the breakdown as label | value rows (spans, because the whole card is a link). A thin line separates it
+                from the hint. Before: one text-xs sentence ("₱X principal, ₱Y interest and charges") that wrapped. */}
+            {k.rows && (
+              <span className="mt-1.5 block space-y-0.5 border-t border-slate-100 pt-1.5 text-xs">
+                {k.rows.map(([label, value]) => (
+                  <span key={label} className="flex items-baseline justify-between gap-3">
+                    <span className="text-slate-500">{label}</span>
+                    <span className="whitespace-nowrap font-medium tabular-nums text-slate-700">{value}</span>
+                  </span>
+                ))}
+              </span>
+            )}
           {/* end of the card */}
           </Link>
         ))}
@@ -506,7 +527,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         {/* Review #14: "Date" because paid loans show the payment date, others the due date */}
                         <TH>Date</TH>
                         {/* Viewport fit: whitespace-nowrap keeps "Owed now" on one line, so the heading row stays short */}
-                        <TH align="right" className="whitespace-nowrap">Owed now</TH>
+                        <TH align="right" className="whitespace-nowrap">
+                          {/* DC2: what Owed now includes (the same shared owedNow as the Loans list; no new math) */}
+                          <span className="inline-flex items-center gap-1">
+                            Owed now <InfoTip label="Owed now">{OWED_NOW_HELP}</InfoTip>
+                          </span>
+                        </TH>
                         <TH>Status</TH>
                         <TH>
                           <span className="sr-only">Actions</span>
@@ -651,7 +677,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     {/* Review 2 #5: the date it became eligible for forfeit review */}
                     <TH className="whitespace-nowrap">Grace ended</TH>
                     {/* Viewport fit: whitespace-nowrap keeps "Owed now" on one line, so the heading row stays short */}
-                        <TH align="right" className="whitespace-nowrap">Owed now</TH>
+                        <TH align="right" className="whitespace-nowrap">
+                          {/* DC2: what Owed now includes (the same shared owedNow as the Loans list; no new math) */}
+                          <span className="inline-flex items-center gap-1">
+                            Owed now <InfoTip label="Owed now">{OWED_NOW_HELP}</InfoTip>
+                          </span>
+                        </TH>
                     <TH>Status</TH>
                     <TH>
                       {/* sr-only = hidden on screen, read out by screen readers */}
