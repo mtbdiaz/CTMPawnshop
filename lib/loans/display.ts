@@ -38,7 +38,8 @@ export function situationBadge(loan: AccrualLoan, today: string): LoanBadge | nu
 
 /**
  * L5: the amount to show as "Owed now".
- * - running or defaulted loan: principal left + interest (incl. interest after the due date), the same as "To redeem today"
+ * - running or defaulted loan: principal left + interest (incl. interest after the due date) + liquidated damages after the
+ *   grace days (LD, 0073), the same as "To redeem today"
  * - forfeited: null, because the item became shop property and the loan isn't collected any more
  * - redeemed: 0
  */
@@ -49,10 +50,9 @@ export function owedDisplay(loan: AccrualLoan, today: string): number | null {
 }
 
 // L1: the same "fully paid" rule written as a database filter, so a tab can count and page through ALL loans.
-// Verified against the code: there are no fees or penalties, interest only grows while principal is above 0,
-// and the database's record_payment uses principal_balance + interest_owed as the total owed.
-// So a loan owes ₱0 exactly when both stored balances are 0.
-// LD (0073): or liquidated damages written down and not paid
+// Verified against the code: interest and liquidated damages only grow while principal is above 0, and the database's
+// record_payment uses principal_balance + interest_owed + damages_owed as the total owed (LD, 0073).
+// So a loan owes ₱0 exactly when all three stored balances are 0. (LC5: this comment said "no fees or penalties" before 0073.)
 export const STILL_OWES_FILTER = "principal_balance.gt.0,interest_owed.gt.0,damages_owed.gt.0"; // use with .or(...)
 
 /**
@@ -63,6 +63,18 @@ export const STILL_OWES_FILTER = "principal_balance.gt.0,interest_owed.gt.0,dama
 export function renewGraceEnd(loan: { status: string; maturity_date: string; grace_period_days: number }): string | null {
   if (loan.status === "reinstated") return null; // reinstated loans skip the grace check
   return addDaysIso(loan.maturity_date, loan.grace_period_days); // due date + grace days
+}
+
+/**
+ * LC3 (Nov 14): the loan page's "Grace period" line, from the loan's own saved grace days (not today's Settings):
+ * "7 days, until Dec 18, 2026" while it runs (the last grace day included), "7 days, ended Nov 13, 2026" after,
+ * "None (0 days on this loan)" for 0. formatDay turns an ISO date into the page's date format.
+ */
+export function graceSummary(loan: { maturity_date: string; grace_period_days: number }, today: string, formatDay: (iso: string) => string): string {
+  const days = Number(loan.grace_period_days ?? 0);
+  if (days <= 0) return "None (0 days on this loan)";
+  const end = addDaysIso(loan.maturity_date, days);
+  return `${days} ${days === 1 ? "day" : "days"}, ${today > end ? "ended" : "until"} ${formatDay(end)}`;
 }
 
 /** L24: true when renew_loan would refuse this loan today because the grace period is over. */

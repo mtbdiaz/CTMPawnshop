@@ -231,7 +231,8 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
           <dl className="mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <dt className="font-semibold text-slate-800">Cash in today</dt>
-              <dd>Every cash entry that came in since 12:00 midnight today (Manila time): payments, renewal interest, auction sales, other revenue.</dd>
+              {/* LC7 (Nov 14): + "and liquidated damages" (a renewal also collects them since 0073). Before: "renewal interest" */}
+              <dd>Every cash entry that came in since 12:00 midnight today (Manila time): payments, renewal interest and liquidated damages, auction sales, other revenue.</dd>
             </div>
             <div>
               <dt className="font-semibold text-slate-800">Cash out today</dt>

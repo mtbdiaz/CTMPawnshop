@@ -481,6 +481,12 @@ export default async function RemindersPage({
               Active, Renewed and Reinstated loans due today up to {REMINDER_LEAD_DAYS} days from now (Manila date) that still owe money. Fully paid
               loans waiting for release are left out.
             </li>
+            {/* LC8 (Nov 14): what staff can tell a customer about paying late (the loan's own terms, LD 0073). Before: not said */}
+            <li>
+              If the customer asks about paying late: interest keeps being added every 30 days after the due date, and after the
+              loan&apos;s grace period, liquidated damages (the % saved on that loan, of the unpaid principal) are added every 30
+              days too. The loan page shows that loan&apos;s grace period and %.
+            </li>
             <li>
               Past the due date? Those loans leave this list. Follow them up on{" "}
               <Link href="/dashboard/loans?status=overdue" className="text-navy-700 underline">

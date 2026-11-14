@@ -5,7 +5,7 @@ import { hasRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { accruedDamages, accruedInterest, addDaysIso, capitalizePreview, renewPreview, TERM_DAYS } from "@/lib/loans/accrual"; // LD: accruedDamages
 import { isOverdueUnpaid } from "@/lib/loans/status"; // F3: shared overdue rule
-import { pastGracePeriod, renewBlocked, renewGraceEnd, situationBadge, stateBadge, wouldBeDefaulted } from "@/lib/loans/display"; // L3/L4: the same badges as the Loans list; L24: renew grace rule
+import { pastGracePeriod, renewBlocked, renewGraceEnd, situationBadge, stateBadge, wouldBeDefaulted, graceSummary } from "@/lib/loans/display"; // L3/L4: the same badges as the Loans list; L24: renew grace rule
 import { Icon } from "@/components/icons";
 import { categoryLabel } from "@/lib/appraisal/valuation";
 import { formatDate, formatDateTime, formatPeso, manilaToday } from "@/lib/format";
@@ -319,9 +319,22 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
                 { label: "Original principal", value: formatPeso(loan.principal_amount) },
                 { label: "Interest rate", value: `${loan.interest_rate_percent}% per ${TERM_DAYS} days` },
                 // LD (0073): the pawn ticket clause, with this loan's own % (fixed when it was issued)
-                { label: "Liquidated damages", value: `${loan.liquidated_damages_percent}% of the unpaid principal per ${TERM_DAYS} days, after ${formatDate(damagesFrom)}` },
+                // LC4 (Nov 14): a loan saved with 0% says "None" instead of "0% of the unpaid principal ...". Before: always the % sentence
+                {
+                  label: "Liquidated damages",
+                  value:
+                    Number(loan.liquidated_damages_percent) > 0
+                      ? `${loan.liquidated_damages_percent}% of the unpaid principal per ${TERM_DAYS} days, after ${formatDate(damagesFrom)}`
+                      : "None (0% on this loan)",
+                },
                 { label: "Loan date", value: formatDate(loan.loan_date) },
                 { label: "Due date", value: formatDate(loan.maturity_date), emphasize: true },
+                // LC3 (Nov 14): this loan's own grace period (saved on the loan when it was made, not today's Settings) and the day it ends.
+                // Before: not shown; staff had to work it out from the liquidated damages line.
+                {
+                  label: "Grace period",
+                  value: graceSummary(loan, today, formatDate),
+                },
                 { label: "Renewals", value: String(loan.extension_count) },
                 { label: "Vault", value: vault?.vault_location ?? "" },
               ]}

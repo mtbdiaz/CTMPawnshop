@@ -43,7 +43,8 @@ const OPEN: Enums<"loan_status">[] = ["active", "extended", "reinstated"];
 // L21: "help" = what the tab means, shown in "What do the loan statuses mean?" under the list. Each one was checked against the
 // database functions (0017_improvement_pass.sql): reinstate_loan (Cashier, defaulted only, not if the item is queued
 // for auction), forfeit_loan (Admin, defaulted only), redeem_loan (Cashier, only when ₱0 is owed), run_default_detection
-// (active/renewed loans past due date + grace period; reinstated loans are skipped).
+// (active, renewed and reinstated loans past due date + grace period that still owe money; LC5: reinstated loans were
+// skipped once, not any more since the owner decision on Matt #3).
 // L32: the order of the help box below the list (all eight views). The toolbar shows five of them as tabs and the
 // other three in "More views" (see PRIMARY_VIEWS / MORE_VIEWS).
 const TABS = {

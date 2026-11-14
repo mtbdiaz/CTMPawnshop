@@ -413,7 +413,8 @@ export default async function CustomerDetailPage({
             <div className="space-y-2">
               {pageLoans.map((loan) => {
                 // C1: still owed = principal left + interest, INCLUDING interest that piled up
-                // after the due date (same as the loan page). Defaulted loans still owe money too.
+                // after the due date, + liquidated damages after the grace days (LD, 0073; same as the loan page).
+                // Defaulted loans still owe money too.
                 const owes = loan.status === "active" || loan.status === "extended" || loan.status === "reinstated" || loan.status === "defaulted";
                 const owed = owes ? owedNow(loan, today) : 0; // LD (0073): the shared rule (principal + interest + liquidated damages)
                 // the status word and colour, same as the Dashboard
@@ -451,7 +452,7 @@ export default async function CustomerDetailPage({
                       </div>
                       {/* C1 + PR9: what's owed today, shown for open AND defaulted loans */}
                       {owes && (
-                        <div className="shrink-0 text-right" title="Principal left plus interest, including interest after the due date">
+                        <div className="shrink-0 text-right" title="Unpaid principal + interest (including interest after the due date) + liquidated damages after the grace period, when they apply" /* LC6 (Nov 14): + damages. Before: "Principal left plus interest, including interest after the due date" */>
                           <p className="text-xs text-slate-600">Owed now</p>
                           <p className="text-lg font-semibold leading-tight tabular-nums text-navy-900">{formatPeso(owed)}</p>
                         </div>
