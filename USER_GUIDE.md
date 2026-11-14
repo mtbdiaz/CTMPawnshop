@@ -37,12 +37,19 @@ trail at the top so you can step back.
 3. **Loans** → From the appraisal, click **Create loan** (amount capped at
    the suggested maximum). The ticket opens — click **Print pawn ticket**.
 4. **Payments** → Find the ticket (Loans search by ticket number or name),
-   use **Interest only** or **Pay in full**, or type an amount. Interest is
-   settled first; any remainder reduces principal. Each payment has a
-   **Receipt** button in the payment history.
+   use the quick button or **Pay in full**, or type an amount. The quick
+   button is **Interest only** on a normal loan and **Damages and interest**
+   when the loan owes liquidated damages (see below). A payment is used in
+   this order: **liquidated damages → interest → principal**. The confirm
+   box shows exactly how the payment is split before you save it. Each
+   payment has a **Print receipt** button in the payment history.
 5. **Renewals** → If the customer isn't ready to redeem, **Renew loan** on the
-   ticket: collect the interest shown (a receipt is recorded), and the due
-   date moves out 30 days.
+   ticket: collect the amount shown, which is all the interest owed plus any
+   liquidated damages owed (one receipt is recorded), and the due date moves
+   out 30 days. Renew works until the grace days end; after that, only a
+   loan that was Defaulted and then Reinstated can still be renewed.
+   **Capitalize** (adding unpaid interest to the principal) is refused while
+   liquidated damages are owed; collect them with Record payment first.
 6. **Redemption** → Once the balance reaches ₱0, redeem the item — it's
    marked released in the vault.
 7. If a loan passes its due date **and** its grace period with no payment or
@@ -52,6 +59,28 @@ trail at the top so you can step back.
 If a customer has lost their physical ticket, both the payment and
 redemption forms have a "lost ticket" checkbox that verifies their identity
 against the ID number on file instead.
+
+### Liquidated damages (late charge)
+
+This is the clause on CTM's pawn ticket: if the loan is not paid on time,
+the customer pays liquidated damages on top of the interest.
+
+- **When it starts:** the day after the grace days end (due date + grace
+  days). During the grace days there are no liquidated damages, only
+  interest.
+- **How much:** the loan's liquidated damages rate (2% for loans so far) of
+  the **principal still unpaid**, for every 30 days. Any part of 30 days
+  counts as a full 30 days. Example: ₱10,000 unpaid, 1 day after the grace
+  days end = ₱200; 31 days after = ₱400.
+- **Where you see it:** "To redeem today" on the loan page, Owed now on the
+  Loans list, Dashboard and reports, the payment confirm box and the
+  receipt ("To liq. damages").
+- **Paying it:** every payment clears liquidated damages first. Redeem needs
+  the principal, interest and liquidated damages all paid. A renewal
+  collects them with the interest and starts the count again from the new
+  due date.
+- It keeps adding up while a loan is Defaulted. It stops when the loan is
+  redeemed or forfeited.
 
 ## Inventory
 
@@ -86,8 +115,15 @@ export a copy.
 ## System Settings (Admin)
 
 Set the current gold price, monthly interest rate, loan-to-value percentage,
-and grace period here. These drive every appraisal and loan calculation
-system-wide — update the gold price regularly.
+grace period and **liquidated damages (% per 30 days)** here. These drive
+every appraisal and loan calculation system-wide — update the gold price
+regularly.
+
+Interest rate, grace days and liquidated damages % are copied onto each loan
+when it is created, so changing them affects **new loans only**; existing
+loans keep the values they were issued with. (Loans that existed when
+liquidated damages were added on Nov 14, 2026 were given 2%.) The liquidated
+damages % can be 0 to 100; 0 turns the charge off for new loans.
 
 ## User Accounts (Admin)
 

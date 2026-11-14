@@ -82,7 +82,8 @@ export default async function OverdueLoansReport({ searchParams }: { searchParam
     <div>
       <ReportHeader
         title="Overdue loans"
-        description="Loans past their due date that still owe money, including defaulted loans. Fully paid loans awaiting release are excluded."
+        // LDU2 (Nov 14): + what Owed now includes (liquidated damages, 0073). Before: the first two sentences only
+        description="Loans past their due date that still owe money, including defaulted loans. Fully paid loans awaiting release are excluded. Owed now already includes interest and any liquidated damages."
         subtitle={`As of ${formatDate(today)} · ${scope}${sort !== "due" ? ` · sorted by ${OVERDUE_SORTS[sort].toLowerCase()}` : ""}`}
       />
 
@@ -313,7 +314,10 @@ export default async function OverdueLoansReport({ searchParams }: { searchParam
             <dt>
               <Badge tone="warning">{OVERDUE_STAGES.in_grace}</Badge>
             </dt>
-            <dd className="mt-1">The due date has passed and the loan still owes money, but its grace days have not run out yet. The customer can still pay or renew.</dd>
+            <dd className="mt-1">
+              The due date has passed and the loan still owes money, but its grace days have not run out yet. The customer can still pay or renew.
+              {/* LDU2 */} No liquidated damages are charged during the grace days.
+            </dd>
           </div>
           <div>
             <dt>
@@ -321,7 +325,7 @@ export default async function OverdueLoansReport({ searchParams }: { searchParam
             </dt>
             <dd className="mt-1">
               The grace days have run out and the loan still owes money, but it is not marked Defaulted yet. The nightly default check (12:05 AM) marks
-              it Defaulted; opening this report never does.
+              it Defaulted; opening this report never does. Liquidated damages now apply (see below).
             </dd>
           </div>
           <div>
@@ -330,9 +334,18 @@ export default async function OverdueLoansReport({ searchParams }: { searchParam
                 {OVERDUE_STAGES.defaulted}
               </Badge>
             </dt>
-            <dd className="mt-1">The loan is already recorded as Defaulted and still owes money. It stays on this report while it is Defaulted and still owes money.</dd>
+            <dd className="mt-1">
+              The loan is already recorded as Defaulted and still owes money. It stays on this report while it is Defaulted and still owes money.
+              {/* LDU2 */} Liquidated damages keep adding up while it is Defaulted.
+            </dd>
           </div>
         </dl>
+        {/* LDU2 (Nov 14): the liquidated damages rule (0073), as the database applies it */}
+        <p className="mt-3">
+          <strong>Liquidated damages:</strong> they start the day after the grace days end. For every 30 days, or any part of 30 days, the loan is
+          charged its liquidated damages rate (fixed on the loan when it was issued; new loans take the rate in Settings) on the principal still
+          unpaid. Owed now on this report already includes them. A payment pays the liquidated damages first, then interest, then principal.
+        </p>
         <p className="mt-3 text-xs text-slate-600">
           Not on this report: loans not yet due, and loans that are fully paid (even past the due date) while they wait for the item to be released.
         </p>

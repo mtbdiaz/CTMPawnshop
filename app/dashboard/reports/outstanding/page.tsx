@@ -95,7 +95,9 @@ export default async function OutstandingLoansReport({ searchParams }: { searchP
     <div>
       <ReportHeader
         title="Outstanding loans"
-        description="Every open loan (Active, Renewed or Reinstated). Owed now = principal left + interest, including interest after the due date."
+        // LDU1 (Nov 14): Owed now also includes liquidated damages (0073), so the description says so.
+        // Before: "Owed now = principal left + interest, including interest after the due date."
+        description="Every open loan (Active, Renewed or Reinstated). Owed now = unpaid principal + interest (including interest after the due date) + liquidated damages after the grace days, when they apply."
         subtitle={`As of ${formatDate(today)} · ${scope}${sort !== "due" ? ` · sorted by ${LOAN_SORTS[sort].toLowerCase()}` : ""}`}
       />
 
@@ -111,7 +113,9 @@ export default async function OutstandingLoansReport({ searchParams }: { searchP
             { label: "Overdue", value: count("overdue").toLocaleString("en-PH") },
             { label: "Ready to release", value: count("paid").toLocaleString("en-PH") },
             { label: "Principal left", value: formatPeso(whole.balance) },
-            { label: "Interest now", value: formatPeso(whole.interest) },
+            // LDU1: "Interest and charges" (was "Interest now"): the database works it out as owed minus principal left, so for a
+            // loan past its grace days it also holds the liquidated damages. Same number as before, clearer name
+            { label: "Interest and charges", value: formatPeso(whole.interest) },
             { label: "Owed now", value: formatPeso(whole.owed), strong: true },
           ].map((m) => (
             <div key={m.label} className={cx("rounded-md border bg-white px-3 py-2", m.strong ? "border-navy-200 bg-navy-50" : "border-slate-200")}>
@@ -224,7 +228,7 @@ export default async function OutstandingLoansReport({ searchParams }: { searchP
                 <TH>Ticket and item</TH>
                 <TH align="right">Principal</TH>
                 <TH align="right">Principal left</TH>
-                <TH align="right">Interest now</TH>
+                <TH align="right">Interest and charges</TH>
                 <TH align="right">Owed now</TH>
                 <TH>Due</TH>
                 <TH>Status</TH>
