@@ -345,7 +345,10 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
         {/* L27: the right side: what is owed, then Loan actions */}
         <div className="min-w-0 space-y-5 lg:col-start-3 lg:row-span-2 lg:row-start-1">
           <Card>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{open || loan.status === "defaulted" ? "To redeem today" : "Balance"}</p>
+            {/* LP1 (Nov 14, page check): a Defaulted loan says "Total owed today": it can't be paid or redeemed until it is
+                reinstated, so "To redeem today" promised something that isn't available. Same amount (owedNow).
+                Before: "To redeem today" for open AND Defaulted loans. */}
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{open ? "To redeem today" : loan.status === "defaulted" ? "Total owed today" : "Balance"}</p>
             <p className="mt-1 text-3xl font-semibold tabular-nums text-navy-900">{open || loan.status === "defaulted" ? formatPeso(owed) : formatPeso(0)}</p>
             {(open || loan.status === "defaulted") && (
               <dl className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm">

@@ -39,7 +39,7 @@ export function situationBadge(loan: AccrualLoan, today: string): LoanBadge | nu
 /**
  * L5: the amount to show as "Owed now".
  * - running or defaulted loan: principal left + interest (incl. interest after the due date) + liquidated damages after the
- *   grace days (LD, 0073), the same as "To redeem today"
+ *   grace days (LD, 0073), the same as the loan page's "To redeem today" ("Total owed today" on a Defaulted loan)
  * - forfeited: null, because the item became shop property and the loan isn't collected any more
  * - redeemed: 0
  */
