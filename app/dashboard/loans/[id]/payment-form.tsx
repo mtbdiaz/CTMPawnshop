@@ -119,21 +119,37 @@ export function PaymentForm({
       />
       <div className="flex flex-wrap gap-2">
         {/* LD: with liquidated damages owed, the quick button pays the damages and the interest (they are paid first) */}
+        {/* PR1 (Nov 14, page check): on an overdue loan that can still be renewed, this amount also renews it (ctm_auto_renew:
+            all interest and damages paid, some principal still owed), so the button says "& renew". Before: "Interest only"
+            even when it renewed the loan. Not overdue (or past the grace days): "Interest only" / "Damages and interest" as before. */}
         {charges > 0 && (
           <button type="button" onClick={() => setAmount(String(charges))} className={buttonClasses("secondary", "sm")}>
-            {damagesDue > 0 ? "Damages and interest" : "Interest only"} · {formatPeso(charges)}
+            {renewOnClear && principalBalance > 0
+              ? damagesDue > 0
+                ? "Damages, interest & renew"
+                : "Interest & renew"
+              : damagesDue > 0
+                ? "Damages and interest"
+                : "Interest only"}{" "}
+            · {formatPeso(charges)}
           </button>
         )}
         <button type="button" onClick={() => setAmount(String(total))} className={buttonClasses("secondary", "sm")}>
           Pay in full · {formatPeso(total)}
         </button>
       </div>
-      {/* AR1: before saving, say that this payment also renews the overdue loan, and what that means */}
+      {/* AR1: before saving, say that this payment also renews the overdue loan, and what that means.
+          PR2 (Nov 14, page check): a title line and the amount being collected. It follows the typed amount (willRenew is the
+          database's own rule), not only the quick button. Before: one sentence without the amount. */}
       {willRenew && (
-        <p role="status" className="rounded-md border border-navy-200 bg-navy-50 px-3 py-2 text-sm text-navy-900">
-          This pays all the interest{damagesDue > 0 ? " and liquidated damages" : ""}, so the loan is <span className="font-semibold">renewed</span>: new due date {formatDate(renewOnClear!.newMaturity)}.
-          Interest for the new term ({formatPeso(newTermInterest)}) is added, the same as Renew.
-        </p>
+        <div role="status" className="rounded-md border border-navy-200 bg-navy-50 px-3 py-2 text-sm text-navy-900">
+          <p className="font-semibold">This payment will renew the loan</p>
+          <p className="mt-0.5">
+            The {formatPeso(paid)} payment pays all the {damagesDue > 0 ? "liquidated damages and interest" : "interest"}
+            {toPrincipal > 0 ? ` and ${formatPeso(toPrincipal)} of the principal` : ""}. New due date {formatDate(renewOnClear!.newMaturity)}. Interest
+            for the new term ({formatPeso(newTermInterest)}) is added, the same as Renew.
+          </p>
+        </div>
       )}
       {/* AR1: an overdue loan with interest still unpaid after this payment stays overdue */}
       {renewOnClear && paid > 0 && (interestLeft > 0 || damagesLeft > 0) && (

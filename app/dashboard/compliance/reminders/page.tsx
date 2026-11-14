@@ -25,6 +25,11 @@ import { CopyNumber } from "./copy-number"; // R2: copy the mobile number
 import { ContactHistoryButton } from "./contact-history"; // RH1: the history in a popup
 import { InfoTip } from "../../customers/info-tip"; // the same "i" help button as on Customers and Loans
 
+// RM1 (Nov 14, Page 12): the same Owed now help as the Loans list, Dashboard and customer profile, so it means one thing
+// everywhere. Loans on this list aren't past due, so their liquidated damages are always ₱0 here.
+const OWED_NOW_HELP =
+  "The total amount the customer currently owes: unpaid principal, interest, and any liquidated damages after the grace period. The actions available depend on the loan's status.";
+
 export const metadata = { title: "Reminders" };
 
 const PAGE_SIZE = 10; // same as Customers, Appraisals and Loans, so the list fits one screen
@@ -304,15 +309,19 @@ export default async function RemindersPage({
       {/* R1: today's workload in one short row (each number opens that part of the list), with the manual-only
           notice under it in the same box, so together they take little space above the list */}
       <section aria-label="Today's reminders" className="mb-3 rounded-md border border-slate-200 bg-white">
-        <dl className="grid grid-cols-3 divide-x divide-slate-200">
+        {/* RM2 (Nov 14): phones (below 640px): Due today and Due in 1-3 days side by side, Contact made across the full width
+            under them. Before: 3 narrow boxes, and "of 47 loan reminders · 44 unique customers" wrapped onto 4 lines */}
+        <dl className="grid grid-cols-2 divide-x divide-slate-200 sm:grid-cols-3">
           {[
             { label: "Due today", value: summary.dueToday, hint: `loan${summary.dueToday === 1 ? "" : "s"} · ${shortDate(today)}`, href: href({ view: "all", due: "today", q: undefined, page: undefined }), warn: summary.dueToday > 0 },
             { label: "Due in 1–3 days", value: summary.dueSoon, hint: `loan${summary.dueSoon === 1 ? "" : "s"} · ${shortRange(dueRange("tomorrow", today)[0], windowEnd)}`, href: href({ view: "all", due: undefined, q: undefined, page: undefined }), warn: false },
-            // R2: "of 51 loan reminders · 45 unique customers" = the counts are LOANS (each ticket has its own reminder),
-            // and how many different people that is. R3: only reached / message sent count as contact made
-            { label: "Contact made", value: summary.contacted, hint: `of ${summary.total} loan reminder${summary.total === 1 ? "" : "s"} · ${summary.customers} unique customer${summary.customers === 1 ? "" : "s"}`, href: href({ view: "logged", due: undefined, q: undefined, page: undefined }), warn: false },
-          ].map((s) => (
-            <div key={s.label}>
+            // R2: "of 51 loan reminders" + "45 unique customers" = the counts are LOANS (each ticket has its own reminder),
+            // and how many different people that is. R3: only reached / message sent count as contact made.
+            // RM2: the customers count is its own line (sub) instead of the end of one long line
+            { label: "Contact made", value: summary.contacted, hint: `of ${summary.total} loan reminder${summary.total === 1 ? "" : "s"}`, sub: `${summary.customers} unique customer${summary.customers === 1 ? "" : "s"}`, href: href({ view: "logged", due: undefined, q: undefined, page: undefined }), warn: false, wide: true },
+          ].map((s: { label: string; value: number; hint: string; sub?: string; href: string; warn: boolean; wide?: boolean }) => (
+            // RM2: the wide box (Contact made) takes a full row on phones, with a line above it instead of one on its left
+            <div key={s.label} className={s.wide ? "col-span-2 border-t border-slate-200 max-sm:border-l-0 sm:col-span-1 sm:border-t-0" : undefined}>
               {/* label on top, then the number and its words (the same in all 3 boxes, at every width) */}
               <Link href={s.href} className="block px-3 py-1.5 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500 sm:px-4">
                 <dt className="text-xs font-medium text-slate-600">{s.label}</dt>
@@ -320,6 +329,7 @@ export default async function RemindersPage({
                   <span className={`font-display text-xl font-semibold tabular-nums ${s.warn ? "text-amber-800" : "text-navy-900"}`}>{s.value}</span>
                   <span className="text-xs text-slate-500">{s.hint}</span>
                 </dd>
+                {s.sub && <dd className="text-xs text-slate-500">{s.sub}</dd>}
               </Link>
             </div>
           ))}
@@ -413,7 +423,13 @@ export default async function RemindersPage({
                   <TH>Customer</TH>
                   <TH>Ticket</TH>
                   <TH>Due</TH>
-                  <TH align="right">Owed now</TH>
+                  {/* RM1: the same "i" as Loans, the Dashboard and the customer profile */}
+                  <TH align="right">
+                    <span className="inline-flex items-center gap-1">
+                      Owed now
+                      <InfoTip label="Owed now">{OWED_NOW_HELP}</InfoTip>
+                    </span>
+                  </TH>
                   <TH>
                     <span className="inline-flex items-center gap-1">
                       Contact

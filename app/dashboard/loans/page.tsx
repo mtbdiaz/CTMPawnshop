@@ -324,10 +324,13 @@ export default async function LoansPage({
                   <SortTH label="Original principal" column="principal" current={sort} dir={dir} basePath="/dashboard/loans" params={listParams} align="right" />
                   {/* #23: Owed now can be sorted (the database works out the same amount the page shows) */}
                   <SortTH label="Owed now" column="owed" current={sort} dir={dir} basePath="/dashboard/loans" params={listParams} align="right">
-                    {/* RW3 (Nov 14): + liquidated damages (0073). Before: "Principal still unpaid plus interest, including interest added
-                        for each 30 days past the due date." The amount itself already came from the shared owedNow / owed_now */}
+                    {/* RW3 (Nov 14): + liquidated damages (0073). The amount itself already came from the shared owedNow / owed_now.
+                        LT1 (Nov 14, page check): "It is the amount to redeem today" removed, because a Defaulted loan can't simply be
+                        redeemed (it has to be reinstated first) and a Forfeited one not at all. Before: "Unpaid principal + interest
+                        (including interest added for each 30 days past the due date) + liquidated damages, which are added for each 30 days
+                        after the grace period ends. It is the amount to redeem today." */}
                     <InfoTip label="Owed now">
-                        Unpaid principal + interest (including interest added for each 30 days past the due date) + liquidated damages, which are added for each 30 days after the grace period ends. It is the amount to redeem today. Original principal is the amount first lent. Forfeited loans show &quot;Item kept&quot;: the item became shop property and the loan is not collected.
+                        The total amount the customer currently owes: unpaid principal, interest, and any liquidated damages after the grace period. The actions available depend on the loan&apos;s status. Original principal is the amount first lent. Forfeited loans show &quot;Item kept&quot;: the item became shop property and the loan is not collected.
                       </InfoTip>
                   </SortTH>
                   <SortTH label="Due" column="due" current={sort} dir={dir} basePath="/dashboard/loans" params={listParams} />

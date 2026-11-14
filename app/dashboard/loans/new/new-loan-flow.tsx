@@ -8,6 +8,7 @@ import { ActionForm, Field, SelectField, SubmitButton } from "@/components/form"
 import { RequestIdInput } from "@/components/request-id"; // #40: one-time id, so the same form can't make two loans
 import { Alert, Badge, Card, buttonClasses, cx } from "@/components/ui";
 import { ScoreBadge } from "@/components/score-badge";
+import { Icon } from "@/components/icons"; // NL8: the small "i" in the late-payment box
 import { formatDate, formatPeso, manilaToday } from "@/lib/format";
 import { addDaysIso, TERM_DAYS, termInterest } from "@/lib/loans/accrual";
 import type { KaratPrices } from "@/lib/appraisal/valuation";
@@ -55,6 +56,9 @@ export function NewLoanFlow({
   const [draft, setDraft] = useState<AppraisalDraft | null>(null);
   // #39: the terms as the database works them out, and which item + amount they are for
   const [preview, setPreview] = useState<{ key: string; terms: LoanPreview } | null>(null);
+  // NL9 (Nov 14, page check): the amount whose database check failed (no answer, an error or too many requests), so the note
+  // stops saying "Checking with the database" for ever. Before: a failed check left that note on screen.
+  const [previewFailed, setPreviewFailed] = useState("");
 
   // #38: an item appraised for one customer can only be pawned by that customer (the database refuses it too)
   const wrongOwner = Boolean(item?.customerId && customer && item.customerId !== customer.id);
@@ -124,8 +128,13 @@ export function NewLoanFlow({
     const [itemId, amt] = previewKey.split("|");
     let stale = false; // true once the amount or item changed again: that answer is thrown away
     const t = setTimeout(async () => {
-      const terms = await previewLoan(itemId, Number(amt));
-      if (!stale && terms) setPreview({ key: previewKey, terms });
+      // NL9: a failed or empty answer is remembered too (the server action returns null, or throws if the connection drops);
+      // asking again for the same amount shows "Checking" again first
+      setPreviewFailed((k) => (k === previewKey ? "" : k));
+      const terms = await previewLoan(itemId, Number(amt)).catch(() => null);
+      if (stale) return;
+      if (terms) setPreview({ key: previewKey, terms });
+      else setPreviewFailed(previewKey);
     }, 300);
     return () => {
       stale = true;
@@ -435,17 +444,30 @@ export function NewLoanFlow({
                   ? "Estimate. The database works out the terms once the appraisal is saved." // TP1: no saved item to ask about yet
                   : fromDb
                     ? "Worked out by the database for this amount. The final terms are set when the loan is created."
-                    : "Estimate. Checking with the database."}
+                    : previewFailed === previewKey
+                      ? "Estimate. The database couldn't check it right now; the final terms are set when the loan is created." // NL9
+                      : "Estimate. Checking with the database…"}
               </p>
             )}
             {/* LDU4 (Nov 14): what happens if the customer is late (liquidated damages, 0073), with today's Settings values so
-                the Cashier can explain it at the counter. One short line, under the summary */}
+                the Cashier can explain it at the counter.
+                NL8 (Nov 14, page check): a small bordered box with a title instead of one long sentence; shorter words. The date is
+                still the due date (the database's when it has answered) + the grace days, and the % and days come from Settings.
+                Hidden at 0%, as before. Before: "If late: if not paid or renewed by <date> (the due date + 7 grace days), liquidated
+                damages of 2% of the unpaid principal are added for every 30 days. Any part of 30 days counts as a full 30 days." */}
             {damagesPercent > 0 && (
-              <p className="-mt-2 text-xs text-slate-600">
-                <span className="font-medium text-slate-700">If late:</span> if not paid or renewed by {formatDate(addDaysIso(due, graceDays))} (the
-                due date + {graceDays} grace day{graceDays === 1 ? "" : "s"}), liquidated damages of {damagesPercent}% of the unpaid principal are
-                added for every {TERM_DAYS} days. Any part of {TERM_DAYS} days counts as a full {TERM_DAYS} days.
-              </p>
+              <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                <p className="flex items-center gap-1.5 font-semibold text-slate-800">
+                  <Icon name="info" className="h-3.5 w-3.5 shrink-0 text-navy-600" />
+                  If payment is late
+                </p>
+                <p className="mt-0.5">
+                  Pay or renew by <span className="font-semibold text-slate-800">{formatDate(addDaysIso(due, graceDays))}</span>
+                  {graceDays > 0 ? ` (${graceDays}-day grace period)` : " (no grace period)"}. After that, liquidated damages of{" "}
+                  <span className="font-semibold text-slate-800">{damagesPercent}% of the unpaid principal</span> are added for every {TERM_DAYS} days
+                  or part of {TERM_DAYS} days.
+                </p>
+              </div>
             )}
             {blocked && <Alert tone="danger">This customer is blacklisted. A loan cannot be issued.</Alert>}
             {/* #38: the picked item belongs to someone else's appraisal */}
