@@ -332,24 +332,83 @@ export function CapitalizeForm({
 }
 
 /** Item 7: give a defaulted loan another chance. */
-export function ReinstateForm({ loanId, interestOwed, damagesOwed = 0 }: { loanId: string; interestOwed: number; damagesOwed?: number }) {
+// RW1 (Nov 14): reinstating keeps the old due date, and the nightly default check (12:05 AM) also checks Reinstated
+// loans, so a reinstated loan that still owes money is Defaulted again that night unless it is renewed or paid in full
+// first (checked with rolled-back tests on a real Defaulted loan: reinstate only -> Defaulted again; renew right after,
+// or a payment of all the interest and damages -> renewed, stays open; less than that -> Defaulted again; paid in full
+// -> stays open with ₱0). Capitalize is refused after the grace period, so it isn't offered.
+// RW6: the payment wording follows ctm_auto_renew exactly: it renews only when all interest and damages are paid AND some
+// principal is still owed, so "₱X or more, but less than the full amount". The amounts are worked out when the page loads
+// (renewPreview / owedNow, the same math as renew_loan and owed_now); the Renew and Record payment forms work them out again
+// after reinstating. Only the loan id is sent: the database checks the loan is still Defaulted and its item isn't queued
+// for auction, so an old page can't reinstate the wrong thing.
+// Before: the form only said "Due date: Unchanged. Renew or capitalize to extend it." and nothing about tonight's check.
+export function ReinstateForm({
+  loanId,
+  interestOwed,
+  damagesOwed = 0,
+  dueDate,
+  graceEnd,
+  principalLeft,
+  renewDue,
+  owedTotal,
+}: {
+  loanId: string;
+  interestOwed: number;
+  damagesOwed?: number;
+  dueDate: string; // the loan's own due date (it doesn't change)
+  graceEnd: string; // due date + the loan's own grace days
+  principalLeft: number;
+  renewDue: string; // the new due date a renewal right after reinstating would give (renewPreview, same as renew_loan)
+  owedTotal: number; // principal + interest + damages today
+}) {
+  const charges = Math.round((interestOwed + damagesOwed) * 100) / 100; // what Renew collects (interest + damages)
+  const canRenew = principalLeft > 0 && charges > 0; // nothing to renew when only interest or damages are left
   const rows: [string, string][] = [
-    ["Interest owed (through default)", formatPeso(interestOwed)],
+    ["Interest owed now", formatPeso(interestOwed)],
     // LD (0073): the liquidated damages since the grace days ended stay owed after reinstating
     ...(damagesOwed > 0 ? ([["Liquidated damages owed", formatPeso(damagesOwed)]] as [string, string][]) : []),
-    ["Due date", "Unchanged. Renew or capitalize to extend it."],
+    ["Due date", `${formatDate(dueDate)} (not changed)`],
+    ["Grace period ended", formatDate(graceEnd)],
+    ["To keep it open today", canRenew ? `Renew (${formatPeso(charges)}) or pay in full (${formatPeso(owedTotal)})` : `Pay in full (${formatPeso(owedTotal)})`],
   ];
   return (
-    <ActionForm action={reinstateLoan} className="space-y-3" successMessage="Loan reinstated.">
+    <ActionForm action={reinstateLoan} className="space-y-3" successMessage="Loan reinstated. Renew it or have it paid in full today.">
       <input type="hidden" name="loan_id" value={loanId} />
       <p className="text-sm text-slate-600">
         Interest{damagesOwed > 0 ? " and liquidated damages" : ""} kept accruing while the loan was in default. The item stays in the vault and is taken
         off the forfeiture list.
       </p>
+      {/* RW1: the warning comes before the button, so it is read before anyone confirms */}
+      <div role="note" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
+        <p className="font-semibold">Reinstating does not extend the due date</p>
+        <p className="mt-1">
+          The due date stays {formatDate(dueDate)} and the grace period ended {formatDate(graceEnd)}. If the loan still owes money at the next automatic
+          default check (every night at 12:05 AM, or sooner if an Admin runs Check for defaults), it is marked Defaulted again.
+        </p>
+        <p className="mt-1.5 font-medium">To keep it open, before the customer leaves:</p>
+        <ul className="mt-0.5 list-disc space-y-0.5 pl-5">
+          {canRenew && (
+            <li>
+              Renew it: collect {formatPeso(charges)} ({damagesOwed > 0 ? `${formatPeso(interestOwed)} interest + ${formatPeso(damagesOwed)} liquidated damages` : "the interest"}).
+              New due date {formatDate(renewDue)}. Recording a payment of {formatPeso(charges)} or more, but less than the full amount, renews it too.
+            </li>
+          )}
+          <li>Or have it paid in full ({formatPeso(owedTotal)}), then redeem the item.</li>
+        </ul>
+        {canRenew && <p className="mt-1.5">A smaller payment does not stop the default.</p>}
+      </div>
       <Summary rows={rows} />
       <SubmitButton
         pendingLabel="Reinstating"
-        confirm={{ title: "Reinstate this loan?", message: "The loan reopens with the status Reinstated.", confirmLabel: "Reinstate", tone: "primary", locked: true, details: rows }}
+        confirm={{
+          title: "Reinstate this loan?",
+          message: `The loan reopens with the status Reinstated. The due date stays ${formatDate(dueDate)}, so unless it is ${canRenew ? "renewed or " : ""}paid in full before the next automatic check (12:05 AM), it is marked Defaulted again.`,
+          confirmLabel: "Reinstate",
+          tone: "primary",
+          locked: true,
+          details: rows,
+        }}
       >
         Reinstate loan
       </SubmitButton>

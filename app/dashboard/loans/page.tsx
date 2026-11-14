@@ -323,8 +323,10 @@ export default async function LoansPage({
                   <SortTH label="Original principal" column="principal" current={sort} dir={dir} basePath="/dashboard/loans" params={listParams} align="right" />
                   {/* #23: Owed now can be sorted (the database works out the same amount the page shows) */}
                   <SortTH label="Owed now" column="owed" current={sort} dir={dir} basePath="/dashboard/loans" params={listParams} align="right">
+                    {/* RW3 (Nov 14): + liquidated damages (0073). Before: "Principal still unpaid plus interest, including interest added
+                        for each 30 days past the due date." The amount itself already came from the shared owedNow / owed_now */}
                     <InfoTip label="Owed now">
-                        Principal still unpaid plus interest, including interest added for each 30 days past the due date. It is the amount to redeem today. Original principal is the amount first lent. Forfeited loans show &quot;Item kept&quot;: the item became shop property and the loan is not collected.
+                        Unpaid principal + interest (including interest added for each 30 days past the due date) + liquidated damages, which are added for each 30 days after the grace period ends. It is the amount to redeem today. Original principal is the amount first lent. Forfeited loans show &quot;Item kept&quot;: the item became shop property and the loan is not collected.
                       </InfoTip>
                   </SortTH>
                   <SortTH label="Due" column="due" current={sort} dir={dir} basePath="/dashboard/loans" params={listParams} />
@@ -430,7 +432,7 @@ export default async function LoansPage({
                       ? "Couldn't load the list. Reload the page."
                       : defaults.candidates.length === 0
                         ? "Nothing to change today." // A1: the 12:05 AM note is inside the box, once
-                        : `${defaults.candidates.length} active or renewed loan${defaults.candidates.length === 1 ? " is" : "s are"} past the grace period and still ${defaults.candidates.length === 1 ? "owes" : "owe"} money.`}
+                        : `${defaults.candidates.length} active, renewed or reinstated loan${defaults.candidates.length === 1 ? " is" : "s are"} past the grace period and still ${defaults.candidates.length === 1 ? "owes" : "owe"} money.`}
                   </span>
                 </span>
                 <Icon name="chevron-down" className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
@@ -466,7 +468,8 @@ export default async function LoansPage({
                 ) : defaults.candidates.length === 0 ? (
                   <p className="text-slate-600">
                     {/* A1: "that still owe money" added (Matt #1) */}
-                    Nothing would change. Only active and renewed loans that still owe money are checked, and only after the due date plus the grace period.
+                    {/* RW4 (Nov 14): + reinstated (the database checks them too, and so does this page's list). Before: "Only active and renewed loans ..." */}
+                    Nothing would change. Only active, renewed and reinstated loans that still owe money are checked, and only after the due date plus the grace period.
                   </p>
                 ) : (
                   <>

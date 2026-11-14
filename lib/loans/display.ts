@@ -82,7 +82,7 @@ type DefaultCheckLoan = {
 };
 
 /**
- * A1: true when an active or renewed loan is past its due date + grace days (the date part of the check).
+ * A1: true when an active, renewed or reinstated loan is past its due date + grace days (the date part of the check).
  * Reinstated, closed and archived loans are never checked by the database (Matt #3), so they are false here too.
  */
 export function pastGracePeriod(loan: DefaultCheckLoan, today: string): boolean {
