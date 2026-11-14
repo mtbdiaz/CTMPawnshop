@@ -8,6 +8,7 @@ import { computeCashPosition } from "@/lib/finance/ledger";
 import { daysUntilDue } from "@/lib/compliance/reminders";
 import { formatDate, formatPeso, manilaDayStart, manilaToday } from "@/lib/format";
 import { owedNow as sharedOwedNow } from "@/lib/loans/status"; // LD (0073): principal + interest + liquidated damages
+import { addDaysIso } from "@/lib/loans/accrual"; // LC2: due date + the loan's own grace days
 // categoryLabel turns "ring" into "Ring" (or the custom name for "others")
 import { categoryLabel } from "@/lib/appraisal/valuation";
 // isDueForReminder = due within the next 3 days (same rule the Reminders page uses)
@@ -108,8 +109,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const loans = (openLoans ?? []) as unknown as LoanRow[];
   const now = new Date();
   const today = manilaToday(now);
-  // What the customer owes today: principal left + interest
-  // (including interest that piled up after the due date).
+  // What the customer owes today: principal left + interest (including interest that piled up after the due date)
+  // + liquidated damages after the grace days (LD, 0073). LC5: comment updated, the math is the shared owedNow.
   // Moved to the top so the lines below can use it.
   const owedNow = (l: LoanRow) => sharedOwedNow(l, today);
  
@@ -233,7 +234,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Redesign: today's date under the title, in Philippine time, e.g. "Monday, October 19, 2026"
   const todayLabel = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "Asia/Manila" }).format(now);
  
-  // Review #2: split what is owed into principal and interest (same numbers as before, just separated)
+  // Review #2: split what is owed into principal and the rest (same numbers as before, just separated).
+  // LC1 (Nov 14): "the rest" is owed minus principal, so it also holds liquidated damages for a loan past its grace days
+  // that isn't Defaulted yet. Label: "interest and charges" (was "interest"), the same name as the Outstanding report.
   const principalTotal = loans.reduce((sum, l) => sum + Number(l.principal_balance), 0);
   const interestTotal = outstanding - principalTotal;
  
@@ -243,7 +246,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   type Kpi = { label: string; value: string; hint: string; detail?: string; href: string; icon: IconName; tone: "default" | "danger" | "warning" };
   const kpis: Kpi[] = [
     // card 1: open loans and the total still owed
-    { label: "Open loans", value: String(loans.length), hint: `${formatPeso(outstanding)} outstanding`, detail: `${formatPeso(principalTotal)} principal, ${formatPeso(interestTotal)} interest`, href: "/dashboard/loans?status=open", icon: "ticket", tone: "default" },
+    { label: "Open loans", value: String(loans.length), hint: `${formatPeso(outstanding)} outstanding`, detail: `${formatPeso(principalTotal)} principal, ${formatPeso(interestTotal)} interest and charges`, href: "/dashboard/loans?status=open", icon: "ticket", tone: "default" },
     // card 2: overdue loans (Admin goes to the Overdue report, others to the Loans list)
     { label: "Overdue", value: String(overdue.length), hint: "Past due date, not yet defaulted", detail: waitingForfeit.length ? `+${waitingForfeit.length} past grace period (forfeit pending)` : undefined, href: role === "admin" ? "/dashboard/reports/overdue" : "/dashboard/loans?status=overdue", icon: "alert", tone: overdue.length ? "warning" : "default" }, // L26: amber, like the Overdue badge
     // card 3: loans due today up to 7 days from now (Cashier goes to Reminders)
@@ -626,7 +629,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         {/* Line 2: status, grace end date, ticket number */}
                         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
                           <StatusBadge status="defaulted" label="Forfeit pending" />
-                          <span>Grace ended {formatDate(loan.defaulted_at)}</span>
+                          {/* LC2 (Nov 14): the day the grace period ended = due date + this loan's own grace days. Before: defaulted_at,
+                              the day the default check ran, which can be days or weeks later (e.g. the Nov 9 batch) */}
+                          <span>Grace ended {formatDate(addDaysIso(loan.maturity_date, Number(loan.grace_period_days)))}</span>
                           <span className="font-mono">{loan.ticket_number}</span>
                         </div>
                       {/* end of the tappable block */}
@@ -668,7 +673,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                                     one line, ends with "..." if too long, full number on hover */}
                                 <span className="block max-w-[8rem] truncate font-mono text-xs text-slate-500 2xl:hidden" title={loan.ticket_number}>{loan.ticket_number}</span>
                               </TD>
-                        <TD className="whitespace-nowrap">{formatDate(loan.defaulted_at)}</TD>
+                        {/* LC2: due date + the loan's own grace days (was defaulted_at, the day the check ran) */}
+                        <TD className="whitespace-nowrap">{formatDate(addDaysIso(loan.maturity_date, Number(loan.grace_period_days)))}</TD>
                         <TD align="right">{formatPeso(owedNow(loan))}</TD>
                         {/* Redesign: status column, same place as in the table above */}
                         <TD>

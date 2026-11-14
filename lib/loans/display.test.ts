@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { owedDisplay, pastGracePeriod, renewBlocked, renewGraceEnd, situationBadge, stateBadge, wouldBeDefaulted } from "./display"; // A1: + pastGracePeriod
+import { owedDisplay, pastGracePeriod, renewBlocked, renewGraceEnd, situationBadge, stateBadge, wouldBeDefaulted, graceSummary } from "./display"; // A1: + pastGracePeriod; LC3: + graceSummary
 import { accruedInterest } from "./accrual";
 
 const today = "2026-11-05";
@@ -101,5 +101,18 @@ describe("wouldBeDefaulted (L30, same rule as run_default_detection)", () => {
   // A1: owing only interest (principal paid off) still counts as owing money, same as the database
   it("still defaults a loan that owes only interest", () => {
     expect(wouldBeDefaulted({ ...loan, principal_balance: 0, interest_owed: 50 }, "2026-11-06")).toBe(true);
+  });
+});
+
+describe("graceSummary (LC3)", () => {
+  const f = (iso: string) => iso; // keep the ISO date so the test reads plainly
+  const loan = { maturity_date: "2026-11-06", grace_period_days: 7 };
+  it("says until the last grace day, and ended the day after", () => {
+    expect(graceSummary(loan, "2026-11-13", f)).toBe("7 days, until 2026-11-13");
+    expect(graceSummary(loan, "2026-11-14", f)).toBe("7 days, ended 2026-11-13");
+  });
+  it("uses the loan's own days, 1 day and 0 days", () => {
+    expect(graceSummary({ ...loan, grace_period_days: 1 }, "2026-11-01", f)).toBe("1 day, until 2026-11-07");
+    expect(graceSummary({ ...loan, grace_period_days: 0 }, "2026-11-01", f)).toBe("None (0 days on this loan)");
   });
 });
