@@ -115,6 +115,17 @@ export function AppShell({
     </Link>
   );
 
+  // the signed-in staff member, at the bottom of the side menu (name, role, sign out)
+  const account = (rail: boolean) => (
+    <div className="border-t border-white/10 px-2 py-2">
+      <div className={cx("px-3 pb-1 leading-tight transition-opacity duration-200 motion-reduce:transition-none", rail && "pointer-events-none h-0 overflow-hidden pb-0 opacity-0")} aria-hidden={rail}>
+        <p className="truncate text-sm font-medium text-white">{userName}</p>
+        <p className="truncate text-xs text-navy-300">{roleLabel}</p>
+      </div>
+      <LogoutButton variant="sidebar" rail={rail} />
+    </div>
+  );
+
   return (
     <div
       className={cx(
@@ -130,6 +141,7 @@ export function AppShell({
       >
         {brand(collapsed)}
         {nav(collapsed)}
+        {account(collapsed)}
         <button
           type="button"
           onClick={() => writeCollapsed(!collapsed)}
@@ -142,8 +154,8 @@ export function AppShell({
         </button>
       </aside>
 
-      <header className="sticky top-0 z-20 flex h-12 items-center justify-between border-b border-slate-200 bg-white px-4 print:hidden sm:px-6">
-        <div className="flex items-center gap-2 lg:hidden">
+      <header className="sticky top-0 z-20 flex h-12 items-center border-b border-slate-200 bg-white px-4 print:hidden sm:px-6 lg:hidden">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -156,23 +168,6 @@ export function AppShell({
           {/* D4: app name shown on phones next to the menu button.
               whitespace-nowrap = never break this text onto 2 lines */}
           <span className="whitespace-nowrap font-display text-base font-semibold text-navy-900">CTM PawnTrack</span>
-        </div>
-        <div className="ml-auto flex items-center gap-3 text-sm">
-          {/* D4: name and role in the top bar.
-              Phones show only the role; wider screens show "Name · Role". */}
-          {/* opens the name + role group. whitespace-nowrap = keep it on 1 line */}
-          <span className="whitespace-nowrap text-slate-700">
-            {/* opens the name part. hidden sm:inline = hidden on phones, shown on screens 640px and wider */}
-            <span className="hidden sm:inline">
-              {/* the staff member's name, a grey dot, then a space. {" "} is a space JSX won't remove */}
-              {userName} <span className="text-slate-500">·</span>{" "}
-            {/* closes the name part */}
-            </span>
-            {/* the role (for example "Cashier"), always shown */}
-            <span className="text-slate-500">{roleLabel}</span>
-          {/* closes the name + role group */}
-          </span>
-          <LogoutButton />
         </div>
       </header>
 
@@ -187,6 +182,7 @@ export function AppShell({
               </button>
             </div>
             {nav(false)}
+            {account(false)}
           </aside>
         </div>
       )}
