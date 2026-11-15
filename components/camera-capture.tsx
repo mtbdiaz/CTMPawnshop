@@ -9,6 +9,11 @@ import { Icon } from "./icons";
 // The photo is handed back as a JPEG file, so it goes through the same checks and upload as "Add photos".
 // If the browser can't use the camera here (no camera, permission refused, an old browser), the popup says so and
 // offers the phone's own camera app instead (a file box with capture), and "Add photos" still works.
+// Nov 16 (Wush): a laptop can list a second "camera" that can't show a picture (an infrared or virtual one).
+//   - Switching to a camera that won't start now goes back to the camera that was working, says so, and takes the
+//     broken one off the Switch list. Before, it ended on an error with no way back.
+//   - The error screen has "Try again", and on a computer the file button says "Choose a photo file" (it opens the
+//     file window there; only a phone opens its camera app).
 type Phase = "starting" | "live" | "taken" | "error";
 
 export function CameraButton({ onCapture, disabled, compact }: { onCapture: (file: File) => void; disabled?: boolean; compact?: boolean }) {
@@ -22,6 +27,11 @@ export function CameraButton({ onCapture, disabled, compact }: { onCapture: (fil
   const [preview, setPreview] = useState<string | null>(null); // the photo just taken, to look at before using it
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]); // every camera, for "Switch camera"
   const [cameraIndex, setCameraIndex] = useState<number | null>(null); // null = the back camera if there is one
+  const [note, setNote] = useState(""); // a small message under the picture, e.g. after a failed switch
+  const working = useRef<string | null>(null); // the camera that last showed a picture (to go back to)
+  const broken = useRef(new Set<string>()); // cameras that wouldn't start: left out of "Switch camera"
+  const [brokenIds, setBrokenIds] = useState<string[]>([]); // the same list, for the screen (hides Switch camera when only one works)
+  const [touch, setTouch] = useState(false); // a phone or tablet: its file button opens the camera app
 
   // switch the camera off (the light on a laptop goes off too)
   function stopCamera() {
@@ -29,7 +39,7 @@ export function CameraButton({ onCapture, disabled, compact }: { onCapture: (fil
     stream.current = null;
   }
 
-  async function startCamera(index: number | null) {
+  async function startCamera(index: number | null, backTo?: string | null) {
     stopCamera();
     setPhase("starting");
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -38,7 +48,7 @@ export function CameraButton({ onCapture, disabled, compact }: { onCapture: (fil
       return;
     }
     try {
-      const device = index !== null ? cameras[index] : undefined;
+      const device = index !== null ? usable()[index] : undefined;
       stream.current = await navigator.mediaDevices.getUserMedia({
         video: device
           ? { deviceId: { exact: device.deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
@@ -52,9 +62,23 @@ export function CameraButton({ onCapture, disabled, compact }: { onCapture: (fil
       // the camera names are only shown after permission, so list them now
       const all = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
       setCameras(all);
+      working.current = stream.current.getVideoTracks()[0]?.getSettings().deviceId ?? null;
       setPhase("live");
     } catch (e) {
       const name = (e as { name?: string })?.name;
+      // a switch that failed: remember that camera as broken and go back to the one that was working
+      const tried = index !== null ? usable()[index] : undefined;
+      if (tried && backTo && tried.deviceId !== backTo) {
+        broken.current.add(tried.deviceId);
+        setBrokenIds([...broken.current]);
+        const back = usable().findIndex((c) => c.deviceId === backTo);
+        if (back >= 0) {
+          setCameraIndex(back);
+          setNote(`${tried.label ? `"${tried.label}"` : "That camera"} couldn't be started, so the first camera is back on.`);
+          await startCamera(back);
+          return;
+        }
+      }
       setError(
         name === "NotAllowedError"
           ? "Camera permission was refused. Allow the camera for this site in the browser settings, or use the camera app below."
@@ -70,7 +94,7 @@ export function CameraButton({ onCapture, disabled, compact }: { onCapture: (fil
   useEffect(() => {
     if (!open) return;
     dialog.current?.showModal();
-    void startCamera(cameraIndex); // eslint-disable-line react-hooks/set-state-in-effect -- starts the camera once the popup (and its video) is on screen
+    void startCamera(cameraIndex); // starts the camera once the popup (and its video) is on screen
     return () => stopCamera();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the popup opens; switching is done by the button
   }, [open]);
@@ -104,13 +128,20 @@ export function CameraButton({ onCapture, disabled, compact }: { onCapture: (fil
     dialog.current?.close();
   }
 
+  // the cameras "Switch camera" goes through: every camera except the ones that wouldn't start
+  function usable() {
+    return cameras.filter((c) => !broken.current.has(c.deviceId));
+  }
+
   function switchCamera() {
-    if (cameras.length < 2) return;
-    const current = stream.current?.getVideoTracks()[0]?.getSettings().deviceId;
-    const at = cameras.findIndex((c) => c.deviceId === current);
-    const next = (at + 1) % cameras.length;
+    const list = usable();
+    if (list.length < 2) return;
+    const current = stream.current?.getVideoTracks()[0]?.getSettings().deviceId ?? null;
+    const at = list.findIndex((c) => c.deviceId === current);
+    const next = (at + 1) % list.length;
+    setNote("");
     setCameraIndex(next);
-    void startCamera(next);
+    void startCamera(next, current);
   }
 
   // the phone's own camera app (fallback): a file box that asks for the camera
@@ -132,6 +163,9 @@ export function CameraButton({ onCapture, disabled, compact }: { onCapture: (fil
           setPreview(null);
           shot.current = null;
           setError("");
+          setNote("");
+          setCameraIndex(null); // start on the usual camera every time the popup opens
+          setTouch(window.matchMedia("(pointer: coarse)").matches);
           setOpen(true);
         }}
         className={cx(
@@ -173,22 +207,32 @@ export function CameraButton({ onCapture, disabled, compact }: { onCapture: (fil
             )}
             {phase === "starting" && <p className="px-5 py-3 text-center text-sm text-white/80">Starting the camera. Allow the camera if the browser asks.</p>}
           </div>
+          {note && phase !== "error" && (
+            <p role="status" className="border-b border-amber-200 bg-amber-50 px-5 py-2 text-sm text-amber-900">
+              {note}
+            </p>
+          )}
 
           {phase === "error" && (
             <div role="alert" className="space-y-3 px-5 py-4 text-sm">
               <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900">{error}</p>
-              {/* on a phone this opens the camera app straight away */}
-              <label className={cx(buttonClasses("secondary"), "cursor-pointer has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-navy-500")}>
-                <Icon name="camera" className="h-4 w-4" />
-                Use the camera app
-                <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={fromCameraApp} className="sr-only" />
-              </label>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => { setNote(""); setCameraIndex(null); void startCamera(null); }} className={buttonClasses("secondary")}>
+                  Try again
+                </button>
+                {/* on a phone this opens the camera app straight away; on a computer it opens the file window, so it says so */}
+                <label className={cx(buttonClasses("secondary"), "cursor-pointer has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-navy-500")}>
+                  <Icon name="camera" className="h-4 w-4" />
+                  {touch ? "Use the camera app" : "Choose a photo file"}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={fromCameraApp} className="sr-only" />
+                </label>
+              </div>
             </div>
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-5 py-3">
             <div>
-              {phase === "live" && cameras.length > 1 && (
+              {phase === "live" && cameras.filter((c) => !brokenIds.includes(c.deviceId)).length > 1 && (
                 <button type="button" onClick={switchCamera} className={buttonClasses("secondary", "sm")}>
                   Switch camera
                 </button>
