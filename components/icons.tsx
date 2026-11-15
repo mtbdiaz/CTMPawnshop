@@ -18,7 +18,8 @@ export type IconName =
   | "menu"
   | "logout"
   | "info"
-  | "arrow-left";
+  | "arrow-left"
+  | "dots"; // U-Phase 2B: the Actions menu button on Settings → Users
 
 const PATHS: Record<IconName, string> = {
   home: "M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
@@ -48,6 +49,7 @@ const PATHS: Record<IconName, string> = {
   check: "M20 6 9 17l-5-5",
   x: "M18 6 6 18M6 6l12 12",
   menu: "M4 6h16M4 12h16M4 18h16",
+  dots: "M6.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM13.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zM20.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z", // three dots
   logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
   info: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20M12 16v-4M12 8h.01",
   "arrow-left": "M19 12H5M12 19l-7-7 7-7",

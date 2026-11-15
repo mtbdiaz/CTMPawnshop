@@ -4,8 +4,8 @@ import { Alert, Card, PageHeader, SectionTitle, Table, TBody, TH, THead } from "
 import { ViewTabs } from "@/components/view-tabs"; // D2: the shared tab row (no "Viewing" here: each tab is a whole section, not a list)
 import { SettingsForm } from "./settings-form";
 import { listAccounts } from "../users/actions";
-import { CreateAccountForm } from "../users/create-account-form";
-import { AccountRow } from "../users/account-row";
+import { StaffDirectory } from "../users/staff-directory"; // Phase 2B: the staff list, Actions menu and popups
+import type { StaffAccount } from "@/lib/staff/directory";
 import Link from "next/link";
 import { AddVaultLocationForm, OtherLocations, VaultLocationCard, VaultLocationRow, type OtherLocationRow, type VaultRow } from "./vault-locations"; // #37
 import { countByLocation, inventoryTabFor, itemsLabel, locationKey, readItemsInShop } from "@/lib/settings/vault-locations"; // VL (Nov 15)
@@ -13,9 +13,12 @@ import { countByLocation, inventoryTabFor, itemsLabel, locationKey, readItemsInS
 export const metadata = { title: "Settings" };
 
 // Item 13: System Settings and User Accounts merged into one page with tabs.
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+type SettingsParams = { tab?: string; q?: string; role?: string; status?: string; page?: string };
+
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<SettingsParams> }) {
   const user = await requireRole(["admin"]);
-  const asked = (await searchParams).tab;
+  const params = await searchParams;
+  const asked = params.tab;
   const tab = asked === "users" || asked === "vaults" ? asked : "rates"; // anything else opens the first tab
 
   return (
@@ -31,7 +34,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           { label: "Users", value: "users", href: "/dashboard/settings?tab=users" },
         ]}
       />
-      {tab === "rates" ? <RatesTab /> : tab === "vaults" ? <VaultsTab /> : <UsersTab currentUserId={user.id} />}
+      {tab === "rates" ? <RatesTab /> : tab === "vaults" ? <VaultsTab /> : <UsersTab currentUserId={user.id} params={params} />}
     </div>
   );
 }
@@ -166,32 +169,8 @@ function Summary({ label, value, hint, warn = false }: { label: string; value: s
   );
 }
 
-async function UsersTab({ currentUserId }: { currentUserId: string }) {
-  const accounts = await listAccounts();
-  const active = accounts.filter((a) => a.is_active).length;
-  return (
-    <div className="space-y-5">
-      <Card>
-        <SectionTitle>Add a staff member</SectionTitle>
-        <CreateAccountForm />
-      </Card>
-      <section>
-        <SectionTitle description={`${active} active of ${accounts.length}`}>Staff</SectionTitle>
-        <Card padded={false}>
-          <Table minWidth="820px">
-            <THead>
-              <TH>Name, email and role</TH>
-              <TH>Status</TH>
-              <TH>Access</TH>
-            </THead>
-            <TBody>
-              {accounts.map((account) => (
-                <AccountRow key={account.id} account={account} isSelf={account.id === currentUserId} />
-              ))}
-            </TBody>
-          </Table>
-        </Card>
-      </section>
-    </div>
-  );
+// Phase 2B (Nov 15): Settings → Users. The list itself is StaffDirectory (app/dashboard/users/staff-directory.tsx).
+async function UsersTab({ currentUserId, params }: { currentUserId: string; params: SettingsParams }) {
+  const accounts: StaffAccount[] = await listAccounts();
+  return <StaffDirectory accounts={accounts} currentUserId={currentUserId} params={params} />;
 }

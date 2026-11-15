@@ -10,7 +10,8 @@ import { createAccountSchema, staffDetailsSchema } from "@/lib/validation/accoun
 import { generateTempPassword } from "@/lib/auth/temp-password"; // U6
 import { deactivate, reactivate, updateDetails, type StaffDeps, type StaffEvent } from "@/lib/staff/account-flows"; // U3, U5
 
-export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; tempPassword?: string; message?: string };
+// accountName / accountEmail: who a new temporary password belongs to (shown with it, Phase 2B)
+export type ActionState = { error?: string; fieldErrors?: FieldErrors; success?: boolean; tempPassword?: string; message?: string; accountName?: string; accountEmail?: string };
 
 // "100 years": how Supabase blocks a sign-in (PB-4)
 const BLOCK_FOREVER = "876000h";
@@ -78,7 +79,11 @@ export async function createAccount(_prevState: ActionState, formData: FormData)
     app_metadata: { force_password_change: true },
     user_metadata: { force_password_change: true },
   });
-  if (error || !data.user) return { error: error?.message ?? "Could not create account" };
+  if (error || !data.user) {
+    // U13: Supabase's own English message for a used email, in our words
+    if (error && /already (been )?registered|already exists/i.test(error.message)) return { fieldErrors: { email: "This email already has an account." } };
+    return { error: error?.message ?? "Could not create account" };
+  }
 
   // U4: the profile is added as the signed-in Admin, so the audit log shows who created the account
   const supabase = await createClient();
@@ -93,7 +98,7 @@ export async function createAccount(_prevState: ActionState, formData: FormData)
   }
 
   revalidatePath("/dashboard/settings");
-  return { success: true, tempPassword };
+  return { success: true, tempPassword, accountName: parsed.data.full_name, accountEmail: parsed.data.email };
 }
 
 // U3: name and role only. Never touches the active status, so an old page can't reactivate anyone.
