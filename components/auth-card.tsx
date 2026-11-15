@@ -17,7 +17,7 @@ function Logo({ onDark = false }: { onDark?: boolean }) {
  * and the form on the right. Phone and tablet: a slim navy band with the name, then the form. Light only, like the rest of
  * the app. The form is anchored from the top (not centered), so opening the help box below it never moves the fields.
  */
-export function AuthCard({ title, subtitle, children }: { title: string; subtitle: ReactNode; children: ReactNode }) {
+export function AuthCard({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   return (
     <main className="min-h-screen bg-white lg:grid lg:grid-cols-[5fr_6fr]">
       {/* phone and tablet: the brand band */}
@@ -49,7 +49,7 @@ export function AuthCard({ title, subtitle, children }: { title: string; subtitl
         <div className="flex flex-1 items-start justify-center px-5 pb-8 pt-10 sm:px-8 sm:pt-16 lg:pt-[18vh]">
           <div className="w-full max-w-sm">
             <h1 className="font-display text-3xl font-semibold text-navy-900">{title}</h1>
-            <p className="mt-2 text-base text-slate-600">{subtitle}</p>
+            {subtitle && <p className="mt-2 text-base text-slate-600">{subtitle}</p>}
             <div className="mt-8">{children}</div>
           </div>
         </div>
