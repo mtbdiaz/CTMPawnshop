@@ -157,7 +157,6 @@ function EditStaff({ account, perms }: { account: StaffAccount; perms: StaffPerm
         </dl>
         <SelectField
           id={`edit-role-${account.id}`}
-          data-native-picker="" // inside a popup: the app's own dropdown list (picker-enhancer) would open behind it
           label="Role"
           name="role"
           value={role}
@@ -487,7 +486,6 @@ function AddStaffForm() {
             <Field id="add-staff-email" label="Email" name="email" type="email" required maxLength={254} autoComplete="off" hint="They sign in with this. It can't be changed later in PawnTrack." />
             <SelectField
               id="add-staff-role"
-              data-native-picker="" // inside a popup: keep the browser's own list (see Edit staff)
               label="Role"
               name="role"
               required
