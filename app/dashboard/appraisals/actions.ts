@@ -79,6 +79,22 @@ export async function findCustomersForAppraisal(query: string): Promise<Customer
   }));
 }
 
+// Nov 16: one customer for the picker, by id. Used right after "Register new customer" inside New appraisal,
+// so the person just registered is picked without searching again. Same masking as the search above.
+export async function getCustomerOption(id: string): Promise<CustomerOption | null> {
+  await requireRole(["appraiser", "cashier", "admin"]);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
+  const { data: c, error } = await createAdminClient()
+    .from("customers")
+    .select("id, customer_no, full_name, id_type, id_number, is_blacklisted")
+    .eq("id", id)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (error) console.error("getCustomerOption failed:", error.message); // details for the developers
+  if (!c) return null;
+  return { id: c.id, customer_no: c.customer_no, full_name: c.full_name, id_hint: `${c.id_type} ${maskId(c.id_number)}`, blacklisted: Boolean(c.is_blacklisted) };
+}
+
 async function valuationFor(karat: number, weight: number) {
   const supabase = await createClient();
   const { data: settings } = await supabase

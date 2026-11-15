@@ -46,6 +46,7 @@ export function AppraisalCalculator({
   onCancel,
   forCustomer,
   onDraft,
+  canRegisterCustomer = false,
 }: {
   prices: KaratPrices;
   ltvPercent: number;
@@ -57,6 +58,8 @@ export function AppraisalCalculator({
   forCustomer?: { id: string; full_name: string } | null;
   /** TP1: New Loan only: told about every change to the item being typed (null = nothing picked yet) */
   onDraft?: (draft: AppraisalDraft | null) => void;
+  /** Nov 16: New appraisal popup only: this role may register a customer who isn't found (Admin, Cashier). */
+  canRegisterCustomer?: boolean;
 }) {
   const router = useRouter();
   const [category, setCategory] = useState("");
@@ -220,7 +223,7 @@ export function AppraisalCalculator({
         {/* #38: first, who brought the item in. NL3: inside New Loan it is the customer picked in step 1 */}
         <div className="sm:col-span-2">
           {!inLoan ? (
-            <CustomerPicker onPicked={(c) => setHasCustomer(Boolean(c))} />
+            <CustomerPicker onPicked={(c) => setHasCustomer(Boolean(c))} canRegister={canRegisterCustomer} />
           ) : (
             <>
               <input type="hidden" name="customer_id" value={forCustomer?.id ?? ""} />

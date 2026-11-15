@@ -4,7 +4,8 @@ import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { useFieldError } from "@/components/form"; // the server's error for this field, if any
 import { cx } from "@/components/ui";
 import { customerNo } from "@/lib/ref-numbers"; // C-0012
-import { findCustomersForAppraisal, type CustomerOption } from "./actions";
+import { findCustomersForAppraisal, getCustomerOption, type CustomerOption } from "./actions";
+import { RegisterCustomerDialog } from "../customers/register-dialog"; // the same Register customer popup as on Customers and New Loan
 
 /**
  * #38: picks the customer an appraised item belongs to. Used by New appraisal and by "Change customer".
@@ -14,9 +15,13 @@ import { findCustomersForAppraisal, type CustomerOption } from "./actions";
 export function CustomerPicker({
   initial = null,
   onPicked,
+  canRegister = false,
 }: {
   initial?: CustomerOption | null; // already chosen (e.g. the appraisal's current customer)
   onPicked?: (c: CustomerOption | null) => void; // tells the form who is picked (null = cleared)
+  // Nov 16 (Wush and Matt): Admin and Cashier can register a missing customer right here, like on New Loan.
+  // An Appraiser can't register customers (the server refuses), so they keep the message instead of a button.
+  canRegister?: boolean;
 }) {
   const [picked, setPicked] = useState<CustomerOption | null>(initial);
   const [q, setQ] = useState(""); // what is typed
@@ -140,9 +145,30 @@ export function CustomerPicker({
               : limited && searched === q.trim()
                 ? "Too many searches. Wait a minute, then try again."
                 : q.trim().length >= 2 && searched === q.trim() && !hits.length
-                  ? "No customer found. An Operator registers new customers under Customers."
+                  ? canRegister
+                    ? "No customer found. Register them with the button below."
+                    : "No customer found. A Cashier or Operator registers new customers under Customers."
                   : (error ?? "The person who brought the item in. Check the name and the last 4 of the ID.")}
           </p>
+          {/* the person isn't found (or isn't among the names shown): register them without leaving New appraisal.
+              The popup is the same form as on Customers (ID and phone duplicate checks, AML check).
+              After saving, the new customer is picked here and the appraisal continues */}
+          {canRegister && q.trim().length >= 2 && searched === q.trim() && !limited && !pending && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+              <span>{hits.length ? "Not the right person?" : "New customer?"}</span>
+              <RegisterCustomerDialog
+                small
+                portal
+                label="Register new customer"
+                // a typed name (letters, no digits) starts the Full name box; a phone or C-number doesn't
+                defaultName={/[a-z]/i.test(q) && !/\d/.test(q) ? q.trim() : undefined}
+                onRegistered={async (id) => {
+                  const c = await getCustomerOption(id); // the new customer, with the masked ID
+                  if (c) pick(c);
+                }}
+              />
+            </div>
+          )}
         </>
       )}
     </div>

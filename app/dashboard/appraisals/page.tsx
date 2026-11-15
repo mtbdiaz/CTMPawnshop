@@ -190,7 +190,7 @@ export default async function AppraisalsPage({
         description="Items appraised and waiting to be pawned. Once a loan is issued against an item it leaves this list."
         breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Appraisals" }]}
         // C1: New appraisal is a header button that opens a popup (Appraiser and Admin), like Register customer
-        actions={canAppraise && settings ? <NewAppraisalDialog prices={settings} ltvPercent={Number(settings.ltv_percent)} defaultOpen={params.new === "1"} /> : undefined}
+        actions={canAppraise && settings ? <NewAppraisalDialog prices={settings} ltvPercent={Number(settings.ltv_percent)} defaultOpen={params.new === "1"} canRegisterCustomer={hasRole(user.profile.role, ["operator", "cashier"])} /> : undefined}
       />
 
       <Card padded={false}>

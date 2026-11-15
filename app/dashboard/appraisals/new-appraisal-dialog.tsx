@@ -10,7 +10,7 @@ import { AppraisalCalculator } from "./appraisal-calculator"; // the same calcul
 // C1: "New appraisal" is one button in the page header. It opens the calculator in a popup,
 // so the list isn't pushed down. Same look and behavior as Register customer:
 // Cancel, X or Esc asks "Discard this appraisal?" if anything was entered. ?new=1 opens it straight away.
-export function NewAppraisalDialog({ prices, ltvPercent, defaultOpen }: { prices: KaratPrices; ltvPercent: number; defaultOpen?: boolean }) {
+export function NewAppraisalDialog({ prices, ltvPercent, defaultOpen, canRegisterCustomer = false }: { prices: KaratPrices; ltvPercent: number; defaultOpen?: boolean; canRegisterCustomer?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null); // the <dialog> element
   const keepEditing = useRef<HTMLButtonElement>(null); // the "Continue editing" button (gets focus)
   const [open, setOpen] = useState(false); // true while the popup is showing
@@ -110,7 +110,7 @@ export function NewAppraisalDialog({ prices, ltvPercent, defaultOpen }: { prices
         {/* the calculator. Only drawn while open, so it starts empty each time.
             onInput / onChange catch any typing or picking inside, to know there's something to lose */}
         <div className="px-5 py-5" onInput={() => setDirty(true)} onChange={() => setDirty(true)}>
-          {open && <AppraisalCalculator prices={prices} ltvPercent={ltvPercent} onCancel={requestClose} />}
+          {open && <AppraisalCalculator prices={prices} ltvPercent={ltvPercent} onCancel={requestClose} canRegisterCustomer={canRegisterCustomer} />}
         </div>
       </dialog>
     </>
