@@ -41,10 +41,10 @@ function initials(name: string): string {
   return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
 }
 
-// the soft gold glow and the navy fade behind the menu (decoration only)
+// the soft cream wash behind the menu, the same family as the login panel (decoration only)
 const SIDEBAR_BG: React.CSSProperties = {
   backgroundImage:
-    "radial-gradient(18rem 14rem at 0% 0%, rgba(212,164,41,0.13), transparent 70%), linear-gradient(180deg, var(--color-navy-900) 0%, var(--color-navy-950) 100%)",
+    "radial-gradient(22rem 16rem at 0% 0%, rgba(255,255,255,0.95), transparent 70%), linear-gradient(180deg, var(--color-gold-50) 0%, #fffdf6 42%, var(--color-gold-100) 140%)",
 };
 
 export function AppShell({
@@ -64,26 +64,27 @@ export function AppShell({
   const collapsed = useSyncExternalStore(subscribe, readCollapsed, () => false);
 
   const nav = (rail: boolean) => (
-    <nav aria-label="Main" className="sidebar-scroll flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-4">
+    <nav aria-label="Main" className="sidebar-scroll flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-2">
       {sections.map((section, s) => (
         <div key={section.title} className={cx(s > 0 && "mt-4")}>
           {/* expanded: the section name. collapsed: a thin rule, so the groups still read as groups */}
-          <div className="relative h-5">
+          <div className="relative h-6">
             <p
               className={cx(
-                "absolute inset-x-0 top-0 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-navy-300 transition-opacity duration-200 motion-reduce:transition-none",
+                "absolute inset-x-0 top-1 flex items-center gap-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 transition-opacity duration-200 motion-reduce:transition-none",
                 rail && "opacity-0",
               )}
               aria-hidden={rail}
             >
               {section.title}
+              <span className="h-px flex-1 bg-gold-200" />
             </p>
             <span
               aria-hidden="true"
-              className={cx("absolute inset-x-2 top-2 h-px bg-white/10 transition-opacity duration-200 motion-reduce:transition-none", !rail && "opacity-0")}
+              className={cx("absolute inset-x-2 top-3 h-px bg-gold-200 transition-opacity duration-200 motion-reduce:transition-none", !rail && "opacity-0")}
             />
           </div>
-          <ul className="mt-1 space-y-0.5">
+          <ul className="mt-0.5 space-y-0.5">
             {section.items.map((item) => {
               const active = item.href === current;
               return (
@@ -94,24 +95,24 @@ export function AppShell({
                     aria-label={rail ? item.label : undefined}
                     onClick={() => setOpen(false)}
                     className={cx(
-                      "relative flex h-9 items-center gap-3 rounded-lg px-2.5 text-[13.5px] transition-[background-color,color] duration-150 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold-400 motion-reduce:transition-none",
+                      "relative flex h-9 items-center gap-3 rounded-lg px-2.5 text-[13.5px] transition-[background-color,color,box-shadow] duration-150 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-navy-500 motion-reduce:transition-none",
                       active
-                        ? "bg-gradient-to-r from-white/[0.14] to-white/[0.05] font-medium text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)]"
-                        : "text-navy-100/85 hover:bg-white/[0.07] hover:text-white",
+                        ? "bg-white font-semibold text-navy-900 shadow-[0_1px_2px_rgba(10,22,40,0.08),0_0_0_1px_rgba(212,164,41,0.28)]"
+                        : "text-slate-700 hover:bg-white/70 hover:text-navy-900",
                     )}
                   >
                     {/* the gold marker on the page you are on */}
                     <span
                       aria-hidden="true"
                       className={cx(
-                        "absolute -left-3 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-gold-400 transition-opacity duration-150 motion-reduce:transition-none",
+                        "absolute -left-3 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-gold-500 transition-opacity duration-150 motion-reduce:transition-none",
                         active ? "opacity-100" : "opacity-0",
                       )}
                     />
                     <span
                       className={cx(
                         "flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors duration-150 motion-reduce:transition-none",
-                        active ? "bg-gold-500/20 text-gold-300" : "bg-white/[0.04] text-navy-300 group-hover:bg-white/10 group-hover:text-white",
+                        active ? "bg-navy-800 text-gold-300" : "bg-gold-100/70 text-gold-700 group-hover:bg-gold-100",
                       )}
                     >
                       <Icon name={item.icon} className="h-4 w-4" />
@@ -123,7 +124,7 @@ export function AppShell({
                   {rail && (
                     <span
                       role="tooltip"
-                      className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-md bg-navy-950 px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg ring-1 ring-white/10 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
+                      className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-md bg-navy-900 px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
                     >
                       {item.label}
                     </span>
@@ -142,8 +143,8 @@ export function AppShell({
       href="/dashboard"
       onClick={() => setOpen(false)}
       className={cx(
-        "block shrink-0 overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold-500",
-        rail ? "flex h-16 items-center justify-center" : "border-b-[3px] border-gold-400 bg-white px-5 py-3.5",
+        "block shrink-0 overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-navy-500",
+        rail ? "flex h-16 items-center justify-center" : "px-5 pb-2 pt-5",
       )}
       aria-label="CTM Pawnshop PawnTrack dashboard"
     >
@@ -152,25 +153,29 @@ export function AppShell({
           CTM
         </span>
       ) : (
-        // a white header strip across the top of the menu: the logo was made for a light background, so it sits on it as it is
-        <Image src="/ctm-logo.webp" alt="CTM Pawnshop" width={960} height={278} priority sizes="224px" className="mx-auto h-auto w-full max-w-[200px]" />
+        <>
+          {/* the logo was made for a light background, so it sits on the cream menu as it is */}
+          <Image src="/ctm-logo.webp" alt="CTM Pawnshop" width={960} height={278} priority sizes="224px" className="mx-auto h-auto w-full max-w-[196px] drop-shadow-[0_4px_8px_rgba(10,22,40,0.15)]" />
+          <span className="mx-auto mt-3 block h-0.5 w-10 rounded-full bg-gold-500" aria-hidden="true" />
+          <span className="mt-2 block text-center text-[10px] font-semibold uppercase tracking-[0.22em] text-navy-700">PawnTrack</span>
+        </>
       )}
     </Link>
   );
 
   // the signed-in staff member, at the bottom of the side menu: avatar, name, role, sign out
   const account = (rail: boolean) => (
-    <div className="shrink-0 border-t border-white/10 p-3">
-      <div className={cx("flex items-center gap-3 rounded-lg px-1.5 py-1.5", !rail && "bg-white/[0.04]")} title={rail ? `${userName} · ${roleLabel}` : undefined}>
-        <span
-          aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gold-500/20 text-xs font-semibold text-gold-300 ring-1 ring-gold-400/40"
-        >
+    <div className="shrink-0 border-t border-gold-200 p-3">
+      <div
+        className={cx("flex items-center gap-3 rounded-lg px-1.5 py-1.5", !rail && "bg-white shadow-[0_1px_2px_rgba(10,22,40,0.06),0_0_0_1px_rgba(10,22,40,0.05)]")}
+        title={rail ? `${userName} · ${roleLabel}` : undefined}
+      >
+        <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-navy-800 text-xs font-semibold text-gold-300 ring-2 ring-gold-300/60">
           {initials(userName)}
         </span>
         <span className={cx("min-w-0 leading-tight transition-opacity duration-200 motion-reduce:transition-none", rail && "pointer-events-none w-0 opacity-0")}>
-          <span className="block truncate text-[13px] font-medium text-white">{userName}</span>
-          <span className="block truncate text-[11px] text-navy-300">{roleLabel}</span>
+          <span className="block truncate text-[13px] font-semibold text-navy-900">{userName}</span>
+          <span className="block truncate text-[11px] text-slate-600">{roleLabel}</span>
         </span>
       </div>
       <div className="mt-1">
@@ -189,7 +194,7 @@ export function AppShell({
       <aside
         style={SIDEBAR_BG}
         className={cx(
-          "fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-white/5 transition-[width] duration-200 ease-out motion-reduce:transition-none lg:flex print:hidden",
+          "fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-gold-200/80 transition-[width] duration-200 ease-out motion-reduce:transition-none lg:flex print:hidden",
           collapsed ? "w-[72px]" : "w-64",
         )}
       >
@@ -201,7 +206,7 @@ export function AppShell({
             onClick={() => writeCollapsed(!collapsed)}
             aria-expanded={!collapsed}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="flex h-8 w-full items-center gap-3 rounded-lg px-2.5 text-xs text-navy-300 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold-400 motion-reduce:transition-none"
+            className="flex h-8 w-full items-center gap-3 rounded-lg px-2.5 text-xs text-slate-600 transition-colors hover:bg-white/70 hover:text-navy-900 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-navy-500 motion-reduce:transition-none"
           >
             <span className="flex h-7 w-7 shrink-0 items-center justify-center">
               <Icon name={collapsed ? "chevron-right" : "arrow-left"} className="h-4 w-4" />
@@ -231,11 +236,11 @@ export function AppShell({
 
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden print:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
-          <button type="button" className="absolute inset-0 bg-navy-950/60 backdrop-blur-[2px]" aria-label="Close navigation menu" onClick={() => setOpen(false)} />
+          <button type="button" className="absolute inset-0 bg-navy-950/50 backdrop-blur-[2px]" aria-label="Close navigation menu" onClick={() => setOpen(false)} />
           <aside style={SIDEBAR_BG} className="relative flex h-full w-72 max-w-[85vw] flex-col shadow-2xl">
             <div className="flex items-center justify-between pr-2">
               {brand(false)}
-              <button type="button" onClick={() => setOpen(false)} aria-label="Close navigation menu" className="rounded-md p-2 text-navy-100 hover:bg-white/10">
+              <button type="button" onClick={() => setOpen(false)} aria-label="Close navigation menu" className="rounded-md p-2 text-slate-600 hover:bg-white/70">
                 <Icon name="x" className="h-5 w-5" />
               </button>
             </div>

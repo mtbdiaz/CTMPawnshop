@@ -29,10 +29,10 @@ export function LogoutButton({ variant = "default", rail = false }: { variant?: 
         disabled={pending}
         aria-label={rail ? "Sign out" : undefined}
         title={rail ? "Sign out" : undefined}
-        className="group flex h-8 w-full items-center gap-3 whitespace-nowrap rounded-lg px-2.5 text-[13px] text-navy-200 transition-colors hover:bg-red-500/15 hover:text-red-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold-400 disabled:opacity-60 motion-reduce:transition-none"
+        className="group flex h-8 w-full items-center gap-3 whitespace-nowrap rounded-lg px-2.5 text-[13px] text-slate-700 transition-colors hover:bg-red-50 hover:text-red-800 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-navy-500 disabled:opacity-60 motion-reduce:transition-none"
       >
         <span className="flex h-6 w-6 shrink-0 items-center justify-center">
-          <Icon name="logout" className="h-4 w-4 text-navy-300 group-hover:text-red-200" />
+          <Icon name="logout" className="h-4 w-4 text-slate-500 group-hover:text-red-700" />
         </span>
         <span className={cx("transition-opacity duration-200 motion-reduce:transition-none", rail && "opacity-0")}>{pending ? "Signing out" : "Sign out"}</span>
       </button>
