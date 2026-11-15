@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createAccountSchema, editAccountSchema } from "./account";
+import { createAccountSchema, staffDetailsSchema } from "./account";
 
 describe("createAccountSchema (PB-4)", () => {
   const valid = {
@@ -34,18 +34,18 @@ describe("createAccountSchema (PB-4)", () => {
   });
 });
 
-describe("editAccountSchema (PB-4)", () => {
-  it("accepts valid input", () => {
-    const result = editAccountSchema.safeParse({
-      full_name: "Jane Cashier",
-      role: "appraiser",
-      is_active: false,
-    });
-    expect(result.success).toBe(true);
+describe("staffDetailsSchema (PB-4, U3)", () => {
+  it("accepts a name and a role", () => {
+    expect(staffDetailsSchema.safeParse({ full_name: "Jane Cashier", role: "appraiser" }).success).toBe(true);
   });
 
-  it("rejects a missing role", () => {
-    const result = editAccountSchema.safeParse({ full_name: "Jane", is_active: true });
-    expect(result.success).toBe(false);
+  it("rejects a missing role or a blank name", () => {
+    expect(staffDetailsSchema.safeParse({ full_name: "Jane" }).success).toBe(false);
+    expect(staffDetailsSchema.safeParse({ full_name: "  ", role: "cashier" }).success).toBe(false);
+  });
+
+  it("has no active/inactive field (that is a separate action now)", () => {
+    const parsed = staffDetailsSchema.safeParse({ full_name: "Jane", role: "cashier", is_active: true });
+    expect(parsed.success && "is_active" in parsed.data).toBe(false);
   });
 });

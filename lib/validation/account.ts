@@ -10,10 +10,11 @@ export const createAccountSchema = z.object({
 
 export type CreateAccountInput = z.infer<typeof createAccountSchema>;
 
-export const editAccountSchema = z.object({
+// U3 (Nov 15): a name/role change only. Before: editAccountSchema also carried is_active, so a Save from an old page
+// could switch a deactivated account back on. Activating and deactivating are now a separate action.
+export const staffDetailsSchema = z.object({
   full_name: z.string().trim().min(1, "Full name is required"),
   role: z.enum(ALL_ROLES as [string, ...string[]]),
-  is_active: z.boolean(),
 });
 
-export type EditAccountInput = z.infer<typeof editAccountSchema>;
+export type StaffDetailsInput = z.infer<typeof staffDetailsSchema>;

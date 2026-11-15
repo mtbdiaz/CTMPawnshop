@@ -40,7 +40,18 @@ export const RECORD_TYPES: [string, string, string][] = [
   ["vault_locations", "Vault location", "Vault locations"],
   // VL1 (Nov 15, 0075): an item moved to another location (Inventory → Move)
   ["inventory_location_moves", "Item move", "Item moves"],
+  // U4 (Nov 15, 0076): password resets and the Supabase sign-in block/un-block, done by an Admin on Settings → Users
+  ["staff_account_events", "Staff account event", "Staff account events"],
 ];
+
+// U4: what each staff account event means (the password itself is never saved)
+const STAFF_EVENT: Record<string, string> = {
+  password_reset: "Password reset by an Admin",
+  login_blocked: "Sign-in blocked (deactivated)",
+  login_unblocked: "Sign-in allowed again (reactivated)",
+  login_block_failed: "Blocking the sign-in failed",
+  login_unblock_failed: "Allowing the sign-in again failed",
+};
 const ONE = new Map(RECORD_TYPES.map(([t, one]) => [t, one]));
 export const recordName = (table: string) => ONE.get(table) ?? humanize(table);
 
@@ -110,6 +121,7 @@ export function eventTitle(e: AuditEvent): string {
     if (e.table_name === "cash_flow_entries") return "Cash entry recorded";
     if (e.table_name === "customers") return "Customer registered";
     if (e.table_name === "inventory_location_moves") return "Item moved"; // VL1
+    if (e.table_name === "staff_account_events") return STAFF_EVENT[str(rowOf(e).action)] ?? "Staff account event"; // U4
     return `${name} created`;
   }
   if (e.action === "DELETE") return `${name} deleted`;
@@ -161,6 +173,8 @@ export function eventSummary(e: AuditEvent, names?: Map<string, string>): string
       return `Audit started for ${str(r.scope_vault) || "all vaults"}`;
     case "profiles":
       return [str(r.full_name), r.role ? humanize(str(r.role)) : ""].filter(Boolean).join(" · ") || "New staff account";
+    case "staff_account_events": // U4: for whom (the actor is in the "By" column)
+      return `For ${names?.get(str(r.profile_id)) ?? "a staff account"}`;
     default:
       return "New record";
   }
@@ -180,6 +194,7 @@ export function eventReason(e: AuditEvent): string {
   if (e.action === "VIEW") return str(r.reason);
   if (e.action === "INSERT" && e.table_name === "inventory_location_moves") return str(r.reason); // VL1: why it was moved
   if (e.action === "INSERT" && e.table_name === "loan_penalty_waivers") return str(r.reason_note); // PW: what happened
+  if (e.action === "INSERT" && e.table_name === "staff_account_events") return str(r.note); // U4: e.g. the Supabase error
   if (e.action === "UPDATE" && r.archived_at && !rowOfBefore(e).archived_at) return str(r.archive_reason);
   return "";
 }
