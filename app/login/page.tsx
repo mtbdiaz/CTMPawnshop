@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Sign in" };
 
 export default function LoginPage() {
   return (
-    <AuthCard title="Sign in" subtitle="Use the staff account your Admin created for you.">
+    <AuthCard title="Sign in">
       <LoginForm />
     </AuthCard>
   );
