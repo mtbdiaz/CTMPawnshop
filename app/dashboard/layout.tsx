@@ -5,6 +5,7 @@ import { navForRole } from "@/lib/nav";
 import { SessionTimeoutWatcher } from "@/components/session-timeout-watcher";
 import { AppShell } from "@/components/app-shell";
 import { ToastProvider } from "@/components/toast";
+import { PickerEnhancer } from "@/components/picker-enhancer";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -15,6 +16,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <ToastProvider>
       <SessionTimeoutWatcher />
+      {/* the same look for every dropdown and calendar pop-up in the app */}
+      <PickerEnhancer />
       <AppShell
         sections={navForRole(user.profile.role)}
         userName={user.profile.full_name}

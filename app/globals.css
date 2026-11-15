@@ -112,3 +112,52 @@ body {
   .pawn-form-wrap { background: #fff; padding: 0; overflow: visible; }
   .pawn-form { margin: 0; }
 }
+
+/* Dropdowns and date boxes. The closed box looks the same in every browser; the pop-up that opens is drawn by
+   components/picker-enhancer.tsx. These rules are not inside a Tailwind layer on purpose: they must win over the
+   padding utilities on each field so the arrow and the calendar icon always have room. */
+select:not([multiple]):not([size]) {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-right: 2.25rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2364748b' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 7.5 5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 1rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+select:not([multiple]):not([size]):hover:not(:disabled) { border-color: var(--color-navy-300); }
+select:not([multiple]):not([size])[aria-expanded="true"] {
+  border-color: var(--color-navy-500);
+  box-shadow: 0 0 0 2px rgb(36 85 164 / 0.2);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%232455a4' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 5-5 5 5'/%3E%3C/svg%3E");
+}
+select:disabled { cursor: not-allowed; }
+
+input[type="date"] {
+  cursor: pointer;
+  padding-right: 2.25rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2364748b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4.5' width='14' height='12.5' rx='2'/%3E%3Cpath d='M3 8.5h14M7 2.75v3.5M13 2.75v3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 1.05rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+input[type="date"]:hover:not(:disabled) { border-color: var(--color-navy-300); }
+input[type="date"][aria-expanded="true"] { border-color: var(--color-navy-500); box-shadow: 0 0 0 2px rgb(36 85 164 / 0.2); }
+/* the browser's own small calendar icon: kept (so the click area still exists) but invisible, ours is drawn above */
+input[type="date"]::-webkit-calendar-picker-indicator { opacity: 0; width: 1.5rem; margin-left: 0.25rem; cursor: pointer; }
+input[type="date"]::-webkit-datetime-edit-fields-wrapper { padding: 0; }
+input[type="date"]:disabled { cursor: not-allowed; }
+
+/* the pop-up (dropdown list or calendar) */
+@keyframes picker-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+.picker-pop { animation: picker-in 0.12s ease-out; transform-origin: top left; }
+@media (prefers-reduced-motion: reduce) { .picker-pop { animation: none; } }
+
+/* the side menu list scrolls on short screens: a slim scrollbar that matches the navy */
+.sidebar-scroll { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.18) transparent; }
+
+/* the side menu list scrolls on short screens: a slim scrollbar that matches the navy */
+.sidebar-scroll { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.18) transparent; }
