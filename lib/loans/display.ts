@@ -91,6 +91,7 @@ type DefaultCheckLoan = {
   archived_at?: string | null; // archived loans are never checked
   principal_balance: number; // stored principal still unpaid
   interest_owed: number; // stored interest still unpaid
+  damages_owed?: number; // stored liquidated damages still unpaid (0081: they count as money owed; missing = none)
 };
 
 /**
@@ -106,10 +107,10 @@ export function pastGracePeriod(loan: DefaultCheckLoan, today: string): boolean 
 /**
  * L30 + A1: true when the database's default check would mark this loan Defaulted today.
  * Same rule as ctm_default_detection_core (migration 0020): past the grace period AND it still owes money
- * (stored principal or interest above 0). A fully paid loan is skipped since Matt's fix #1.
+ * (stored principal, interest or liquidated damages above 0). A fully paid loan is skipped since Matt's fix #1.
  */
 export function wouldBeDefaulted(loan: DefaultCheckLoan, today: string): boolean {
-  const owesMoney = Number(loan.principal_balance) > 0 || Number(loan.interest_owed) > 0; // same check as the database
+  const owesMoney = Number(loan.principal_balance) > 0 || Number(loan.interest_owed) > 0 || Number(loan.damages_owed ?? 0) > 0; // same check as the database (0081: + liquidated damages)
   return pastGracePeriod(loan, today) && owesMoney; // both must be true
 }
 

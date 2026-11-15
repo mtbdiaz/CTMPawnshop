@@ -284,3 +284,10 @@ Checks:
 - `ctm_selftest_0078`: 7 of 7 PASS (whole waiver and exact balance, no second waiver and not added back, partial then rest, Cashier and missing reason refused, double click once, redeemed loan refused, no direct writes).
 - Unit tests for the reasons, the preview and the audit-trail wording.
 - Not tested in a browser here: the Waive penalty card on the loan page. The group test guide should get a step for it.
+
+## Pass 9: review of the 2% liquidated damages (Nov 15, 2026)
+- 64 database tests (every suite that touches loans, payments, penalties, reminders, search): 63 PASS, plus the lifecycle test, which prints its numbers (reinstate: status=reinstated, interest=1575.00) instead of a pass or fail.
+- Rule boundaries (ctm_selftest_0081): 4 of 4 PASS.
+- App against database: 216 of 216 loans give the same "owed now".
+- Staff and Admin logins cannot change a loan's damages, a loan's percent or a payment's damages part directly.
+- 367 unit tests, type check, lint and build pass.
