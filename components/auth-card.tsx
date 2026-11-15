@@ -2,7 +2,7 @@ import Image from "next/image";
 import type { ReactNode } from "react";
 
 /**
- * The sign-in and password screens. Desktop: a light panel on the left with the CTM Pawnshop logo, PawnTrack and Pawnshop Management
+ * The sign-in and password screens. Desktop: a light panel on the left with just the CTM Pawnshop logo
  * and the form on the right. Phone and tablet: a slim white band with the logo, then the form. Light only, like the rest of
  * the app. The form is anchored from the top (not centered), so opening the help box below it never moves the fields.
  */
@@ -28,9 +28,6 @@ export function AuthCard({ title, subtitle, children }: { title: string; subtitl
         />
         <div className="relative flex w-full max-w-lg flex-col items-center px-10 text-center">
           <Image src="/ctm-logo.webp" alt="CTM Pawnshop" width={960} height={278} priority sizes="512px" className="h-auto w-full drop-shadow-[0_10px_18px_rgba(10,22,40,0.18)]" />
-          <span aria-hidden="true" className="mt-9 h-0.5 w-16 rounded-full bg-gold-500" />
-          <p className="mt-6 font-display text-3xl font-semibold text-navy-900 xl:text-4xl">PawnTrack</p>
-          <p className="mt-2 text-base tracking-wide text-slate-600 xl:text-lg">Pawnshop Management</p>
         </div>
       </aside>
 
