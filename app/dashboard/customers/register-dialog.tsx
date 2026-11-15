@@ -2,6 +2,7 @@
 
 // useEffect = run code after the page shows; useRef = points at the popup; useState = is it open? anything typed?
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 // buttonClasses = the app's button look
 import { buttonClasses } from "@/components/ui";
 // Icon = the small line icons used across the app
@@ -20,12 +21,16 @@ export function RegisterCustomerDialog({
   small = false,
   defaultName,
   onRegistered,
+  portal = false,
 }: {
   defaultOpen?: boolean;
   label?: string;
   small?: boolean; // a smaller, secondary-looking button (New Loan)
   defaultName?: string;
   onRegistered?: (customerId: string) => void;
+  // Nov 16: true when the button sits inside another form (New appraisal). A form can't be inside a form, so the
+  // popup is drawn at the end of the page instead; the browser still shows it on top of everything.
+  portal?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null); // the <dialog> element
   const keepEditing = useRef<HTMLButtonElement>(null); // F9: the "Continue editing" button (gets focus)
@@ -58,14 +63,11 @@ export function RegisterCustomerDialog({
     if (confirming) keepEditing.current?.focus();
   }, [confirming]);
 
-  return (
-    <>
-      {/* the header button */}
-      <button type="button" onClick={show} className={small ? buttonClasses("secondary", "sm") : buttonClasses("primary")}>
-        <Icon name="plus" className="h-4 w-4" />
-        {label}
-      </button>
+  // inside another form: nothing typed, sent or closed in this popup may reach the form around the button
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
+  const popup = (
+    <>
       {/* the popup. Shadow is allowed because it floats above the page.
           onCancel = Esc was pressed: stop the browser closing it, and ask first if needed (F9).
           onClose = it really closed: reset everything. The browser puts the keyboard back on the Register button. */}
@@ -73,11 +75,13 @@ export function RegisterCustomerDialog({
         ref={ref}
         aria-labelledby="register-title"
         onCancel={(e) => {
+          if (portal) e.stopPropagation(); // the popup around the button (New appraisal) must not react to this one
           if (e.target !== e.currentTarget) return; // Esc came from the small "Register this customer?" box inside: let that box handle it
           e.preventDefault(); // don't close yet
           if (!confirming) requestClose(); // ask, or close if nothing typed
         }}
         onClose={(e) => {
+          if (portal) e.stopPropagation(); // same: New appraisal stays open when this popup closes
           if (e.target !== e.currentTarget) return; // the small confirm box inside closed, not this popup: keep the form
           setOpen(false); // removes the form, so it starts empty next time
           setDirty(false); // nothing typed any more
@@ -152,6 +156,28 @@ export function RegisterCustomerDialog({
         </div>
       {/* end of the popup */}
       </dialog>
+    </>
+  );
+
+  return (
+    <>
+      {/* the header button */}
+      <button type="button" onClick={show} className={small ? buttonClasses("secondary", "sm") : buttonClasses("primary")}>
+        <Icon name="plus" className="h-4 w-4" />
+        {label}
+      </button>
+
+      {portal ? (
+        typeof document !== "undefined" &&
+        createPortal(
+          <div onSubmit={stop} onReset={stop} onInput={stop} onChange={stop} onKeyDown={stop} onClick={stop}>
+            {popup}
+          </div>,
+          document.body,
+        )
+      ) : (
+        popup
+      )}
     </>
   );
 }
