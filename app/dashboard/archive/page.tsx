@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ARCHIVABLE_TABLES, ARCHIVE_LABELS, type ArchivableTable } from "@/lib/archive";
 import { formatDateTime } from "@/lib/format";
 import {
+  archiveCountLine,
   ARCHIVE_LIST_LIMIT,
   ARCHIVE_PAGE_SIZE,
   ARCHIVE_SELECT,
@@ -135,14 +136,8 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
             )}
           </form>
 
-          <p className="text-sm text-slate-600" aria-live="polite">
-            {all.length === 0
-              ? `No archived ${label.toLowerCase()}.`
-              : shown.length === 0
-                ? "No archived records match these filters."
-                : filtered
-                  ? `${shown.length} of ${all.length} archived ${label.toLowerCase()} match.`
-                  : `${all.length} archived ${label.toLowerCase()}${all.length >= ARCHIVE_LIST_LIMIT ? ` (the newest ${ARCHIVE_LIST_LIMIT})` : ""}.`}
+          <p className="text-sm text-slate-600 empty:hidden" aria-live="polite">
+            {archiveCountLine(label, all.length, shown.length, f)}
           </p>
         </div>
 

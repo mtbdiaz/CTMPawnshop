@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { activeHref, type NavSection } from "@/lib/nav";
 import { Icon } from "./icons";
 import { cx } from "./ui";
@@ -62,6 +62,15 @@ export function AppShell({
   const current = activeHref(pathname);
   const [open, setOpen] = useState(false);
   const collapsed = useSyncExternalStore(subscribe, readCollapsed, () => false);
+
+  // On short screens (1366x768) the menu scrolls, and the last items (Settings, Archive) start below the fold.
+  // Bring the current page's item into view inside the menu, so the highlighted item is never half hidden.
+  // "nearest" only scrolls the menu itself, and does nothing when the item is already fully visible.
+  useEffect(() => {
+    document.querySelectorAll<HTMLElement>('nav[aria-label="Main"] [aria-current="page"]').forEach((el) => {
+      if (el.offsetParent !== null) el.scrollIntoView({ block: "nearest" });
+    });
+  }, [current]);
 
   const nav = (rail: boolean) => (
     <nav aria-label="Main" className="sidebar-scroll flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-2">

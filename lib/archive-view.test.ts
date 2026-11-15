@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ARCHIVABLE_TABLES } from "./archive";
-import { archiveFilters, describeArchived, filterArchiveRows, historyOnlyReason, isFiltered, pageOf, SYSTEM_ACTOR, type ArchiveRow } from "./archive-view";
+import { ARCHIVABLE_TABLES, ARCHIVE_LABELS } from "./archive";
+import { archiveCountLine, archiveFilters, describeArchived, filterArchiveRows, historyOnlyReason, isFiltered, pageOf, SYSTEM_ACTOR, type ArchiveRow } from "./archive-view";
 
 const row = (id: string, title: string, at: string, by: string | null, reason = ""): ArchiveRow => ({
   id,
@@ -87,5 +87,26 @@ describe("historyOnlyReason", () => {
       expect(historyOnlyReason(t)).toBeTruthy();
     }
     for (const t of ["customers", "appraisal_items", "loans", "inventory_items", "suspicious_activity_flags"] as const) expect(historyOnlyReason(t)).toBeNull();
+  });
+});
+
+describe("archiveCountLine", () => {
+  const none = archiveFilters({});
+  it("counts in plain words, one or many", () => {
+    expect(archiveCountLine("Customers", 8, 8, none)).toBe("8 archived customers.");
+    expect(archiveCountLine("Auction batches", 1, 1, none)).toBe("1 archived auction batch.");
+    expect(archiveCountLine("Cash entries", 1, 1, none)).toBe("1 archived cash entry.");
+    expect(archiveCountLine("Vault audits", 500, 500, none)).toBe("500 archived vault audits (the newest 500).");
+    for (const t of ARCHIVABLE_TABLES) expect(archiveCountLine(ARCHIVE_LABELS[t], 1, 1, none)).not.toMatch(/s\.$|ie\.$|che\.$/);
+  });
+  it("says nothing when the type is empty (the empty box says it)", () => {
+    expect(archiveCountLine("Payments", 0, 0, none)).toBe("");
+    expect(archiveCountLine("Payments", 0, 0, archiveFilters({ q: "abc" }))).toBe("");
+  });
+  it("only talks about matches when a real filter is on, not for a sort", () => {
+    expect(archiveCountLine("Customers", 8, 8, archiveFilters({ sort: "oldest" }))).toBe("8 archived customers.");
+    expect(archiveCountLine("Customers", 8, 6, archiveFilters({ by: "system" }))).toBe("6 of 8 archived customers match.");
+    expect(archiveCountLine("Customers", 8, 1, archiveFilters({ q: "coles" }))).toBe("1 of 8 archived customers matches.");
+    expect(archiveCountLine("Customers", 8, 0, archiveFilters({ q: "zzz" }))).toBe("No archived records match these filters.");
   });
 });
