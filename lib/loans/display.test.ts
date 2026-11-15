@@ -98,6 +98,11 @@ describe("wouldBeDefaulted (L30, same rule as run_default_detection)", () => {
     expect(wouldBeDefaulted(paid, "2026-11-06")).toBe(false); // the database skips it
     expect(pastGracePeriod(paid, "2026-11-06")).toBe(true); // so the Admin box lists it as "skipped"
   });
+  // 0081: a loan that owes only liquidated damages still owes money, same as the database
+  it("still defaults a loan that owes only liquidated damages, but not one that owes nothing", () => {
+    expect(wouldBeDefaulted({ ...loan, principal_balance: 0, interest_owed: 0, damages_owed: 50 }, "2026-11-06")).toBe(true);
+    expect(wouldBeDefaulted({ ...loan, principal_balance: 0, interest_owed: 0, damages_owed: 0 }, "2026-11-06")).toBe(false);
+  });
   // A1: owing only interest (principal paid off) still counts as owing money, same as the database
   it("still defaults a loan that owes only interest", () => {
     expect(wouldBeDefaulted({ ...loan, principal_balance: 0, interest_owed: 50 }, "2026-11-06")).toBe(true);
