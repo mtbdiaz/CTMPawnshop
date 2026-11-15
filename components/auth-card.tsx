@@ -1,19 +1,8 @@
+import Image from "next/image";
 import type { ReactNode } from "react";
 
-function Logo({ onDark = false }: { onDark?: boolean }) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="flex h-10 w-10 items-center justify-center rounded-md bg-gold-500 text-xs font-bold tracking-wide text-navy-900">CTM</span>
-      <span className="leading-tight">
-        <span className={onDark ? "block text-base font-semibold text-white" : "block text-base font-semibold text-navy-900"}>CTM PawnTrack</span>
-        <span className={onDark ? "block text-xs text-navy-200" : "block text-xs text-slate-600"}>Pawnshop Management</span>
-      </span>
-    </div>
-  );
-}
-
 /**
- * The sign-in and password screens. Desktop: a navy panel on the left with the brand (CTM, PawnTrack, Pawnshop Management)
+ * The sign-in and password screens. Desktop: a navy panel on the left with the CTM Pawnshop logo, PawnTrack and Pawnshop Management
  * and the form on the right. Phone and tablet: a slim navy band with the name, then the form. Light only, like the rest of
  * the app. The form is anchored from the top (not centered), so opening the help box below it never moves the fields.
  */
@@ -21,8 +10,11 @@ export function AuthCard({ title, subtitle, children }: { title: string; subtitl
   return (
     <main className="min-h-screen bg-white lg:grid lg:grid-cols-[5fr_6fr]">
       {/* phone and tablet: the brand band */}
-      <header className="bg-navy-900 px-5 py-4 sm:px-8 lg:hidden">
-        <Logo onDark />
+      <header className="flex items-center justify-between gap-4 bg-navy-900 px-5 py-3 sm:px-8 lg:hidden">
+        <span className="block rounded-lg bg-white px-2.5 py-1.5">
+          <Image src="/ctm-logo.webp" alt="CTM Pawnshop" width={960} height={278} priority className="h-8 w-auto" />
+        </span>
+        <span className="text-right text-[11px] font-semibold uppercase leading-tight tracking-[0.14em] text-navy-200">PawnTrack<br />Pawnshop Management</span>
       </header>
 
       {/* desktop: the brand panel (the pattern is decoration, hidden from screen readers) */}
@@ -36,10 +28,13 @@ export function AuthCard({ title, subtitle, children }: { title: string; subtitl
             backgroundSize: "auto, 44px 44px, 44px 44px",
           }}
         />
-        <div className="relative flex flex-col items-center px-8 text-center">
-          <span className="flex h-24 w-24 items-center justify-center rounded-xl bg-gold-500 text-3xl font-bold tracking-wide text-navy-900">CTM</span>
-          <p className="mt-7 font-display text-4xl font-semibold text-white xl:text-5xl">CTM PawnTrack</p>
-          <p className="mt-3 text-base tracking-wide text-navy-200 xl:text-lg">Pawnshop Management</p>
+        <div className="relative flex w-full max-w-md flex-col items-center px-8 text-center">
+          {/* the logo on a light card: its dark blue "PAWNSHOP" would not read straight on navy */}
+          <span className="block w-full rounded-2xl bg-white px-8 py-7 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.5)] ring-1 ring-white/30">
+            <Image src="/ctm-logo.webp" alt="CTM Pawnshop" width={960} height={278} priority sizes="400px" className="h-auto w-full" />
+          </span>
+          <p className="mt-8 font-display text-3xl font-semibold text-white xl:text-4xl">PawnTrack</p>
+          <p className="mt-2 text-base tracking-wide text-navy-200 xl:text-lg">Pawnshop Management</p>
         </div>
       </aside>
 

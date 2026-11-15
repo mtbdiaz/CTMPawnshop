@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
@@ -140,16 +141,25 @@ export function AppShell({
     <Link
       href="/dashboard"
       onClick={() => setOpen(false)}
-      className="flex h-16 shrink-0 items-center gap-3 px-[18px] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold-400"
-      aria-label="CTM PawnTrack dashboard"
+      className={cx(
+        "block shrink-0 overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold-400",
+        rail ? "flex h-16 items-center justify-center" : "px-4 pb-1 pt-3",
+      )}
+      aria-label="CTM Pawnshop PawnTrack dashboard"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-gold-400 to-gold-600 font-mono text-[11px] font-bold tracking-wide text-navy-950 shadow-[0_2px_10px_rgba(212,164,41,0.35)]">
-        CTM
-      </span>
-      <span className={cx("min-w-0 leading-tight transition-opacity duration-200 motion-reduce:transition-none", rail && "opacity-0")}>
-        <span className="block font-display text-[17px] font-semibold text-white">PawnTrack</span>
-        <span className="block whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.12em] text-navy-300">Pawnshop Management</span>
-      </span>
+      {rail ? (
+        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-gold-400 to-gold-600 font-mono text-[11px] font-bold tracking-wide text-navy-950 shadow-[0_2px_10px_rgba(212,164,41,0.35)]">
+          CTM
+        </span>
+      ) : (
+        <>
+          {/* the logo sits on a light card: its dark blue "PAWNSHOP" would not read on navy */}
+          <span className="block rounded-xl bg-white px-3 py-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.25)] ring-1 ring-white/20">
+            <Image src="/ctm-logo.webp" alt="CTM Pawnshop" width={960} height={278} priority sizes="224px" className="h-auto w-full" />
+          </span>
+          <span className="mt-1.5 block text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-navy-300">PawnTrack</span>
+        </>
+      )}
     </Link>
   );
 
