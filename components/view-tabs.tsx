@@ -41,7 +41,7 @@ export function ViewTabs({
               // -mb-px = the navy line sits on top of the grey line under the row
               "-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500",
               // open tab = navy line + bold; others = no line, grey line on hover
-              active ? "border-navy-700 font-semibold text-navy-900" : "border-transparent font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900",
+              active ? "border-gold-500 font-semibold text-navy-900" : "border-transparent font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900",
             )}
           >
             {/* the dot only shows when there is something in that tab; the word says it too, so color is never the only signal */}

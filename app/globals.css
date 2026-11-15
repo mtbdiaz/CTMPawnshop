@@ -26,11 +26,35 @@
   --color-gold-600: #a97f1a;
   --color-gold-700: #7d5d14;
 
-  /* CT1 (Matt, Nov 11): the two lightest greys used for text and icons, a little darker so small text is easy to read.
-     slate-500 (small secondary text, hints, dates): about 4.8:1 on white before, about 6.5:1 now (WCAG AA is 4.5:1).
-     slate-400 (icons, the "·" dots): about 2.6:1 before, about 3.6:1 now (3:1 is the rule for icons). */
-  --color-slate-500: oklch(47.5% 0.046 257.4);
-  --color-slate-400: oklch(62% 0.042 257);
+  /* Nov 15, 2026: the greys are now warm neutrals (a touch of cream), so every page, card, table and form matches
+     the cream menu and login panel. The app only uses the slate names, so this one block recolors the whole system.
+     Contrast (checked): 400 = 3.8:1 on white (icons need 3:1), 500 = 6.8:1 (small secondary text needs 4.5:1),
+     600 and darker are above 9:1. The old CT1 darkening of 500 and 400 is kept: they are still as dark or darker. */
+  --color-slate-50: #fcfaf4;
+  --color-slate-100: #f6f2e7;
+  --color-slate-200: #ebe5d3;
+  --color-slate-300: #d9d1b9;
+  --color-slate-400: #8a8372;
+  --color-slate-500: #5f5b4f;
+  --color-slate-600: #4b483e;
+  --color-slate-700: #3a382f;
+  --color-slate-800: #25241e;
+  --color-slate-900: #151410;
+  --color-slate-950: #0c0b08;
+
+  /* status colors: the pale steps lean a little warm so they sit well on cream and white; meaning and the strong
+     steps (600 and darker, used for text) are unchanged */
+  --color-red-50: #fdf3f0;
+  --color-red-100: #fbe4df;
+  --color-red-200: #f6cdc5;
+  --color-red-300: #ee9f93;
+  --color-amber-50: #fdf7e6;
+  --color-amber-100: #fbedc4;
+  --color-amber-300: #f2cf6b;
+  --color-amber-400: #e4b43a;
+  --color-emerald-50: #f0f7f0;
+  --color-emerald-100: #dcefdc;
+  --color-emerald-300: #8fcfa6;
 
   --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-playfair), Georgia, serif;
@@ -42,7 +66,7 @@
 }
 
 body {
-  background: var(--color-slate-50);
+  background: #fff; /* pure white page; cards are set apart by their warm borders */
   color: var(--color-slate-900);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -98,7 +122,7 @@ body {
 }
 
 /* Pawn ticket form: the owner's half-letter landscape form, placed in PDF points. */
-.pawn-form-wrap { background: #e2e8f0; padding: 12px 0; overflow-x: auto; }
+.pawn-form-wrap { background: var(--color-slate-200); padding: 12px 0; overflow-x: auto; }
 .pawn-form {
   position: relative; width: 612pt; height: 468pt; margin: 0 auto; background: #fff; color: #1e1e1e;
   overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact;

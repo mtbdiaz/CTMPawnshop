@@ -187,7 +187,7 @@ export function AppShell({
   return (
     <div
       className={cx(
-        "min-h-screen bg-slate-50 transition-[padding] duration-200 ease-out motion-reduce:transition-none print:pl-0",
+        "min-h-screen bg-white transition-[padding] duration-200 ease-out motion-reduce:transition-none print:pl-0",
         collapsed ? "lg:pl-[72px]" : "lg:pl-64",
       )}
     >

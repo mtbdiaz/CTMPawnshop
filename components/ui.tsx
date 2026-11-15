@@ -100,7 +100,7 @@ export function Card({
   padded?: boolean;
 }) {
   return (
-    <div className={cx("rounded-md border border-slate-200 bg-white", padded && "p-5", className)}>
+    <div className={cx("rounded-md border border-slate-200 bg-white shadow-[0_1px_2px_rgba(60,50,20,0.05)]", padded && "p-5", className)}>
       {children}
     </div>
   );
@@ -143,13 +143,13 @@ export function StatCard({
   const body = (
     <div
       className={cx(
-        "h-full rounded-md border bg-white px-4 py-3 transition-colors",
+        "h-full rounded-md border bg-white px-4 py-3 shadow-[0_1px_2px_rgba(60,50,20,0.05)] transition-colors",
         tone === "default" && "border-slate-200",
-        tone === "gold" && "border-slate-200",
+        tone === "gold" && "border-gold-300 bg-gold-50",
         tone === "danger" && "border-red-200 bg-red-50",
         tone === "warning" && "border-amber-200 bg-amber-50",
         tone === "success" && "border-slate-200",
-        href && "hover:border-navy-300",
+        href && "hover:border-gold-400 hover:shadow-[0_2px_8px_rgba(60,50,20,0.10)]",
       )}
     >
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
@@ -315,7 +315,7 @@ export function Table({ children, minWidth = "640px", className }: { children: R
 export function THead({ children, sticky }: { children: ReactNode; sticky?: boolean }) {
   return (
     // the heading row; "sticky top-0 z-10" is only added when sticky is true
-    <thead className={cx("border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 print:bg-white", sticky && "sticky top-0 z-10")}>
+    <thead className={cx("border-b-2 border-gold-300 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600 print:border-slate-200 print:bg-white", sticky && "sticky top-0 z-10")}>
       <tr>{children}</tr>
     </thead>
   );
