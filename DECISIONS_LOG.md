@@ -373,3 +373,11 @@ Migrations 0020–0025, all applied live.
 - The CTM Pawnshop logo (`public/ctm-logo.webp`, transparent) is on the login page and at the top of the side menu. It was made for a light background (its dark blue "PAWNSHOP" disappears on navy), and a white card around it looked off, so both places are now light: the login brand panel and the side menu use the same soft cream wash with gold accents, and the logo sits on them as it is. The collapsed menu keeps the small gold "CTM" tile.
 - Side menu colors: cream background, navy text, gold icon tiles; the page you are on is a white card with a navy icon tile and a gold marker; account block is a white card with a navy avatar; Sign out turns soft red on hover.
 - Known: in the collapsed menu the name tooltips are clipped by the menu's scroll box (they were before too); each icon still has its name for screen readers.
+
+## One warm palette for the whole system (Nov 15, 2026, UI only)
+- **Why:** the cream menu and login panel no longer matched the cool blue-grey pages. Owner's choices: warm cream + white; pure white page background; navy buttons with gold highlights; everything (screens, status colors, prints, login and menu).
+- **How:** the app only uses the `slate-*` color names, so `app/globals.css` redefines them as warm neutrals (cream `slate-50`/`100`, sand borders `200`/`300`, warm dark text `500`-`900`). Checked contrast: `slate-500` small text 6.8:1 on white, `slate-400` icons 3.8:1, `600` and darker above 9:1.
+- **Page:** pure white (`body` and the app shell). Cards and tables are set apart by warm borders and a faint shadow.
+- **Gold highlights:** table header bottom line, the open tab underline, stat-card hover and the gold stat tile. Buttons stay navy. Focus rings stay navy on purpose (gold on white is too faint to see).
+- **Status colors:** only the pale steps (red, amber, green backgrounds and rings) lean a little warm; the strong steps used for text are unchanged, so meaning and contrast are the same.
+- **Prints:** printed pages keep black on white (the print rules force it); the table header line prints in the warm grey, no tint. The pawn ticket form (the owner's form, placed in points) is not touched.
