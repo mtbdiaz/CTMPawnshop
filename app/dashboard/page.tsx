@@ -276,7 +276,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // (hasRole also lets Admin through). These are the same pages as the sidebar, no new features.
   // Review #10: icons, and the two most-used counter jobs (main = true) shown stronger and first.
   // group = which heading it sits under (same groups as the sidebar)
-  type Shortcut = { show: boolean; href: string; label: string; hint: string; icon: IconName; main?: boolean; group: "Counter" | "Vault & cash" };
+  type Shortcut = { show: boolean; href: string; label: string; hint: string; icon: IconName; main?: boolean; group: "Counter" | "Vault & cash" | "Admin" };
   const allShortcuts: Shortcut[] = [
     { show: hasRole(role, ["cashier"]), href: "/dashboard/loans/new", label: "New loan", hint: "Customer + appraised item", icon: "plus", main: true, group: "Counter" },
     { show: hasRole(role, ["cashier"]), href: "/dashboard/loans?status=open", label: "Payment, renewal or redemption", hint: "Open the loan, pick the action", icon: "ticket", main: true, group: "Counter" },
@@ -285,10 +285,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     { show: canSeeCash, href: "/dashboard/finance", label: "Record cash entry", hint: "Expenses and other revenue", icon: "cash", group: "Vault & cash" },
     { show: hasRole(role, ["cashier"]) && role !== "admin", href: "/dashboard/compliance/reminders", label: "Send reminders", hint: remindersDue ? `${remindersDue} loan${remindersDue === 1 ? "" : "s"} due within 3 days` : "No loans due within 3 days", icon: "bell", group: "Counter" },
     { show: hasRole(role, ["operator"]), href: "/dashboard/inventory/audit", label: "Physical audit", hint: "Check every vault item", icon: "clipboard", group: "Vault & cash" },
+    // Nov 15: Settings, for Admins only (the Settings page itself also refuses every other role, so this is only a shortcut)
+    { show: role === "admin", href: "/dashboard/settings", label: "Settings", hint: "Rates, vault locations and staff", icon: "settings", group: "Admin" },
   ];
   const shortcuts = allShortcuts.filter((s) => s.show); // keep only the ones this role can use
   // split into the two groups; a group with nothing in it is skipped
-  const shortcutGroups = (["Counter", "Vault & cash"] as const)
+  const shortcutGroups = (["Counter", "Vault & cash", "Admin"] as const)
     .map((g) => ({ title: g, items: shortcuts.filter((s) => s.group === g) }))
     .filter((g) => g.items.length > 0);
  
