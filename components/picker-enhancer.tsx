@@ -8,6 +8,7 @@
 // pickers are kept, because they are the best thing to use there.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { manilaToday } from "@/lib/format";
 import {
   MONTH_NAMES,
@@ -60,6 +61,23 @@ function place(anchor: HTMLElement, popup: HTMLElement) {
   popup.style.top = `${top}px`;
   popup.style.left = `${left}px`;
   popup.style.maxHeight = `${Math.max(160, openUp ? above : below)}px`;
+  // Inside a popup window that is moved with a CSS transform, "fixed" is measured from that window, not the screen.
+  // Check where the list really landed and shift it by the difference, so it always sits on its field.
+  const at = popup.getBoundingClientRect();
+  if (Math.abs(at.top - top) > 1 || Math.abs(at.left - left) > 1) {
+    popup.style.top = `${top - (at.top - top)}px`;
+    popup.style.left = `${left - (at.left - left)}px`;
+  }
+}
+
+/**
+ * The open popup window (<dialog> opened with showModal) the field sits in, if any. The browser draws such a window
+ * above everything else on the page and switches the rest of the page off, so a list drawn outside it would open
+ * behind it and couldn't be clicked. The list is drawn inside that window instead.
+ */
+function modalHost(el: Element): HTMLDialogElement | null {
+  const d = el.closest("dialog");
+  return d instanceof HTMLDialogElement && d.open && d.matches(":modal") ? d : null;
 }
 
 export function PickerEnhancer() {
@@ -156,12 +174,24 @@ export function PickerEnhancer() {
     };
   }, [target, close]);
 
+  // a field inside a popup window: close the list when that window closes
+  useEffect(() => {
+    const host = target ? modalHost(target.el) : null;
+    if (!host) return;
+    const onClose = () => close(false);
+    host.addEventListener("close", onClose);
+    return () => host.removeEventListener("close", onClose);
+  }, [target, close]);
+
   if (!target) return null;
-  return target.kind === "select" ? (
-    <ListPopup key="select" el={target.el} close={close} />
-  ) : (
-    <CalendarPopup key="date" el={target.el} close={close} />
-  );
+  const popup =
+    target.kind === "select" ? (
+      <ListPopup key="select" el={target.el} close={close} />
+    ) : (
+      <CalendarPopup key="date" el={target.el} close={close} />
+    );
+  const host = modalHost(target.el);
+  return host ? createPortal(popup, host) : popup;
 }
 
 /* ---------------------------------- dropdown list ---------------------------------- */
