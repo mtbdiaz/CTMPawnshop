@@ -45,6 +45,7 @@ export function LoginForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [capsLock, setCapsLock] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // Caps Lock is the most common reason a right password is refused, so say so while typing
   function watchCapsLock(e: KeyboardEvent<HTMLInputElement>) {
@@ -165,23 +166,39 @@ export function LoginForm() {
         {loading ? "Signing in" : "Sign in"}
       </button>
 
-      <details className="group rounded-md border border-slate-200 text-sm">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 font-medium text-slate-800 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+      {/* the help box opens by sliding (grid rows 0fr -> 1fr), not by popping, and only grows downward: nothing above it moves.
+          Closed, it is inert, so keyboard and screen reader users can't land in the hidden text. */}
+      <div className="rounded-md border border-slate-200 text-sm">
+        <button
+          type="button"
+          onClick={() => setHelpOpen((v) => !v)}
+          aria-expanded={helpOpen}
+          aria-controls="login-help"
+          className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-md px-4 py-2.5 text-left font-medium text-slate-800 transition-colors hover:bg-slate-50"
+        >
           Need help signing in?
-          <Icon name="chevron-down" className="h-4 w-4 shrink-0 text-slate-600 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
-        </summary>
-        <ul className="space-y-2 border-t border-slate-200 px-4 py-3 text-slate-700">
-          <li>
-            <span className="font-medium text-slate-900">Forgot your password?</span> Ask an Admin to reset it. You will choose your own new password the next time you sign in.
-          </li>
-          <li>
-            <span className="font-medium text-slate-900">Account deactivated?</span> Only an Admin can switch it back on.
-          </li>
-          <li>
-            <span className="font-medium text-slate-900">Signed out on your own?</span> For safety you are signed out after 15 minutes without activity.
-          </li>
-        </ul>
-      </details>
+          <Icon name="chevron-down" className={cx("h-4 w-4 shrink-0 text-slate-600 transition-transform duration-200 motion-reduce:transition-none", helpOpen && "rotate-180")} />
+        </button>
+        <div
+          id="login-help"
+          inert={!helpOpen}
+          className={cx("grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none", helpOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}
+        >
+          <div className="overflow-hidden">
+            <ul className="space-y-2 border-t border-slate-200 px-4 py-3 text-slate-700">
+              <li>
+                <span className="font-medium text-slate-900">Forgot your password?</span> Ask an Admin to reset it. You will choose your own new password the next time you sign in.
+              </li>
+              <li>
+                <span className="font-medium text-slate-900">Account deactivated?</span> Only an Admin can switch it back on.
+              </li>
+              <li>
+                <span className="font-medium text-slate-900">Signed out on your own?</span> For safety you are signed out after 15 minutes without activity.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </form>
   );
 }
