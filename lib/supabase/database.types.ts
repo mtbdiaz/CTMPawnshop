@@ -1371,6 +1371,51 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_account_events: {
+        Row: {
+          action: string
+          actor: string
+          created_at: string
+          id: string
+          is_demo: boolean
+          note: string | null
+          profile_id: string
+        }
+        Insert: {
+          action: string
+          actor: string
+          created_at?: string
+          id?: string
+          is_demo?: boolean
+          note?: string | null
+          profile_id: string
+        }
+        Update: {
+          action?: string
+          actor?: string
+          created_at?: string
+          id?: string
+          is_demo?: boolean
+          note?: string | null
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_account_events_actor_fkey"
+            columns: ["actor"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_account_events_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suspicious_activity_flags: {
         Row: {
           archive_reason: string | null
@@ -1912,6 +1957,10 @@ export type Database = {
       }
       record_cash_entry: {
         Args: { p_amount: number; p_description: string; p_request_id?: string; p_type: string }
+        Returns: string
+      }
+      record_staff_account_event: {
+        Args: { p_action: string; p_note?: string; p_profile: string }
         Returns: string
       }
       record_payment: {

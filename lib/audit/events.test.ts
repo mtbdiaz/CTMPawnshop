@@ -92,6 +92,18 @@ describe("record references", () => {
     expect(recordRef(ev({ table_name: "auction_batches", record_id: BATCH, changed_data: { notes: "" } }), lk).main).toBe("AB-0007");
     expect(recordRef(ev({ table_name: "cash_flow_entries", record_id: "x", action: "INSERT", changed_data: { related_loan_id: null } }), lk)).toEqual({ main: "", sub: "Not linked to a loan" });
   });
+  it("shows a staff account event: what happened, for whom, and the Supabase error when a step failed; never a password (U4)", () => {
+    const STAFF = "66666666-6666-4666-8666-666666666666";
+    const names = new Map([[STAFF, "Carlo Cashier"]]);
+    const reset = ev({ table_name: "staff_account_events", record_id: "s1", action: "INSERT", changed_data: { profile_id: STAFF, action: "password_reset", note: null } });
+    expect(eventTitle(reset)).toBe("Password reset by an Admin");
+    expect(eventSummary(reset, names)).toBe("For Carlo Cashier");
+    expect(eventReason(reset)).toBe("");
+    const failed = ev({ table_name: "staff_account_events", record_id: "s2", action: "INSERT", changed_data: { profile_id: STAFF, action: "login_block_failed", note: "Auth service unavailable" } });
+    expect(eventTitle(failed)).toBe("Blocking the sign-in failed");
+    expect(eventReason(failed)).toBe("Auth service unavailable");
+  });
+
   it("shows an item move as the item, from where to where, and why (VL1)", () => {
     const move = ev({
       table_name: "inventory_location_moves",
