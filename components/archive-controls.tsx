@@ -1,7 +1,7 @@
 "use client";
 
 import { ActionForm, Field, SubmitButton } from "./form";
-import { archiveRecord, restoreRecord } from "@/app/dashboard/archive/actions";
+import { archiveRecord } from "@/app/dashboard/archive/actions";
 import type { ArchivableTable } from "@/lib/archive";
 
 /** Item 1: "Archive" (never delete). A reason is required; Admins can restore. */
@@ -26,26 +26,5 @@ export function ArchiveForm({ table, id, label }: { table: ArchivableTable; id: 
   );
 }
 
-// name: S2, what the record is ("Customer: Juan Dela Cruz"), so the popup says which one is being restored
-export function RestoreButton({ table, id, name }: { table: ArchivableTable; id: string; name?: string }) {
-  return (
-    <ActionForm action={restoreRecord} successMessage="Record restored.">
-      <input type="hidden" name="table" value={table} />
-      <input type="hidden" name="id" value={id} />
-      <SubmitButton
-        variant="secondary"
-        size="sm"
-        pendingLabel="Restoring"
-        confirm={{
-          title: "Restore this record?",
-          message: "It returns to the normal lists and counts.",
-          confirmLabel: "Restore",
-          tone: "primary",
-          details: name ? [["Record", name]] : undefined, // S2
-        }}
-      >
-        Restore
-      </SubmitButton>
-    </ActionForm>
-  );
-}
+// Archive Phase 2B (Nov 15): the old one-click RestoreButton is gone. Restoring now happens in the Review popup on the
+// Archive page (app/dashboard/archive/archive-review.tsx), which asks the database first and needs a written reason.
