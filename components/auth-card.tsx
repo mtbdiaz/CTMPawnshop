@@ -2,39 +2,35 @@ import Image from "next/image";
 import type { ReactNode } from "react";
 
 /**
- * The sign-in and password screens. Desktop: a navy panel on the left with the CTM Pawnshop logo, PawnTrack and Pawnshop Management
- * and the form on the right. Phone and tablet: a slim navy band with the name, then the form. Light only, like the rest of
+ * The sign-in and password screens. Desktop: a light panel on the left with the CTM Pawnshop logo, PawnTrack and Pawnshop Management
+ * and the form on the right. Phone and tablet: a slim white band with the logo, then the form. Light only, like the rest of
  * the app. The form is anchored from the top (not centered), so opening the help box below it never moves the fields.
  */
 export function AuthCard({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   return (
     <main className="min-h-screen bg-white lg:grid lg:grid-cols-[5fr_6fr]">
-      {/* phone and tablet: the brand band */}
-      <header className="flex items-center justify-between gap-4 bg-navy-900 px-5 py-3 sm:px-8 lg:hidden">
-        <span className="block rounded-lg bg-white px-2.5 py-1.5">
-          <Image src="/ctm-logo.webp" alt="CTM Pawnshop" width={960} height={278} priority className="h-8 w-auto" />
-        </span>
-        <span className="text-right text-[11px] font-semibold uppercase leading-tight tracking-[0.14em] text-navy-200">PawnTrack<br />Pawnshop Management</span>
+      {/* phone and tablet: the logo on white, with a gold line under it */}
+      <header className="flex items-center justify-between gap-4 border-b-[3px] border-gold-400 bg-white px-5 py-3 sm:px-8 lg:hidden">
+        <Image src="/ctm-logo.webp" alt="CTM Pawnshop" width={960} height={278} priority className="h-10 w-auto" />
+        <span className="text-right text-[11px] font-semibold uppercase leading-tight tracking-[0.14em] text-navy-700">PawnTrack<br />Pawnshop Management</span>
       </header>
 
-      {/* desktop: the brand panel (the pattern is decoration, hidden from screen readers) */}
-      <aside className="relative hidden items-center justify-center overflow-hidden bg-navy-900 lg:flex">
+      {/* desktop: a light brand panel, so the logo (made for a light background) sits on it as it is. The pattern is decoration. */}
+      <aside className="relative hidden items-center justify-center overflow-hidden border-r border-slate-200 bg-gradient-to-br from-white via-gold-50 to-gold-100 lg:flex">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0"
           style={{
             backgroundImage:
-              "radial-gradient(60rem 36rem at -10% -10%, rgba(212,164,41,0.20), transparent 60%), linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px)",
+              "radial-gradient(40rem 28rem at 50% 42%, rgba(255,255,255,0.9), transparent 70%), linear-gradient(rgba(10,22,40,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(10,22,40,0.035) 1px, transparent 1px)",
             backgroundSize: "auto, 44px 44px, 44px 44px",
           }}
         />
-        <div className="relative flex w-full max-w-md flex-col items-center px-8 text-center">
-          {/* the logo on a light card: its dark blue "PAWNSHOP" would not read straight on navy */}
-          <span className="block w-full rounded-2xl bg-white px-8 py-7 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.5)] ring-1 ring-white/30">
-            <Image src="/ctm-logo.webp" alt="CTM Pawnshop" width={960} height={278} priority sizes="400px" className="h-auto w-full" />
-          </span>
-          <p className="mt-8 font-display text-3xl font-semibold text-white xl:text-4xl">PawnTrack</p>
-          <p className="mt-2 text-base tracking-wide text-navy-200 xl:text-lg">Pawnshop Management</p>
+        <div className="relative flex w-full max-w-lg flex-col items-center px-10 text-center">
+          <Image src="/ctm-logo.webp" alt="CTM Pawnshop" width={960} height={278} priority sizes="512px" className="h-auto w-full drop-shadow-[0_10px_18px_rgba(10,22,40,0.18)]" />
+          <span aria-hidden="true" className="mt-9 h-0.5 w-16 rounded-full bg-gold-500" />
+          <p className="mt-6 font-display text-3xl font-semibold text-navy-900 xl:text-4xl">PawnTrack</p>
+          <p className="mt-2 text-base tracking-wide text-slate-600 xl:text-lg">Pawnshop Management</p>
         </div>
       </aside>
 

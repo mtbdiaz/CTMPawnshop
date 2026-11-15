@@ -368,3 +368,8 @@ Migrations 0020–0025, all applied live.
 - **Respects the field:** `min`, `max`, `required` (no Clear button), disabled options, option groups. "Today" is the Manila date.
 - **Not changed on purpose:** touch screens (phones, tablets) keep the browser's own pickers, because they are the best choice there. A box can opt out with `data-native-picker`. Multi-select boxes are left alone (none exist today).
 - **Known limit:** in Firefox the small native calendar icon is not hidden, so a click there may show the browser's own calendar; Chrome and Edge are the target.
+
+## Logo, and a cream side menu (Nov 15, 2026, UI only)
+- The CTM Pawnshop logo (`public/ctm-logo.webp`, transparent) is on the login page and at the top of the side menu. It was made for a light background (its dark blue "PAWNSHOP" disappears on navy), and a white card around it looked off, so both places are now light: the login brand panel and the side menu use the same soft cream wash with gold accents, and the logo sits on them as it is. The collapsed menu keeps the small gold "CTM" tile.
+- Side menu colors: cream background, navy text, gold icon tiles; the page you are on is a white card with a navy icon tile and a gold marker; account block is a white card with a navy avatar; Sign out turns soft red on hover.
+- Known: in the collapsed menu the name tooltips are clipped by the menu's scroll box (they were before too); each icon still has its name for screen readers.
