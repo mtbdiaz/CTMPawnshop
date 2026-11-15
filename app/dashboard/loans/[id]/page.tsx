@@ -8,6 +8,7 @@ import { isOverdueUnpaid } from "@/lib/loans/status"; // F3: shared overdue rule
 import { pastGracePeriod, renewBlocked, renewGraceEnd, situationBadge, stateBadge, wouldBeDefaulted, graceSummary } from "@/lib/loans/display"; // L3/L4: the same badges as the Loans list; L24: renew grace rule
 import { Icon } from "@/components/icons";
 import { categoryLabel } from "@/lib/appraisal/valuation";
+import { waiverReasonLabel } from "@/lib/loans/waiver"; // PW: penalty waivers
 import { formatDate, formatDateTime, formatPeso, manilaToday } from "@/lib/format";
 import type { ReactNode } from "react";
 import {
@@ -39,6 +40,7 @@ import {
   PaymentForm,
   RedeemForm,
   ReinstateForm,
+  WaivePenaltyForm,
 } from "./payment-form";
 
 const OPEN = new Set(["active", "extended", "reinstated"]);
@@ -116,10 +118,26 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
     .maybeSingle();
   if (!loan) notFound();
 
-  const [{ data: payments }, { data: extensions }] = await Promise.all([
+  const [{ data: payments }, { data: extensions }, { data: waiversRaw }] = await Promise.all([
     supabase.from("loan_payments").select("*").eq("loan_id", id).is("archived_at", null).order("created_at", { ascending: false }),
     supabase.from("loan_extensions").select("*").eq("loan_id", id).order("created_at", { ascending: false }),
+    // PW (0078): the penalties an Admin waived on this loan, with who authorized each one
+    supabase.from("loan_penalty_waivers").select("*, profiles(full_name)").eq("loan_id", id).order("created_at", { ascending: false }),
   ]);
+  type Waiver = {
+    id: string;
+    created_at: string;
+    penalty_before: number;
+    amount_waived: number;
+    penalty_after: number;
+    owed_before: number;
+    owed_after: number;
+    reason_code: string;
+    reason_note: string;
+    profiles: { full_name: string } | null;
+  };
+  const waivers = (waiversRaw ?? []) as unknown as Waiver[];
+  const waivedTotal = Math.round(waivers.reduce((sum, w) => sum + Number(w.amount_waived), 0) * 100) / 100;
 
   type Joined = {
     customers: { id: string; full_name: string; contact_number: string } | null;
@@ -154,6 +172,14 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
 
   // L27: the Loan actions panel. Same forms, numbers, confirm popups and permissions as before; only the layout changed.
   // Each "reason" is the database's own rule, so a Cashier never fills in a form the database would refuse.
+  // PW (0078): Admin only. Only an open or defaulted loan has a penalty that can be waived; nothing is waived by itself.
+  const waiveAction: LoanAction = {
+    key: "waive",
+    title: "Waive penalty",
+    hint: damages > 0 ? `Remove all or part of the ${formatPeso(damages)} penalty when the delay was not the customer's fault. A reason is required.` : "Remove a penalty the customer owes because of something outside their control.",
+    reason: damages > 0 ? undefined : "No penalty is owed on this loan.",
+    body: <WaivePenaltyForm loanId={loan.id} penalty={damages} owed={owed} />,
+  };
   const openActions: LoanAction[] = [
     {
       key: "payment",
@@ -213,6 +239,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
       reason: owed > 0 ? `${formatPeso(owed)} must be paid first (Record payment).` : undefined,
       body: <RedeemForm loanId={loan.id} canRedeem owed={owed} />,
     },
+    ...(isAdmin ? [waiveAction] : []),
   ];
   // defaulted loans: Reinstate (Cashier/Admin) and Forfeit (Admin only, the server checks too)
   const defaultedActions: LoanAction[] = [
@@ -240,6 +267,7 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
           },
         ]
       : []),
+    ...(isAdmin ? [waiveAction] : []),
     ...(isAdmin ? [{ key: "forfeit", title: "Forfeit", hint: "Make the default final. The item becomes shop property.", body: <ForfeitForm loanId={loan.id} /> }] : []),
   ];
   const actions = canTransact && open ? openActions : loan.status === "defaulted" ? defaultedActions : [];
@@ -384,6 +412,13 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
                     <dd className="tabular-nums">{formatPeso(Math.round((damages - Number(loan.damages_owed)) * 100) / 100)}</dd>
                   </div>
                 )}
+                {/* PW (0078): what an Admin already waived on this loan; it is not owed and is never added back */}
+                {waivedTotal > 0 && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-600">Penalty waived (not owed)</dt>
+                    <dd className="tabular-nums">{formatPeso(waivedTotal)}</dd>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <dt className="text-slate-600">Status</dt>
                   <dd>{state.label}</dd>
@@ -453,6 +488,45 @@ export default async function LoanDetailPage({ params }: { params: Promise<{ id:
               )}
             </Card>
           </section>
+
+          {/* PW (0078): every waiver stays on the loan. Original penalty, what was waived and what is still payable are
+              separate columns, so nothing is hidden or added back. */}
+          {waivers.length > 0 && (
+            <section>
+              <SectionTitle description="Penalties an Admin waived. Each one is permanent and is never added back.">Penalty waivers</SectionTitle>
+              <Card padded={false}>
+                <Table minWidth="780px">
+                  <THead>
+                    <TH>Date</TH>
+                    <TH align="right">Penalty before</TH>
+                    <TH align="right">Waived</TH>
+                    <TH align="right">Penalty payable</TH>
+                    <TH align="right">To redeem after</TH>
+                    <TH>Reason</TH>
+                    <TH>Authorized by</TH>
+                  </THead>
+                  <TBody>
+                    {waivers.map((w) => (
+                      <TR key={w.id}>
+                        <TD className="text-slate-600">{formatDateTime(w.created_at)}</TD>
+                        <TD align="right">{formatPeso(w.penalty_before)}</TD>
+                        <TD align="right" className="font-medium">
+                          {formatPeso(w.amount_waived)}
+                        </TD>
+                        <TD align="right">{formatPeso(w.penalty_after)}</TD>
+                        <TD align="right">{formatPeso(w.owed_after)}</TD>
+                        <TD>
+                          <span className="block">{waiverReasonLabel(w.reason_code)}</span>
+                          <span className="block text-xs text-slate-500">{w.reason_note}</span>
+                        </TD>
+                        <TD>{w.profiles?.full_name ?? ""}</TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              </Card>
+            </section>
+          )}
 
           {extensions && extensions.length > 0 && (
             <section>

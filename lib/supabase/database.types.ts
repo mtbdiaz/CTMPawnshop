@@ -817,6 +817,75 @@ export type Database = {
           },
         ]
       }
+      loan_penalty_waivers: {
+        Row: {
+          amount_waived: number
+          created_at: string
+          created_by: string
+          customer_name: string
+          id: string
+          is_demo: boolean
+          loan_id: string
+          owed_after: number
+          owed_before: number
+          penalty_after: number
+          penalty_before: number
+          reason_code: string
+          reason_note: string
+          request_id: string | null
+          ticket_number: string
+        }
+        Insert: {
+          amount_waived: number
+          created_at?: string
+          created_by: string
+          customer_name: string
+          id?: string
+          is_demo?: boolean
+          loan_id: string
+          owed_after: number
+          owed_before: number
+          penalty_after: number
+          penalty_before: number
+          reason_code: string
+          reason_note: string
+          request_id?: string | null
+          ticket_number: string
+        }
+        Update: {
+          amount_waived?: number
+          created_at?: string
+          created_by?: string
+          customer_name?: string
+          id?: string
+          is_demo?: boolean
+          loan_id?: string
+          owed_after?: number
+          owed_before?: number
+          penalty_after?: number
+          penalty_before?: number
+          reason_code?: string
+          reason_note?: string
+          request_id?: string | null
+          ticket_number?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loan_penalty_waivers_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loan_penalty_waivers_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       loans: {
         Row: {
           appraisal_item_id: string
@@ -1948,6 +2017,10 @@ export type Database = {
         Returns: Json
       }
       reveal_customer_id: { Args: { p_customer_id: string }; Returns: string }
+      waive_penalty: {
+        Args: { p_amount?: number; p_loan_id: string; p_note: string; p_reason_code: string; p_request_id?: string }
+        Returns: Json
+      }
       run_default_detection: { Args: never; Returns: number }
       run_default_detection_job: { Args: never; Returns: number }
       search_customers_fuzzy: {

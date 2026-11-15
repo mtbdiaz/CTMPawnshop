@@ -279,3 +279,8 @@ Checks:
 - `ctm_selftest_0076`: 5 of 5 PASS (name search with no ID number returned, role access, C- and A-numbers, similar names, the 61st search limited, signed-out refused).
 - Ranking check: 150 combinations of names, phones, ID numbers and typed text give the same rank in SQL as `matchRank` in the app.
 - 358 unit tests, type check and lint pass.
+
+## Pass 8: waiving a penalty (Nov 15, 2026)
+- `ctm_selftest_0078`: 7 of 7 PASS (whole waiver and exact balance, no second waiver and not added back, partial then rest, Cashier and missing reason refused, double click once, redeemed loan refused, no direct writes).
+- Unit tests for the reasons, the preview and the audit-trail wording.
+- Not tested in a browser here: the Waive penalty card on the loan page. The group test guide should get a step for it.

@@ -7,6 +7,7 @@ import { changedFields, type FieldChange } from "./changes";
 import { entryTypeLabel } from "@/lib/finance/ledger";
 import { CUSTODY } from "@/lib/inventory/custody";
 import { stateBadge } from "@/lib/loans/display";
+import { waiverReasonLabel } from "@/lib/loans/waiver"; // PW: penalty waivers
 
 export type AuditAction = "INSERT" | "UPDATE" | "DELETE" | "VIEW";
 
@@ -21,6 +22,7 @@ export const RECORD_TYPES: [string, string, string][] = [
   ["loans", "Loan", "Loans"],
   ["loan_payments", "Payment", "Payments"],
   ["loan_extensions", "Renewal", "Renewals"],
+  ["loan_penalty_waivers", "Penalty waiver", "Penalty waivers"], // PW (0078)
   ["inventory_items", "Inventory item", "Inventory items"],
   ["inventory_status_history", "Inventory status", "Inventory status changes"],
   ["cash_flow_entries", "Cash entry", "Cash entries"],
@@ -103,6 +105,7 @@ export function eventTitle(e: AuditEvent): string {
   if (e.action === "INSERT") {
     if (e.table_name === "loan_payments") return "Payment recorded";
     if (e.table_name === "loan_extensions") return "Loan renewed";
+    if (e.table_name === "loan_penalty_waivers") return "Penalty waived"; // PW
     if (e.table_name === "inventory_status_history") return "Inventory status recorded";
     if (e.table_name === "cash_flow_entries") return "Cash entry recorded";
     if (e.table_name === "customers") return "Customer registered";
@@ -136,6 +139,10 @@ export function eventSummary(e: AuditEvent, names?: Map<string, string>): string
       return [r.principal_amount != null ? `${formatPeso(Number(r.principal_amount))} principal` : "", r.maturity_date ? `due ${formatDate(str(r.maturity_date))}` : ""].filter(Boolean).join(" · ") || "New loan";
     case "loan_payments":
       return r.amount != null ? `${formatPeso(Number(r.amount))} payment${r.verified_via_lost_ticket ? " (lost ticket, ID checked)" : ""}` : "Payment";
+    case "loan_penalty_waivers": // PW: what was waived, out of how much, and why in a few words
+      return r.amount_waived != null
+        ? `${formatPeso(Number(r.amount_waived))} waived of ${formatPeso(Number(r.penalty_before ?? 0))} penalty · ${waiverReasonLabel(str(r.reason_code))}`
+        : "Penalty waived";
     case "loan_extensions":
       return r.previous_maturity_date && r.new_maturity_date ? `Due date ${formatDate(str(r.previous_maturity_date))} → ${formatDate(str(r.new_maturity_date))}` : "Loan renewed";
     case "cash_flow_entries":
@@ -172,6 +179,7 @@ export function eventReason(e: AuditEvent): string {
   const r = rowOf(e);
   if (e.action === "VIEW") return str(r.reason);
   if (e.action === "INSERT" && e.table_name === "inventory_location_moves") return str(r.reason); // VL1: why it was moved
+  if (e.action === "INSERT" && e.table_name === "loan_penalty_waivers") return str(r.reason_note); // PW: what happened
   if (e.action === "UPDATE" && r.archived_at && !rowOfBefore(e).archived_at) return str(r.archive_reason);
   return "";
 }
@@ -247,6 +255,8 @@ export function recordRef(e: AuditEvent, lk: RefLookups): { main: string; sub: s
     }
     case "loan_payments":
       return { main: str(r.receipt_number), sub: ticket(r.loan_id) };
+    case "loan_penalty_waivers": // PW: the loan and the customer, as saved with the waiver
+      return { main: str(r.ticket_number) || ticket(r.loan_id), sub: str(r.customer_name) };
     case "loan_extensions":
     case "reminder_log":
       return { main: ticket(r.loan_id), sub: "" };
