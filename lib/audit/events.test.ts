@@ -48,6 +48,19 @@ describe("event titles and summaries", () => {
     );
     expect(detailsLabel(ev({ table_name: "loan_payments", action: "INSERT", changed_data: { amount: 1 } }))).toBe("View details");
   });
+  // PW (0078): a penalty waiver shows who/what/why in plain words
+  it("describes a penalty waiver: the amount, the reason and the loan", () => {
+    const e = ev({
+      table_name: "loan_penalty_waivers",
+      record_id: "66666666-6666-4666-8666-666666666666",
+      action: "INSERT",
+      changed_data: { loan_id: LOAN, ticket_number: "PT-20261006102326-829B", customer_name: "Juan Dela Cruz", penalty_before: 200, amount_waived: 150, reason_code: "shop_closed", reason_note: "Closed Nov 20, typhoon" },
+    });
+    expect(eventTitle(e)).toBe("Penalty waived");
+    expect(eventSummary(e)).toBe("₱150.00 waived of ₱200.00 penalty · Pawnshop closed on the customer's due date");
+    expect(eventReason(e)).toBe("Closed Nov 20, typhoon");
+    expect(recordRef(e, lk)).toEqual({ main: "PT-20261006102326-829B", sub: "Juan Dela Cruz" });
+  });
   it("explains an ID view and keeps its reason", () => {
     const e = ev({ table_name: "customers", record_id: CUST, action: "VIEW", changed_data: { field: "id_number", reason: "ID revealed on screen" } });
     expect(eventTitle(e)).toBe("Customer ID number viewed");

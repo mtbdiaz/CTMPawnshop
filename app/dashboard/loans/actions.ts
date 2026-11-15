@@ -9,6 +9,7 @@ import type { FieldErrors } from "@/lib/validation/errors";
 import { validationFailure } from "@/lib/validation/errors";
 import { manilaToday } from "@/lib/format"; // today in Manila (business day)
 import { candidateKey, loadDefaultCandidates } from "@/lib/loans/default-candidates"; // L30: the loans the default check would change
+import { isWaiverReason } from "@/lib/loans/waiver"; // PW: waiving a penalty
 
 export type ActionState = {
   error?: string;
@@ -249,6 +250,35 @@ export async function adminEditPayment(_prev: ActionState, formData: FormData): 
   });
   if (error) return { error: friendlyError("save the payment correction", error) }; // L20
   revalidateLoan(parsed.data.loan_id);
+  return { success: true, id: parsed.data.loan_id };
+}
+
+// PW (migration 0078): an Admin waives all or part of a penalty (the liquidated damages) because the customer could
+// not pay or renew for a reason outside their control. Never automatic: a reason and a written note are required,
+// the database checks again (Admin only, not more than the penalty owed, once per form), and the waiver is audited.
+const waiveSchema = z.object({
+  loan_id: z.string().uuid(),
+  reason_code: z.string().refine(isWaiverReason, "Pick the reason for the waiver"),
+  note: z.string().trim().min(5, "Write what happened (at least 5 characters)").max(500, "Keep the note to 500 characters or less"),
+  amount: z.preprocess((v) => (v === "" || v === null || v === undefined ? undefined : v), z.coerce.number().gt(0, "Enter more than 0, or leave it empty to waive the whole penalty").optional()),
+});
+
+export async function waivePenalty(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  await requireRole(["admin"]);
+  if (!(await allowRequest("save"))) return { error: TOO_MANY }; // #22: at most 30 saves a minute per account
+  const parsed = waiveSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return validationFailure(parsed.error);
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("waive_penalty", {
+    p_loan_id: parsed.data.loan_id,
+    p_reason_code: parsed.data.reason_code,
+    p_note: parsed.data.note,
+    p_amount: parsed.data.amount, // empty = the whole penalty
+    p_request_id: requestIdFrom(formData), // a double click or a retry waives once
+  });
+  if (error) return { error: friendlyError("waive the penalty", error) };
+  revalidateLoan(parsed.data.loan_id);
+  revalidatePath("/dashboard/reports"); // the audit trail
   return { success: true, id: parsed.data.loan_id };
 }
 

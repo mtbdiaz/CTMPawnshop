@@ -56,6 +56,13 @@ trail at the top so you can step back.
    extension, it's automatically marked defaulted and the item moves toward
    forfeiture — no manual tracking needed.
 
+**Waiving a penalty (Admin only).** If the customer could not pay or renew because of something that was not their
+fault (the shop was closed on their due date, the system was down), open the loan and use **Waive penalty**. Pick the
+reason, write what happened, and leave the amount empty to waive the whole penalty or type a smaller amount. The page
+shows what the customer will owe before you confirm. The waiver is permanent, shows in the **Penalty waivers** list on
+the loan and in the audit trail, and is never added back. Interest is not waived by this, and nothing is waived unless
+an Admin does it.
+
 If a customer has lost their physical ticket, both the payment and
 redemption forms have a "lost ticket" checkbox that verifies their identity
 against the ID number on file instead.

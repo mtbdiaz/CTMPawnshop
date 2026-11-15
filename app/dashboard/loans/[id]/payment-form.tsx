@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ActionForm, CheckboxField, Field, SubmitButton, TextareaField } from "@/components/form";
+import { ActionForm, CheckboxField, Field, SelectField, SubmitButton, TextareaField } from "@/components/form";
 import { buttonClasses } from "@/components/ui";
 import { formatDate, formatPeso } from "@/lib/format";
 import { splitPayment, termInterest } from "@/lib/loans/accrual"; // AR1: one term of interest on what is left; LD: the payment order
 import { RequestIdInput } from "@/components/request-id"; // #31 one-time id so a retry never saves twice
-import { type ActionState, recordPayment, processExtension, redeemLoan, capitalizeLoan, reinstateLoan, forfeitLoan, adminEditLoan, adminEditPayment } from "../actions";
+import { WAIVER_REASONS, waiverPreview } from "@/lib/loans/waiver"; // PW: waiving a penalty
+import { type ActionState, recordPayment, processExtension, redeemLoan, capitalizeLoan, reinstateLoan, forfeitLoan, adminEditLoan, adminEditPayment, waivePenalty } from "../actions";
 
 function LostTicketFields() {
   const [show, setShow] = useState(false);
@@ -443,6 +444,80 @@ export function ForfeitForm({ loanId }: { loanId: string }) {
         confirm={{ title: "Forfeit this loan?", message: "The customer can no longer reinstate or redeem it.", confirmLabel: "Forfeit", locked: true }}
       >
         Forfeit item
+      </SubmitButton>
+    </ActionForm>
+  );
+}
+
+/**
+ * PW (migration 0078): an Admin waives all or part of the penalty (the liquidated damages) when the customer could not
+ * pay or renew for a reason outside their control. A reason and a written note are required. The page shows what the
+ * balance will be before anything is saved, and the database refuses more than the penalty owed.
+ */
+export function WaivePenaltyForm({ loanId, penalty, owed }: { loanId: string; penalty: number; owed: number }) {
+  const [amountText, setAmountText] = useState("");
+  const typed = amountText.trim() === "" ? null : Number(amountText);
+  const preview = waiverPreview(penalty, owed, typed);
+  return (
+    <ActionForm action={waivePenalty} className="space-y-3" successMessage="Penalty waived. It is in the penalty waivers list and the audit trail." onSuccess={() => setAmountText("")}>
+      <input type="hidden" name="loan_id" value={loanId} />
+      {/* a new id for each penalty amount: after a waiver the page shows the new amount, so the next waiver is a new request */}
+      <RequestIdInput key={penalty} />
+      <p className="text-sm text-slate-600">
+        Use this only when the delay was not the customer&apos;s fault, for example the shop was closed on their due date. Nothing is waived unless you do it here.
+      </p>
+      <SelectField label="Reason" name="reason_code" defaultValue="" required>
+        <option value="" disabled>
+          Choose a reason
+        </option>
+        {WAIVER_REASONS.map((r) => (
+          <option key={r.value} value={r.value}>
+            {r.label}
+          </option>
+        ))}
+      </SelectField>
+      <TextareaField label="What happened" name="note" rows={2} required hint="At least 5 characters, for example the date and why the shop was closed. Saved in the audit trail." />
+      <Field
+        label="Amount to waive (₱)"
+        name="amount"
+        type="number"
+        step="0.01"
+        min="0.01"
+        max={penalty}
+        value={amountText}
+        onChange={(e) => setAmountText(e.target.value)}
+        hint={`Leave empty to waive the whole penalty (${formatPeso(penalty)}).`}
+      />
+      <dl className="space-y-1 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+        <div className="flex justify-between">
+          <dt className="text-slate-600">Penalty owed now</dt>
+          <dd className="tabular-nums">{formatPeso(penalty)}</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-slate-600">Waived</dt>
+          <dd className="tabular-nums">{preview.error ? "-" : `-${formatPeso(preview.waive)}`}</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-slate-600">Penalty still payable</dt>
+          <dd className="tabular-nums">{formatPeso(preview.penaltyAfter)}</dd>
+        </div>
+        <div className="flex justify-between border-t border-slate-200 pt-1 font-medium">
+          <dt>To redeem after</dt>
+          <dd className="tabular-nums">{formatPeso(preview.owedAfter)}</dd>
+        </div>
+      </dl>
+      {preview.error && typed !== null && <p className="text-sm text-red-700">{preview.error}</p>}
+      <SubmitButton
+        variant="secondary"
+        pendingLabel="Waiving"
+        disabled={preview.error !== null}
+        confirm={{
+          title: "Waive this penalty?",
+          message: preview.error ? "" : `${formatPeso(preview.waive)} of the penalty is removed from what the customer owes. This is saved permanently with your name and cannot be undone.`,
+          confirmLabel: "Waive penalty",
+        }}
+      >
+        Waive penalty
       </SubmitButton>
     </ActionForm>
   );
