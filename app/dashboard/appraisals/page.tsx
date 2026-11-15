@@ -47,7 +47,9 @@ export default async function AppraisalsPage({
   const sort = SORTS[params.sort ?? ""] ? params.sort! : "appraised";
   // B7: newest first, except Awaiting review: oldest first, so old cases get handled
   const dir = params.dir === "asc" || params.dir === "desc" ? params.dir : tab === "review" && sort === "appraised" ? "asc" : "desc";
-  const canAppraise = hasRole(user.profile.role, ["appraiser"]);
+  // Nov 16: Cashier too. The server already lets a Cashier save an appraisal (New Loan's "Appraise now"), and the
+  // Cashier's Dashboard has a "New appraisal" shortcut that came here and found no button. Editing stays Appraiser/Admin.
+  const canAppraise = hasRole(user.profile.role, ["appraiser", "cashier"]);
 
   const supabase = await createClient();
   // B4: what the search box matches: notes, the "Others" description, a category name, or a karat ("18" / "18K").
