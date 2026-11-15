@@ -64,7 +64,7 @@ export function AppShell({
   const collapsed = useSyncExternalStore(subscribe, readCollapsed, () => false);
 
   const nav = (rail: boolean) => (
-    <nav aria-label="Main" className="sidebar-scroll flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-2">
+    <nav aria-label="Main" className="sidebar-scroll flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3 pt-4">
       {sections.map((section, s) => (
         <div key={section.title} className={cx(s > 0 && "mt-4")}>
           {/* expanded: the section name. collapsed: a thin rule, so the groups still read as groups */}
@@ -142,8 +142,8 @@ export function AppShell({
       href="/dashboard"
       onClick={() => setOpen(false)}
       className={cx(
-        "block shrink-0 overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold-400",
-        rail ? "flex h-16 items-center justify-center" : "px-4 pb-1 pt-3",
+        "block shrink-0 overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold-500",
+        rail ? "flex h-16 items-center justify-center" : "border-b-[3px] border-gold-400 bg-white px-5 py-3.5",
       )}
       aria-label="CTM Pawnshop PawnTrack dashboard"
     >
@@ -152,13 +152,8 @@ export function AppShell({
           CTM
         </span>
       ) : (
-        <>
-          {/* the logo sits on a light card: its dark blue "PAWNSHOP" would not read on navy */}
-          <span className="block rounded-xl bg-white px-3 py-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.25)] ring-1 ring-white/20">
-            <Image src="/ctm-logo.webp" alt="CTM Pawnshop" width={960} height={278} priority sizes="224px" className="h-auto w-full" />
-          </span>
-          <span className="mt-1.5 block text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-navy-300">PawnTrack</span>
-        </>
+        // a white header strip across the top of the menu: the logo was made for a light background, so it sits on it as it is
+        <Image src="/ctm-logo.webp" alt="CTM Pawnshop" width={960} height={278} priority sizes="224px" className="mx-auto h-auto w-full max-w-[200px]" />
       )}
     </Link>
   );
