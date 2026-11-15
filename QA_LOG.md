@@ -274,3 +274,8 @@ Checks:
 - 246 unit tests pass
 - tsc and lint are clean
 - `next build` succeeds
+
+## Pass 7: faster search (Nov 15, 2026)
+- `ctm_selftest_0076`: 5 of 5 PASS (name search with no ID number returned, role access, C- and A-numbers, similar names, the 61st search limited, signed-out refused).
+- Ranking check: 150 combinations of names, phones, ID numbers and typed text give the same rank in SQL as `matchRank` in the app.
+- 358 unit tests, type check and lint pass.

@@ -327,3 +327,11 @@ Migrations 0020–0025, all applied live.
 - **Data:** the PT-SEED-04 item, which was queued for auction while its loan was only defaulted, is back in the vault. Its one-item auction batch was archived, not deleted.
 - **Arch Coles duplicate:** left alone while its loan is open.
 - **#31, double submit:** already handled by `p_request_id` / `ctm_requests` in `record_payment` and `capitalize_loan`, so no change was needed.
+
+## Faster search (Nov 15, 2026, migrations 0076 and 0077)
+- **Cause:** the web server (Vercel) ran in Washington DC and the database (Supabase) is in Seoul. One quick search made 6 trips to the database one after another (8 when it fell back to similar names). Each queued trip crossed the Pacific, while every query itself took only a few milliseconds.
+- **Region:** `vercel.json` now sets `"regions": ["icn1"]`, so the web server runs in Seoul next to the database. This speeds up every page, not just search.
+- **One call:** `quick_search()` (0076) does the role check, the 60-a-minute limit, the customer ranking (the same rules as `lib/customers/search.ts`, checked on 150 name, phone and ID cases: all the same), the similar-names fallback, loans, receipts and appraisals, and returns one JSON. The app still reads the typed text and builds the labels. A full ID number is searched inside the database and never returned.
+- **Small differences:** open-loan counts on the customer rows are now exact (before they were counted from at most 30 loans), and ties in ranking are broken by lower-case name in the database instead of the browser's sort.
+- **Measured:** inside the database the old queries and the new function take about the same time (4–7 ms against 5–8 ms, 20 runs each, rate-limit counter reset between runs). Trips from the web server to the database per search: 6 before (8 with typo fallback), 3 now (who is signed in, the profile, quick_search). Vercel's Hobby plan keeps one hour of logs without request times, so a live before-and-after timing of the deployed site was not possible from here.
+- **Self-test:** `select * from public.ctm_selftest_0076();` (5 tests, every one rolls back).
