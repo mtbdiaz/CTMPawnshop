@@ -36,6 +36,27 @@ export function isFiltered(f: ArchiveFilters) {
   return f.q !== "" || f.when !== "any" || f.by !== "" || f.sort !== "newest";
 }
 
+/** "auction batches" -> "auction batch", "cash entries" -> "cash entry", "customers" -> "customer". */
+function singular(plural: string) {
+  return plural.replace(/ies$/, "y").replace(/ches$/, "ch").replace(/s$/, "");
+}
+
+/**
+ * The line above the list, e.g. "8 archived customers." or "1 of 15 archived vault audits matches.".
+ * Empty when the type has nothing archived: the empty box under it already says so (no need to say it twice).
+ * Changing only the sort isn't a filter, so it keeps the plain count.
+ */
+export function archiveCountLine(label: string, total: number, shown: number, f: ArchiveFilters, limit = ARCHIVE_LIST_LIMIT): string {
+  if (total === 0) return "";
+  const name = label.toLowerCase();
+  const narrowed = f.q !== "" || f.when !== "any" || f.by !== "";
+  if (narrowed) {
+    if (shown === 0) return "No archived records match these filters.";
+    return `${shown} of ${total} archived ${total === 1 ? singular(name) : name} ${shown === 1 ? "matches" : "match"}.`;
+  }
+  return `${total} archived ${total === 1 ? singular(name) : name}${total >= limit ? ` (the newest ${limit})` : ""}.`;
+}
+
 /** Search (every word must appear in the name, details, reason or who archived it), date, person, then sort. */
 export function filterArchiveRows(rows: ArchiveRow[], f: ArchiveFilters, now: Date = new Date()): ArchiveRow[] {
   const words = f.q.toLowerCase().split(/\s+/).filter(Boolean);
