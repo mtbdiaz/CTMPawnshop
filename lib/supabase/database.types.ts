@@ -1930,6 +1930,23 @@ export type Database = {
         Args: { p_id: string; p_table: string }
         Returns: undefined
       }
+      quick_search: {
+        Args: {
+          p_appr?: boolean
+          p_categories?: string[]
+          p_compact: string
+          p_karat?: number
+          p_other?: string
+          p_phone: string
+          p_q: string
+          p_rank_q: string
+          p_ref: string
+          p_safe: string
+          p_short_kind?: string
+          p_short_n?: number
+        }
+        Returns: Json
+      }
       reveal_customer_id: { Args: { p_customer_id: string }; Returns: string }
       run_default_detection: { Args: never; Returns: number }
       run_default_detection_job: { Args: never; Returns: number }

@@ -3,12 +3,9 @@
 
 // the Supabase client that uses the logged-in user's session (database rules still apply)
 import { appraisalNo, customerNo, parseRefNo } from "@/lib/ref-numbers"; // #18 + #29: short numbers
-import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 // checks the user is logged in and has one of the allowed roles
 import { requireRole } from "@/lib/auth/require-role";
-import { allowRequest } from "@/lib/rate-limit"; // #22: rate limiting
-// the SAME customer ranking the New loan search uses (already unit-tested), so results are consistent
-import { rankCustomers } from "@/lib/customers/search";
 // interest that piled up after the due date (same math as the Dashboard and loan page)
 import { owedNow } from "@/lib/loans/status"; // LD (0073): principal + interest + liquidated damages
 // "how many days until this date" (negative = in the past)
@@ -81,7 +78,6 @@ export async function quickSearch(query: string): Promise<SearchResults> {
   // clean the text: trim the ends and turn repeated spaces into one
   const q = query.trim().replace(/\s+/g, " ");
   if (q.length < 2) return empty; // too short to be useful
-  if (!(await allowRequest("search"))) return { ...empty, limited: true }; // #22: at most 60 searches a minute per account
   // remove characters that have a special meaning in the database filter, and cap the length
   const safe = q.replace(/[%,()*\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
   if (safe.length < 2) return empty;
@@ -95,75 +91,97 @@ export async function quickSearch(query: string): Promise<SearchResults> {
   // #18 + #29: "C-0012" or "A-0045" = exactly that customer or appraisal
   const shortNo = parseRefNo(q);
 
-  const supabase = await createClient(); // database, as the logged-in user
   const today = manilaToday(); // today's date in Manila
 
-  // ---------- 1. Customers + loans by ticket + payments by receipt (all at the same time) ----------
-  const [{ data: customerRows }, { data: ticketLoans }, { data: paymentRows }] = await Promise.all([
-    // customers whose name, phone or ID number contains the text
-    shortNo?.kind === "C"
-      ? createAdminClient().from("customers").select("id, customer_no, full_name, contact_number, id_number").is("archived_at", null).eq("customer_no", shortNo.n).limit(1)
-      : createAdminClient() // #17: id_number is not readable with a staff login; the server reads it after requireRole
-          .from("customers")
-          .select("id, customer_no, full_name, contact_number, id_number")
-          .is("archived_at", null)
-          .or(
-            [`full_name.ilike.%${safe}%`, `contact_number.ilike.%${phone}%`, `id_number.ilike.%${safe}%`]
-              .concat(compact !== safe ? [`id_number.ilike.%${compact}%`] : [])
-              .join(","),
-          )
-          .limit(40),
-    // loans whose ticket number contains the text
-    supabase
-      .from("loans")
-      .select("id, ticket_number, status, maturity_date, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, grace_period_days, liquidated_damages_percent, damages_owed, damages_accrued_through, customers(full_name)")
-      .is("archived_at", null)
-      .ilike("ticket_number", `%${ref}%`)
-      .order("created_at", { ascending: false })
-      .limit(10),
-    // payments whose receipt number contains the text (receipts look like RC-20261019...)
-    supabase
-      .from("loan_payments")
-      .select("id, receipt_number, amount, created_at, loans(id, ticket_number, customers(full_name))")
-      .is("archived_at", null)
-      .ilike("receipt_number", `%${ref}%`)
-      .order("created_at", { ascending: false })
-      .limit(4),
-  ]);
+  // What the text says about an item: a category word ("ring", "necklace"), a karat ("18k") or the custom "Others" name.
+  // The database does the searching; the words are read here so the list of categories stays in one place.
+  const words = q.toLowerCase().split(" ");
+  const karatMatch = q.match(/\b(18|21|24)\s*k\b/i); // e.g. "18k" or "24 K"
+  const karat = karatMatch ? Number(karatMatch[1]) : null;
+  const categories = ITEM_CATEGORIES.filter((c) =>
+    words.some((w) => w.length >= 3 && (c.label.toLowerCase().startsWith(w) || c.value.startsWith(w) || CATEGORY_WORDS[w] === c.value)),
+  ).map((c) => c.value);
+  const otherText = safe.replace(/\b(18|21|24)\s*k\b/i, "").trim(); // the text without the karat part
+  const wantAppraisals = shortNo?.kind === "A" || categories.length > 0 || karat !== null || otherText.length >= 3;
 
-  // best customer matches first (name starts with it > a word starts with it > phone/ID > contains)
-  // (a +63 phone number is ranked using its 09... form, the way it is saved)
-  // (a customer number already found exactly one customer, so it isn't ranked)
-  let customers = shortNo?.kind === "C" ? (customerRows ?? []) : rankCustomers(customerRows ?? [], phone !== compact ? phone : q, 4);
-  // #16: no customer found by a text search -> show up to 3 names that are close to what was typed (a typo)
-  let similarNames = false;
-  if (!customers.length && !shortNo && /[a-z]/i.test(q)) {
-    const { data: close } = await supabase.rpc("search_customers_fuzzy", { p_q: q, p_limit: 3 }); // best matches first
-    const ids = (close ?? []).map((r) => r.id);
-    if (ids.length) {
-      const { data: rows } = await createAdminClient().from("customers").select("id, customer_no, full_name, contact_number, id_number").is("archived_at", null).in("id", ids);
-      const order = new Map(ids.map((id, i) => [id, i])); // keep the closest name on top
-      customers = (rows ?? []).sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-      similarNames = customers.length > 0;
-    }
+  // ONE call to the database (migration 0076, quick_search). It checks the role, counts this search against the
+  // 60 a minute limit (#22), finds customers (best 4, same ranking as lib/customers/search.ts, or up to 3 similar
+  // names when nothing matches), their loans and the loans with this ticket number, receipts and appraisals.
+  // Before, this was 6 to 8 separate calls one after another, and with the server far from the database each one
+  // added a noticeable wait. Full ID numbers are searched inside the database and never come back.
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("quick_search", {
+    p_q: q,
+    p_safe: safe,
+    p_compact: compact,
+    p_phone: phone,
+    p_ref: ref,
+    p_rank_q: phone !== compact ? phone : q, // a +63 phone number is ranked using its 09... form, the way it is saved
+    p_short_kind: shortNo?.kind,
+    p_short_n: shortNo?.n,
+    p_categories: categories,
+    p_karat: karat ?? undefined,
+    p_other: otherText,
+    p_appr: wantAppraisals,
+  });
+  if (error || !data) {
+    console.error("quick_search failed:", error?.message); // details stay in the server log
+    throw new Error("Search failed"); // the search box shows its friendly "couldn't search" message
   }
-  const customerIds = customers.map((c) => c.id);
+  const found = data as unknown as QuickSearchAnswer;
+  if (found.limited) return { ...empty, limited: true }; // #22: the server says "slow down" instead of searching
 
-  // ---------- 2. Loans of those customers + how many open loans each has ----------
-  const [{ data: customerLoans }] = await Promise.all([
-    customerIds.length
-      ? supabase
-          .from("loans")
-          .select("id, ticket_number, status, maturity_date, principal_balance, interest_owed, interest_rate_percent, interest_accrued_through, grace_period_days, liquidated_damages_percent, damages_owed, damages_accrued_through, customer_id, customers(full_name)")
-          .is("archived_at", null)
-          .in("customer_id", customerIds)
-          .order("created_at", { ascending: false })
-          .limit(30)
-      : Promise.resolve({ data: [] as never[] }),
-  ]);
+  const loans: SearchHit[] = found.loans.map((l) => {
+    // what the customer owes today (0 once it is closed)
+    const owed = OPEN.has(l.status) || l.status === "defaulted" ? owedNow(l, today) : 0;
+    const s = loanStatus(l, owed, today);
+    return {
+      id: l.id,
+      title: l.ticket_number,
+      // QS1: the name is the second line and the amount + full due date get their own third line.
+      subtitle: l.customer_name ?? "",
+      detail: `${formatPeso(owed)} owed · due ${formatDate(l.maturity_date)}`,
+      href: `/dashboard/loans/${l.id}`,
+      action: s.action,
+      badge: s.badge,
+    };
+  });
 
-  // the loan shape we use below
-  type LoanRow = {
+  const customers: SearchHit[] = found.customers.map((c) => ({
+    id: c.id,
+    title: c.full_name,
+    // #18: the short number. #16: "Similar name" in front when this is a close match, not an exact one
+    subtitle: `${c.similar ? "Similar name · " : ""}${customerNo(c.customer_no)} · ${c.contact_number} · ${c.open_loans} open loan${c.open_loans === 1 ? "" : "s"}`,
+    href: `/dashboard/customers/${c.id}`,
+    action: "View profile",
+  }));
+
+  const appraisals: SearchHit[] = found.appraisals.map((a) => ({
+    id: a.id,
+    title: `${categoryLabel(a.category, a.category_other)}, ${a.karat}K, ${a.weight_grams} g`,
+    subtitle: `${appraisalNo(a.appraisal_no)} · ${formatPeso(a.computed_value)} value${a.customer_name ? ` · ${a.customer_name}` : ""}`,
+    href: `/dashboard/appraisals/${a.id}`,
+    action: "View appraisal",
+    badge: { status: a.status, label: a.status === "pawned" ? "Pawned" : "Available" },
+  }));
+
+  // Payments open the loan they belong to (there is no separate payment page)
+  const payments: SearchHit[] = found.payments.map((p) => ({
+    id: p.id,
+    title: p.receipt_number,
+    subtitle: `${formatPeso(p.amount)} · ${formatDate(p.created_at)} · ${p.customer_name ?? ""} · ${p.ticket_number ?? ""}`,
+    href: p.loan_id ? `/dashboard/loans/${p.loan_id}` : "/dashboard/loans",
+    action: "View loan",
+  }));
+
+  return { customers, loans, appraisals, payments };
+}
+
+// The answer of quick_search (migration 0076)
+type QuickSearchAnswer = {
+  limited: boolean;
+  customers: { id: string; customer_no: number; full_name: string; contact_number: string; similar: boolean; open_loans: number }[];
+  loans: {
     id: string;
     ticket_number: string;
     status: string;
@@ -172,111 +190,12 @@ export async function quickSearch(query: string): Promise<SearchResults> {
     interest_owed: number;
     interest_rate_percent: number;
     interest_accrued_through: string | null;
-    // LD (0073): liquidated damages, so owed amounts include them
     grace_period_days: number;
     liquidated_damages_percent: number;
     damages_owed: number;
     damages_accrued_through: string | null;
-    customer_id?: string;
-    customers: { full_name: string } | null;
-  };
-  const byCustomer = (customerLoans ?? []) as unknown as LoanRow[];
-
-  // open loans per customer, for "2 open loans" under each customer
-  const openCount = new Map<string, number>();
-  for (const l of byCustomer) if (l.customer_id && OPEN.has(l.status)) openCount.set(l.customer_id, (openCount.get(l.customer_id) ?? 0) + 1);
-
-  // ---------- 3. Rank loans: exact ticket > ticket starts with > ticket contains > the customer's loans ----------
-  const lower = ref.toLowerCase();
-  const rank = (l: LoanRow) => {
-    const t = l.ticket_number.toLowerCase();
-    if (t === lower) return 0; // exact ticket number
-    if (t.startsWith(lower)) return 1; // ticket starts with the text
-    if (t.includes(lower)) return 2; // ticket contains the text
-    return 3; // found through the customer's name
-  };
-  const seen = new Set<string>(); // so a loan found both ways is listed once
-  const loanRows = [...((ticketLoans ?? []) as unknown as LoanRow[]), ...byCustomer]
-    .filter((l) => (seen.has(l.id) ? false : (seen.add(l.id), true)))
-    .sort((a, b) => rank(a) - rank(b)) // stable sort: keeps newest-first inside each rank
-    .slice(0, 5);
-
-  const loans: SearchHit[] = loanRows.map((l) => {
-    // what the customer owes today (0 once it is closed)
-    const owed = OPEN.has(l.status) || l.status === "defaulted" ? owedNow(l, today) : 0;
-    const s = loanStatus(l, owed, today);
-    return {
-      id: l.id,
-      title: l.ticket_number,
-      // QS1: before, one line "Name · ₱X owed · due Nov 6, 2026" was cut to one row at 1366px ("due Nov 6, 2…").
-      // Now the name is the second line and the amount + full due date get their own third line.
-      subtitle: l.customers?.full_name ?? "",
-      detail: `${formatPeso(owed)} owed · due ${formatDate(l.maturity_date)}`,
-      href: `/dashboard/loans/${l.id}`,
-      action: s.action,
-      badge: s.badge,
-    };
-  });
-
-  const customerHits: SearchHit[] = customers.map((c) => {
-    const n = openCount.get(c.id) ?? 0; // open loans of this customer
-    return {
-      id: c.id,
-      title: c.full_name,
-      // #18: the short number. #16: "Similar name" in front when this is a close match, not an exact one
-      subtitle: `${similarNames ? "Similar name · " : ""}${customerNo(c.customer_no)} · ${c.contact_number} · ${n} open loan${n === 1 ? "" : "s"}`,
-      href: `/dashboard/customers/${c.id}`,
-      action: "View profile",
-    };
-  });
-
-  // ---------- 4. Appraisals: by category word ("ring", "necklace"), karat ("18k") or the custom name of "Others" ----------
-  const words = q.toLowerCase().split(" ");
-  const karatMatch = q.match(/\b(18|21|24)\s*k\b/i); // e.g. "18k" or "24 K"
-  const karat = karatMatch ? Number(karatMatch[1]) : null;
-  // categories whose name (or one of the extra words) appears in what was typed
-  const categories = ITEM_CATEGORIES.filter((c) =>
-    words.some((w) => w.length >= 3 && (c.label.toLowerCase().startsWith(w) || c.value.startsWith(w) || CATEGORY_WORDS[w] === c.value)),
-  ).map((c) => c.value);
-  // the text without the karat part, for searching the custom "Others" name
-  const otherText = safe.replace(/\b(18|21|24)\s*k\b/i, "").trim();
-
-  let appraisals: SearchHit[] = [];
-  if (shortNo?.kind === "A" || categories.length || karat || otherText.length >= 3) {
-    let aq = supabase
-      .from("appraisal_items")
-      .select("id, appraisal_no, category, category_other, karat, weight_grams, computed_value, status, customers(full_name)")
-      .is("archived_at", null);
-    if (shortNo?.kind === "A") aq = aq.eq("appraisal_no", shortNo.n); // #29: exactly that appraisal
-    else {
-      if (karat) aq = aq.eq("karat", karat); // only that karat
-      const ors = [
-        ...(categories.length ? [`category.in.(${categories.join(",")})`] : []),
-        ...(otherText.length >= 3 ? [`category_other.ilike.%${otherText}%`] : []),
-      ];
-      if (ors.length) aq = aq.or(ors.join(",")); // category OR custom name (if only a karat was typed, karat alone filters)
-    }
-    const { data: apprRows } = await aq.order("created_at", { ascending: false }).limit(4);
-    type ApprRow = { id: string; appraisal_no: number; category: string; category_other: string | null; karat: number; weight_grams: number; computed_value: number; status: string; customers: { full_name: string } | null };
-    appraisals = ((apprRows ?? []) as unknown as ApprRow[]).map((a) => ({
-      id: a.id,
-      title: `${categoryLabel(a.category, a.category_other)}, ${a.karat}K, ${a.weight_grams} g`,
-      subtitle: `${appraisalNo(a.appraisal_no)} · ${formatPeso(a.computed_value)} value${a.customers?.full_name ? ` · ${a.customers.full_name}` : ""}`,
-      href: `/dashboard/appraisals/${a.id}`,
-      action: "View appraisal",
-      badge: { status: a.status, label: a.status === "pawned" ? "Pawned" : "Available" },
-    }));
-  }
-
-  // ---------- 5. Payments: open the loan they belong to (there is no separate payment page) ----------
-  type PayRow = { id: string; receipt_number: string; amount: number; created_at: string; loans: { id: string; ticket_number: string; customers: { full_name: string } | null } | null };
-  const payments: SearchHit[] = ((paymentRows ?? []) as unknown as PayRow[]).map((p) => ({
-    id: p.id,
-    title: p.receipt_number,
-    subtitle: `${formatPeso(p.amount)} · ${formatDate(p.created_at)} · ${p.loans?.customers?.full_name ?? ""} · ${p.loans?.ticket_number ?? ""}`,
-    href: p.loans ? `/dashboard/loans/${p.loans.id}` : "/dashboard/loans",
-    action: "View loan",
-  }));
-
-  return { customers: customerHits, loans, appraisals, payments };
-}
+    customer_name: string | null;
+  }[];
+  payments: { id: string; receipt_number: string; amount: number; created_at: string; loan_id: string | null; ticket_number: string | null; customer_name: string | null }[];
+  appraisals: { id: string; appraisal_no: number; category: string; category_other: string | null; karat: number; weight_grams: number; computed_value: number; status: string; customer_name: string | null }[];
+};
