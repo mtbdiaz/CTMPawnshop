@@ -152,6 +152,56 @@ export type Database = {
           },
         ]
       }
+      archive_events: {
+        Row: {
+          action: string
+          actor: string | null
+          created_at: string
+          id: string
+          original_archive_reason: string | null
+          original_archived_at: string | null
+          original_archived_by: string | null
+          reason: string
+          record_id: string
+          source: string
+          table_name: string
+        }
+        Insert: {
+          action: string
+          actor?: string | null
+          created_at?: string
+          id?: string
+          original_archive_reason?: string | null
+          original_archived_at?: string | null
+          original_archived_by?: string | null
+          reason: string
+          record_id: string
+          source?: string
+          table_name: string
+        }
+        Update: {
+          action?: string
+          actor?: string | null
+          created_at?: string
+          id?: string
+          original_archive_reason?: string | null
+          original_archived_at?: string | null
+          original_archived_by?: string | null
+          reason?: string
+          record_id?: string
+          source?: string
+          table_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "archive_events_actor_fkey"
+            columns: ["actor"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       auction_batch_items: {
         Row: {
           batch_id: string
@@ -1646,6 +1696,10 @@ export type Database = {
         Args: { p_id: string; p_reason: string; p_table: string }
         Returns: undefined
       }
+      archive_restore_check: {
+        Args: { p_id: string; p_table: string }
+        Returns: Json
+      }
       auction_lines: {
         Args: { p_batch?: string; p_kind: string; p_page?: number; p_q?: string; p_size?: number }
         Returns: Json
@@ -2044,10 +2098,9 @@ export type Database = {
         Args: { p_line_id: string; p_notes: string }
         Returns: undefined
       }
-      restore_record: {
-        Args: { p_id: string; p_table: string }
-        Returns: undefined
-      }
+      restore_record:
+        | { Args: { p_id: string; p_table: string }; Returns: undefined }
+        | { Args: { p_id: string; p_reason: string; p_table: string }; Returns: undefined }
       quick_search: {
         Args: {
           p_appr?: boolean
