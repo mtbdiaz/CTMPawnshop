@@ -66,13 +66,11 @@ bottom of each section's run.
   tables** via the Supabase SQL tool (pgcrypto-hashed passwords, the
   standard documented pattern for seeding test users) since I have no
   service_role key to call the Auth Admin API, and there's no self-service
-  signup by design (PB-1/PB-2). All four use password `CtmTest1234!`:
-  - `admin@ctmpawnshop.test`
-  - `operator@ctmpawnshop.test`
-  - `cashier@ctmpawnshop.test`
-  - `appraiser@ctmpawnshop.test`
-  **Delete these (or at least rotate the password) before real production
-  use** — they're for UAT only. Delete via Supabase Dashboard → Authentication
+  signup by design (PB-1/PB-2). Four UAT accounts exist, one per role
+  (the `Test Admin`, `Test Operator`, `Test Cashier` and `Test Appraiser`
+  accounts, `@ctmpawnshop.test`). Credentials are kept in the team password
+  manager and are never written in the repo. **Delete them (or rotate the
+  passwords) before real production use**: Supabase Dashboard → Authentication
   → Users, or `delete from auth.users where email like '%@ctmpawnshop.test';`
   (cascades to `profiles`).
 - **Backups**: Supabase manages backups server-side for this project tier

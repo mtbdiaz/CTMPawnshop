@@ -16,9 +16,9 @@ sensitive data isn't left on an unattended screen.
 | Role | Can do |
 |---|---|
 | **Admin** | Everything — plus System Settings, User Accounts, Compliance review, Reports |
-| **Operator** | Register/edit customers, record inventory audits, prepare auction batches, record non-loan expenses/revenue |
-| **Cashier** | Create loans, record payments, process extensions/redemptions, send reminders |
-| **Appraiser** | Record item appraisals, capture photos |
+| **Operator** | Register and edit customers, vault audits, move items, auction batches, record non-loan expenses/revenue |
+| **Cashier** | Register customers, create loans, record payments, renew, capitalize, redeem, reinstate, log reminder calls |
+| **Appraiser** | Record and edit appraisals, capture photos, flag counterfeit risk |
 
 The left sidebar only shows the screens your role can use. Your **Dashboard**
 shows what needs attention today (overdue loans, loans due this week, flagged
@@ -53,8 +53,11 @@ trail at the top so you can step back.
 6. **Redemption** → Once the balance reaches ₱0, redeem the item — it's
    marked released in the vault.
 7. If a loan passes its due date **and** its grace period with no payment or
-   extension, it's automatically marked defaulted and the item moves toward
-   forfeiture — no manual tracking needed.
+   extension, it's automatically marked defaulted (every night at 00:05). A
+   **Defaulted loan accepts no payment, renewal or redemption**: a Cashier or
+   Admin must **Reinstate** it first (it keeps its old due date, so renew or
+   pay in the same visit, or it defaults again that night), or an Admin
+   **Forfeits** it. Only forfeited items go to auction.
 
 **Waiving a penalty (Admin only).** If the customer could not pay or renew because of something that was not their
 fault (the shop was closed on their due date, the system was down), open the loan and use **Waive penalty**. Pick the
@@ -134,6 +137,6 @@ damages % can be 0 to 100; 0 turns the charge off for new loans.
 
 ## User Accounts (Admin)
 
-Create staff accounts (a temporary password is shown once — share it
+Found under **Settings, Users**. Create staff accounts (a temporary password is shown once — share it
 securely), edit a staff member's name/role, or deactivate an account when
 someone leaves (this immediately blocks their login).
