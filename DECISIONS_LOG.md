@@ -381,3 +381,10 @@ Migrations 0020–0025, all applied live.
 - **Gold highlights:** table header bottom line, the open tab underline, stat-card hover and the gold stat tile. Buttons stay navy. Focus rings stay navy on purpose (gold on white is too faint to see).
 - **Status colors:** only the pale steps (red, amber, green backgrounds and rings) lean a little warm; the strong steps used for text are unchanged, so meaning and contrast are the same.
 - **Prints:** printed pages keep black on white (the print rules force it); the table header line prints in the warm grey, no tint. The pawn ticket form (the owner's form, placed in points) is not touched.
+
+## Fix: the green success message was lost when the form disappeared (Nov 16, 2026)
+- **Found by the tester:** after Redeem, Waive penalty and Pay in full no green pop-up showed, although every one of those forms sets a message.
+- **Cause:** `ActionForm` raised the message in an effect after the new state rendered. On success the server re-renders the page, and for these actions the form is not on the page any more (a redeemed loan has no Redeem form, a paid-off loan no payment form), so the form was removed in the same update and the effect never ran. Reproduced first with a real server action that sets a cookie and revalidates the page; the toast did not appear.
+- **Fix (`components/form.tsx`):** the message is now raised inside the action wrapper, the moment the server answers, through the toast that lives above the page. Every form in the app uses `ActionForm`, so all success messages are covered. Reset-on-success and `onSuccess` still run in the effect (they need the form, so they are not needed once it is gone).
+- **Checked:** the same test now shows the message when the form disappears, and exactly one message (no double) when the form stays.
+- **Not bugs:** the age and "more than owed" messages are the browser's own bubbles (`min`/`max` on the field) shown before anything is sent; the server and database check the same rules and have their own wording, so the rule holds even if the browser check is skipped. The "capitalize refused" and "grace period over" rows are the same single message.

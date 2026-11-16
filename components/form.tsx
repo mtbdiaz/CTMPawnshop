@@ -64,20 +64,31 @@ export function ActionForm<S extends FormState>({
   onSuccess?: (state: S) => void;
 }) {
   const [initial] = useState<S>(() => initialState ?? ({} as S));
-  const [state, formAction, pending] = useActionState<S, FormData>(
-    action as (state: Awaited<S>, formData: FormData) => Promise<S>,
-    initial as Awaited<S>,
-  );
+  const toast = useToast();
+  // The green message is raised here, the moment the server action answers, and not in an effect after the new state
+  // renders. Why: on success many pages re-render without the form at all (a redeemed loan has no Redeem form any more),
+  // so the form was already gone before an effect could run and the message was lost. The toast lives above the page,
+  // so it survives. The latest props are read through a ref, so this wrapper never goes stale.
+  const latest = useRef({ action, successMessage, toast });
+  useEffect(() => {
+    latest.current = { action, successMessage, toast };
+  });
+  const [state, formAction, pending] = useActionState<S, FormData>(async (prev: Awaited<S>, formData: FormData) => {
+    const { action: run, successMessage: msg, toast: t } = latest.current;
+    const result = await run(prev as S, formData);
+    if (result && result.success) {
+      const message = typeof msg === "function" ? msg(result) : msg;
+      if (message) t.push(message, "success");
+    }
+    return result as Awaited<S>;
+  }, initial as Awaited<S>);
   const formRef = useRef<HTMLFormElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null);
-  const toast = useToast();
 
   useEffect(() => {
     if (state === initial) return;
     if (state.success) {
-      const message = typeof successMessage === "function" ? successMessage(state) : successMessage;
-      if (message) toast.push(message, "success");
       if (resetOnSuccess) formRef.current?.reset();
       onSuccess?.(state);
     } else if (state.fieldErrors && formRef.current) {
