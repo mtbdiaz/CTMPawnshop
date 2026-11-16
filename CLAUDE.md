@@ -16,29 +16,34 @@ not port its code structure.
 - **Database/Auth**: Supabase (Postgres + Auth + Row Level Security)
   - Project ref: `qrbopdbpmwjjsjdwoawz`
 - **Hosting**: Vercel
-- **Testing**: to be decided in Sprint 0 scaffold (likely Vitest + React Testing Library)
+- **Testing**: Vitest unit tests (48 files, 429 tests, pure logic only: validation, money rules, roles, formatting). No component, end-to-end or database integration tests yet; the database has `ctm_selftest_*` functions that run inside a rolled-back transaction. Run with `npm test`.
+- **Install**: `npm install --legacy-peer-deps` (a plain `npm ci` fails: the lockfile is out of sync).
 
-## Folder structure (scaffolded in Sprint 0)
+## Folder structure (current)
 
 ```
-app/                    # Next.js App Router routes
-  (auth)/               # login, password reset — added per-feature
-  (dashboard)/          # role-gated screens per module — added per-feature
-lib/
+app/                    # Next.js App Router routes (no API routes: server actions only)
+  login/, force-password-change/   # sign-in and the forced new password
+  dashboard/            # all staff screens: customers, appraisals, loans, inventory (audit, auction),
+                        # finance, compliance (reminders), reports, settings (users), archive
+  print/                # ticket and receipt print pages
+lib/                    # pure logic by area: loans, customers, appraisal, inventory, finance, reports,
+                        # compliance, auth, validation, audit, calendar, format
   supabase/
     client.ts           # browser client (anon key)
     server.ts           # createClient() = session-bound (RLS); createAdminClient() = service_role, server-only
     middleware.ts        # session-refresh helper used by proxy.ts
   validation/           # shared zod/validation schemas — added as needed
-components/             # shared UI components — added as needed
+components/             # shared UI: app shell and menu, forms, tables, toast, date and dropdown pop-ups (picker-enhancer)
 proxy.ts                # Next.js 16 middleware equivalent; refreshes Supabase session cookie
 supabase/
-  migrations/           # SQL migrations (tables + RLS policies) — added per-feature
+  migrations/           # SQL migrations 0001-0086 (tables, RLS, functions). Known drift: see QA report M-02
+  rollbacks/            # rollback scripts for a few migrations
 docs/                   # source-of-truth backlog docs (do not edit)
 ```
 
 Scaffolded with `create-next-app` (TypeScript, Tailwind, ESLint, App Router,
-no `src/` dir). Next.js 16.3.4 — middleware file convention is `proxy.ts`
+no `src/` dir). Next.js 16.4.5 — middleware file convention is `proxy.ts`
 (`middleware.ts` is deprecated in this version), function name `proxy`.
 
 ## Branch strategy
@@ -86,10 +91,11 @@ Four roles throughout: **Admin, Operator, Cashier, Appraiser**.
 ## Known open gaps (flagged by SAD/INVEST review — do not silently resolve)
 
 - **PB-14 (Calculate Valuation & Loan Range)** — marked **not Estimable**.
-  The exact karat/purity-to-value formula was never numerically confirmed
-  with CTM Pawnshop. Implement with a clearly marked placeholder formula and
-  a `// TODO: confirm formula with CTM Pawnshop` comment. Flag explicitly
-  when reached.
+  Current rule (still to be confirmed with CTM Pawnshop): value = weight x
+  the price per gram for the karat (24K/21K/18K prices in Settings; there is
+  no purity multiplier any more), maximum loan = value x LTV %, and the
+  minimum shown is a placeholder 90% of the maximum
+  (`lib/appraisal/valuation.ts`, marked `TODO`).
 - **PB-3 (RBAC)** and **PB-17→ re-mapped as PB-17 "Create Pawn Loan & Issue
   Ticket"** — both marked **not Small**. Stop and report if either feels too
   large mid-build rather than pushing through untested.
@@ -97,9 +103,9 @@ Four roles throughout: **Admin, Operator, Cashier, Appraiser**.
   Build as a shared logging utility/trigger used by every table's
   insert/update/delete, not bolted on per-module, from the start.
 - **PB-39 (Trends & Analytics Dashboard)** — marked **not Testable** as
-  written ("spot patterns" is subjective). Chosen concrete metrics: TBD,
-  will be defined before building in Sprint 9 (candidates: redemption rate,
-  average loan size, forfeiture rate).
+  written ("spot patterns" is subjective). Defined and built: redemption
+  rate, forfeiture rate, average loan size and monthly loan volume
+  (`lib/reports/analytics.ts`).
 
 ## Other docs
 
@@ -168,3 +174,22 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## Rules learned the hard way (Nov 2026)
+
+- A **Defaulted** loan accepts no payment, renewal or redemption. It must be
+  reinstated (Cashier or Admin) or forfeited (Admin only) first. A reinstated
+  loan keeps its old due date, so the nightly job (00:05 Manila,
+  `ctm-default-detection`) defaults it again unless it is renewed or paid.
+- Late charges: interest 5% per 30 days (or part), 7 grace days, liquidated
+  damages 2% of unpaid principal per 30 days after the grace days. Payment
+  order: damages, interest, principal. Rates are copied onto each loan.
+- Admin corrections (`admin_edit_loan`, `admin_edit_payment`) refuse closed or
+  archived loans and amounts that break the balance (migration 0086).
+- Demo data: all rows are marked `is_demo`. A 3-month demo set was loaded on
+  Nov 16, 2026 (see DECISIONS_LOG.md). Test accounts and passwords are never
+  written in the repo.
+- Open QA findings and the owner questions are in `QA_REPORT.md` (if present)
+  and DECISIONS_LOG.md; the ones that matter for go-live: the 90-day
+  redemption period (PD 114) before forfeiture, staging environment, and a
+  migration baseline.

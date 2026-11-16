@@ -1,5 +1,7 @@
 # CTM PawnTrack — Sprint Progress
 
+> **Status Nov 16, 2026:** all 10 sprints are built and live. 48 test files, 429 unit tests; 26 database tables with RLS; migrations 0001-0086. Older per-sprint test counts below (22, 82 ...) are historical. Since the sprints: Reinstate/Capitalize, liquidated damages, penalty waivers, quick search, archive/restore, vault audit follow-ups, a redesigned login, menu, dropdowns and calendar.
+
 Checklist mirrors the authoritative Sprint Backlog sheet in
 `/docs/2026-SoftEng-CTMPawnshop-Sprint.xlsx`. Check items off the moment
 they're done — don't batch updates.
@@ -41,8 +43,8 @@ Tests: +9 unit tests (AML check, customer validation). Build+typecheck+lint clea
 
 - [x] PB-12 Record Gold Item Details (`app/dashboard/appraisals`)
 - [x] PB-13 Capture Item Photo and Notes — Supabase Storage bucket `item-photos`
-- [x] PB-14 Calculate Valuation & Loan Range — ⚠ PLACEHOLDER FORMULA, see DECISIONS_LOG.md, needs real client confirmation
-- [x] PB-15 Flag Counterfeit Risk — placeholder purity-tolerance table, see DECISIONS_LOG.md
+- [x] PB-14 Calculate Valuation & Loan Range — weight x price per gram for the karat (no purity), loan = value x LTV; the 90% minimum is a placeholder, needs client confirmation (see DECISIONS_LOG.md)
+- [x] PB-15 Flag Counterfeit Risk — now a manual flag set by the Appraiser (the purity table was dropped); an Admin clears or confirms it
 - [x] PB-16 Resolve Counterfeit Flag (Admin) (`app/dashboard/appraisals/[id]`)
 
 Tests: +14 unit tests (valuation formula, counterfeit range logic, appraisal
@@ -60,7 +62,7 @@ application/validation, extension). Build+typecheck+lint clean.
 ## Sprint 5 — Loan and Transaction Management (part 2)
 
 - [x] PB-20 Redeem Pawned Item — closes loan, releases inventory item
-- [x] PB-21 Process Loan Default & Forfeiture — ⚠ runs on page load, not a real scheduler, see DECISIONS_LOG.md
+- [x] PB-21 Process Loan Default & Forfeiture — nightly pg_cron job `ctm-default-detection` (00:05 Manila); Admin forfeits. Open: 90-day redemption period (QA H-01)
 - [x] PB-22 Lost Ticket Alternate Verification — ID-number check against customer record on payment/redemption
 
 Tests: +7 unit tests (grace-period detection, lost-ticket ID matching).
@@ -118,7 +120,7 @@ Build+typecheck+lint clean, all 26 routes compile.
 
 Final validation: 82/82 Vitest tests passing, `next build` + `tsc --noEmit` +
 `eslint` all clean (26 routes), no hardcoded secrets (grepped), RLS enabled
-on all 17 tables, Supabase security advisor issues fixed.
+on all 17 tables at that time (26 now), Supabase security advisor issues fixed.
 
 ## Post-Sprint-10 Production Incident Fixes
 
