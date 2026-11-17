@@ -347,52 +347,65 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           They stay separate boxes with their own colour and their own button. Only drawn if at least one shows. */}
       {((pendingFlags ?? 0) > 0 || (openSuspicious ?? 0) > 0) && (
       <div className={cx("grid gap-3", (pendingFlags ?? 0) > 0 && (openSuspicious ?? 0) > 0 && "xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]")}>
-      {/* Counterfeit alert (compact): ONE slim row on computers, wraps to 2 rows on phones.
-          Only shows when at least 1 appraisal is waiting for counterfeit review. */}
+      {/* Counterfeit alert (compact). Only shows when at least 1 appraisal is waiting for counterfeit review.
+          Nov 17 (Wush): an Admin also sees the suspicious-activity box next to it, so this box gets narrower and its one-line
+          text wrapped: the details started with a stray "·" and the Review button dropped under them. Now the box measures
+          its own width (@container): wide = one slim row as before; narrow = the details on a second line (no "·") and the
+          button stays on the right. */}
       {(pendingFlags ?? 0) > 0 && (
-        // role="alert" = screen readers announce it; py-2 + small button keep it about 48px tall
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-slate-800">
-          {/* left side: icon + message + item details (min-w-0 lets long text wrap instead of overflowing) */}
-          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-            {/* small warning icon */}
-            <Icon name="alert" className="h-4 w-4 shrink-0 text-red-700" />
-            {/* short message. "Possible counterfeit" = suspected only, not confirmed */}
-            <span className="font-medium text-red-900">
-              Possible counterfeit: {pendingFlags} appraisal{pendingFlags === 1 ? "" : "s"}{" "}
-              {/* Admin: "needs review" (1) / "need review" (2+). Others: waiting for an Admin. */}
-              {role === "admin" ? (pendingFlags === 1 ? "needs review" : "need review") : "waiting for Admin review"}
-            </span>
-            {/* item details in grey, on the same row (they wrap under the message on small screens) */}
-            {oldestFlag && (
-              <span className="text-slate-600">
-                {/* one flagged item: what it is + when it was flagged */}
-                {pendingFlags === 1 ? (
-                  <>
-                    · {categoryLabel(oldestFlag.category, oldestFlag.category_other)}, {oldestFlag.karat}K, {oldestFlag.weight_grams} g · Flagged{" "}
-                    {formatDate(flaggedOn)} ·{" "}
-                  </>
-                ) : (
-                  // several flagged items: only say how long the oldest has waited
-                  <>· Oldest </>
+        // role="alert" = screen readers announce it
+        <div role="alert" className="@container rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-slate-800">
+          <div className="flex items-center justify-between gap-3">
+            {/* left side: icon + message + item details (min-w-0 lets long text wrap instead of overflowing) */}
+            <div className="flex min-w-0 items-start gap-2 @4xl:items-center">
+              {/* small warning icon */}
+              <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0 text-red-700 @4xl:mt-0" />
+              <div className="min-w-0 @4xl:flex @4xl:flex-wrap @4xl:items-center @4xl:gap-x-2">
+                {/* short message. "Possible counterfeit" = suspected only, not confirmed */}
+                <p className="font-medium text-red-900">
+                  Possible counterfeit: {pendingFlags} appraisal{pendingFlags === 1 ? "" : "s"}{" "}
+                  {/* Admin: "needs review" (1) / "need review" (2+). Others: waiting for an Admin. */}
+                  {role === "admin" ? (pendingFlags === 1 ? "needs review" : "need review") : "waiting for Admin review"}
+                </p>
+                {/* item details in grey: on the same row when the box is wide ("·" in front), on their own line when narrow */}
+                {oldestFlag && (
+                  <p className="text-slate-600">
+                    <span className="hidden @4xl:inline">· </span>
+                    {/* one flagged item: what it is + when it was flagged */}
+                    {pendingFlags === 1 ? (
+                      <>
+                        {categoryLabel(oldestFlag.category, oldestFlag.category_other)}, {oldestFlag.karat}K, {oldestFlag.weight_grams} g · Flagged{" "}
+                        {formatDate(flaggedOn)}{" "}
+                      </>
+                    ) : (
+                      // several flagged items: only say how long the oldest has waited
+                      <>Oldest </>
+                    )}
+                    {/* days waiting, worked out from the real date; bold after 7 days */}
+                    {/* "· 1d pending" stays together, so a wrapped line never ends in a lone "·" */}
+                    <span className={cx("whitespace-nowrap", flagDays > 7 && "font-semibold text-red-800")}>
+                      {pendingFlags === 1 && "· "}
+                      {flagDays}d pending
+                    </span>
+                  </p>
                 )}
-                {/* days waiting, worked out from the real date; bold after 7 days */}
-                <span className={cx("whitespace-nowrap", flagDays > 7 && "font-semibold text-red-800")}>{flagDays}d pending</span>
-              </span>
-            )}
-          {/* end of left side */}
-          </span>
-          {/* small button. 1 flagged item: opens that appraisal. Several: opens the list of flagged items.
-              It only opens the page; clearing or confirming is still done there, by an Admin. */}
-          <ButtonLink href={pendingFlags === 1 && oldestFlag ? `/dashboard/appraisals/${oldestFlag.id}` : "/dashboard/appraisals?risk=pending"} size="sm">
-            {/* D6: only an Admin can clear or confirm a flag, so other roles "view" */}
-            {pendingFlags === 1 ? (role === "admin" ? "Review" : "View") : "View all"}
-          </ButtonLink>
+              </div>
+            </div>
+            {/* small button, always on the right. 1 flagged item: opens that appraisal. Several: opens the list of flagged items.
+                It only opens the page; clearing or confirming is still done there, by an Admin. */}
+            <span className="shrink-0">
+              <ButtonLink href={pendingFlags === 1 && oldestFlag ? `/dashboard/appraisals/${oldestFlag.id}` : "/dashboard/appraisals?risk=pending"} size="sm">
+                {/* D6: only an Admin can clear or confirm a flag, so other roles "view" */}
+                {pendingFlags === 1 ? (role === "admin" ? "Review" : "View") : "View all"}
+              </ButtonLink>
+            </span>
+          </div>
         </div>
       )}
       {/* Suspicious-activity alert: Admin only, only when flags are open */}
       {(openSuspicious ?? 0) > 0 && (
         // Viewport fit: px-3 py-2 = same slim size as the counterfeit alert
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           {/* left side: icon + message */}
           <span className="flex items-center gap-2">
             {/* Redesign: shield icon, same as Suspicious activity in the sidebar */}
@@ -402,9 +415,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </span>
           {/* end of left side */}
           </span>
-          <ButtonLink href="/dashboard/compliance" size="sm">
-            Review flags
-          </ButtonLink>
+          {/* shrink-0 + nowrap: the button keeps its size and one line, the text wraps instead */}
+          <span className="shrink-0 whitespace-nowrap">
+            <ButtonLink href="/dashboard/compliance" size="sm">
+              Review flags
+            </ButtonLink>
+          </span>
         </div>
       )}
       {/* end of the warnings row */}
