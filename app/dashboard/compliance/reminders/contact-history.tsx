@@ -36,7 +36,7 @@ export function ContactHistoryButton({ customer, ticket, items }: { customer: st
           aria-labelledby="history-title"
           onClose={() => setOpen(false)}
           onClick={(e) => e.target === e.currentTarget && ref.current?.close()} // a click on the dark area closes it
-          className="m-auto max-h-[calc(100dvh-2rem)] w-[min(32rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-slate-200 p-0 shadow-2xl backdrop:bg-navy-950/50"
+          className="m-auto max-h-[calc(100dvh-2rem)] w-[min(32rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-slate-200 p-0 text-left shadow-2xl backdrop:bg-navy-950/50"
         >
           <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
             <div className="min-w-0">

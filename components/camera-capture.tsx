@@ -187,7 +187,7 @@ export function CameraButton({ onCapture, disabled, compact }: { onCapture: (fil
             stopCamera();
             setOpen(false);
           }}
-          className="m-auto max-h-[calc(100dvh-2rem)] w-[min(40rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-slate-200 p-0 shadow-2xl backdrop:bg-navy-950/60"
+          className="m-auto max-h-[calc(100dvh-2rem)] w-[min(40rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-slate-200 p-0 text-left shadow-2xl backdrop:bg-navy-950/60"
         >
           <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-3">
             <h2 id="camera-title" className="text-lg font-semibold text-slate-900">

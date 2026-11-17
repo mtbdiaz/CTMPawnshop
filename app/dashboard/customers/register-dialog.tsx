@@ -93,7 +93,7 @@ export function RegisterCustomerDialog({
             window.history.replaceState(null, "", url.toString());
           }
         }}
-        className="m-auto max-h-[calc(100dvh-2rem)] w-[min(48rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-slate-200 p-0 shadow-2xl backdrop:bg-navy-950/50"
+        className="m-auto max-h-[calc(100dvh-2rem)] w-[min(48rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-slate-200 p-0 text-left shadow-2xl backdrop:bg-navy-950/50"
       >
         {/* popup header: title + short note + close button */}
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">

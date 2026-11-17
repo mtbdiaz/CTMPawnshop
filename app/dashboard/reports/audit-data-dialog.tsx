@@ -51,7 +51,7 @@ export function AuditDataButton({
           aria-labelledby="audit-data-title"
           onClose={() => setOpen(false)}
           onClick={(e) => e.target === e.currentTarget && ref.current?.close()} // a click on the dark area closes it
-          className="m-auto max-h-[calc(100dvh-2rem)] w-[min(56rem,calc(100vw-2rem))] overflow-hidden rounded-md border border-slate-200 p-0 shadow-2xl backdrop:bg-navy-950/50 backdrop:backdrop-blur-sm"
+          className="m-auto max-h-[calc(100dvh-2rem)] w-[min(56rem,calc(100vw-2rem))] overflow-hidden rounded-md border border-slate-200 p-0 text-left shadow-2xl backdrop:bg-navy-950/50 backdrop:backdrop-blur-sm"
         >
           <div className="flex max-h-[calc(100dvh-2rem)] flex-col">
             {/* header: what this entry is, and the X */}

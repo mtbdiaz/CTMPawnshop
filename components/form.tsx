@@ -153,8 +153,10 @@ export function ActionForm<S extends FormState>({
       <dialog
         ref={dialogRef}
         onClose={() => setConfirmReq(null)}
-        // F4: rounded-md corners; the shadow stays because dialogs float above the page
-        className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-md border border-slate-200 p-0 shadow-2xl backdrop:bg-navy-950/50"
+        // F4: rounded-md corners; the shadow stays because dialogs float above the page.
+        // text-left (Nov 17): the popup sits inside the form, so in a right-aligned table cell (e.g. Settings → Vault
+        // locations, Switch off) it took that cell's right alignment. It always reads left to right now.
+        className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-md border border-slate-200 p-0 text-left shadow-2xl backdrop:bg-navy-950/50"
       >
         {confirmReq && (
           <div className="p-6">
