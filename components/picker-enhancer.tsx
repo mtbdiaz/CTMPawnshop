@@ -17,11 +17,17 @@ import {
   addMonths,
   clampIso,
   isDisabledDay,
+  isMonthOutOfRange,
+  isYearOutOfRange,
   longDate,
   monthGrid,
   monthTitle,
   parseIso,
   toIso,
+  YEARS_PER_PAGE,
+  yearBounds,
+  yearPage,
+  yearPageStart,
 } from "@/lib/calendar";
 import { Icon } from "./icons";
 import { cx } from "./ui";
@@ -350,8 +356,13 @@ function CalendarPopup({ el, close }: { el: HTMLInputElement; close: (returnFocu
   const popupRef = useRef<HTMLDivElement>(null);
   const [focus, setFocus] = useState(() => clampIso(selected || today, min, max)); // the day the keyboard is on
   const [view, setView] = useState(() => parseIso(selected || clampIso(today, min, max))!); // the month shown
-  const [mode, setMode] = useState<"days" | "months">("days");
+  // Nov 17 (Wush): "years" added. Before, the title only opened the months and the arrows stepped one year at a time,
+  // so a birth date in the 1970s took about 50 clicks. Now: click the year, pick it from 20 at a time, then the month.
+  const [mode, setMode] = useState<"days" | "months" | "years">("days");
+  const [yearStart, setYearStart] = useState(() => yearPageStart(view.year)); // first year on the year page
+  const bounds = yearBounds(today, min, max); // the years this box allows (1900 to 50 years ahead when it has no limits)
   const gridRef = useRef<HTMLDivElement>(null);
+  const pickGridRef = useRef<HTMLDivElement>(null); // the month or year buttons
 
   const showMonthOf = useCallback((iso: string) => {
     const p = parseIso(iso);
@@ -375,7 +386,15 @@ function CalendarPopup({ el, close }: { el: HTMLInputElement; close: (returnFocu
 
   useLayoutEffect(() => {
     if (popupRef.current) place(el, popupRef.current);
-  }, [el, mode, view]);
+  }, [el, mode, view, yearStart]);
+
+  // opening the month or year list puts the keyboard on the chosen one (or the first that can be picked)
+  useEffect(() => {
+    if (mode === "days") return;
+    const grid = pickGridRef.current;
+    const target = grid?.querySelector<HTMLButtonElement>("[data-current]:not(:disabled)") ?? grid?.querySelector<HTMLButtonElement>("[data-pick]:not(:disabled)");
+    target?.focus({ preventScroll: true });
+  }, [mode, yearStart]);
 
   // after a keyboard move, put the real focus on the day so the ring is visible
   useEffect(() => {
@@ -387,7 +406,7 @@ function CalendarPopup({ el, close }: { el: HTMLInputElement; close: (returnFocu
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
-        if (mode === "months") setMode("days");
+        if (mode !== "days") setMode("days");
         else close();
         return;
       }
@@ -396,7 +415,24 @@ function CalendarPopup({ el, close }: { el: HTMLInputElement; close: (returnFocu
         if (!inside) close(false);
         return; // Tab moves through the buttons of the calendar, like any dialog
       }
-      if (mode !== "days") return;
+      if (mode !== "days") {
+        // arrow keys move between the month or year buttons (3 or 4 across); Enter and Space press the button
+        const cols = mode === "months" ? 3 : 4;
+        const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -cols, ArrowDown: cols }[e.key as "ArrowLeft"];
+        if (!step) return;
+        const buttons = [...(pickGridRef.current?.querySelectorAll<HTMLButtonElement>("[data-pick]") ?? [])];
+        const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        if (at < 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        for (let i = at + step; i >= 0 && i < buttons.length; i += step) {
+          if (!buttons[i].disabled) {
+            buttons[i].focus({ preventScroll: true });
+            break;
+          }
+        }
+        return;
+      }
       let next: string | null = null;
       switch (e.key) {
         case "ArrowLeft": next = addDays(focus, -1); break;
@@ -450,50 +486,113 @@ function CalendarPopup({ el, close }: { el: HTMLInputElement; close: (returnFocu
       <div className="mb-2 flex items-center justify-between gap-1">
         <button
           type="button"
-          onClick={() => (mode === "months" ? setView((v) => ({ ...v, year: v.year - 1 })) : stepMonth(-1))}
-          disabled={mode === "days" && prevDisabled}
-          aria-label={mode === "months" ? "Previous year" : "Previous month"}
-          className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-navy-900 disabled:opacity-30 disabled:hover:bg-transparent"
+          onClick={() => (mode === "years" ? setYearStart((y) => y - YEARS_PER_PAGE) : mode === "months" ? setView((v) => ({ ...v, year: v.year - 1 })) : stepMonth(-1))}
+          disabled={mode === "years" ? yearStart <= bounds.first : mode === "months" ? view.year - 1 < bounds.first : prevDisabled}
+          aria-label={mode === "years" ? `Previous ${YEARS_PER_PAGE} years` : mode === "months" ? "Previous year" : "Previous month"}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-navy-900 disabled:opacity-30 disabled:hover:bg-transparent"
         >
           <Icon name="chevron-left" className="h-4 w-4" />
         </button>
+        {/* the title: the month and the year are separate buttons, so either one is a single click away */}
+        <div className="flex min-w-0 items-center gap-0.5" aria-live="polite">
+          {mode === "years" ? (
+            <span className="px-2.5 py-1 font-display text-[15px] font-semibold tabular-nums text-navy-900">
+              {Math.max(yearStart, bounds.first)} – {Math.min(yearStart + YEARS_PER_PAGE - 1, bounds.last)}
+            </span>
+          ) : (
+            <>
+              {mode === "days" && (
+                <button
+                  type="button"
+                  onClick={() => setMode("months")}
+                  aria-label={`Choose the month (now ${MONTH_NAMES[view.month - 1]})`}
+                  className="flex items-center gap-1 rounded-md px-2 py-1 font-display text-[15px] font-semibold text-navy-900 hover:bg-slate-100"
+                >
+                  {MONTH_NAMES[view.month - 1]}
+                  <Icon name="chevron-down" className="h-3.5 w-3.5 text-slate-500" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setYearStart(yearPageStart(view.year));
+                  setMode("years");
+                }}
+                aria-label={`Choose the year (now ${view.year})`}
+                className="flex items-center gap-1 rounded-md px-2 py-1 font-display text-[15px] font-semibold tabular-nums text-navy-900 hover:bg-slate-100"
+              >
+                {view.year}
+                <Icon name="chevron-down" className="h-3.5 w-3.5 text-slate-500" />
+              </button>
+            </>
+          )}
+        </div>
         <button
           type="button"
-          onClick={() => setMode(mode === "days" ? "months" : "days")}
-          aria-live="polite"
-          aria-expanded={mode === "months"}
-          className="flex items-center gap-1 rounded-md px-2.5 py-1 font-display text-[15px] font-semibold text-navy-900 hover:bg-slate-100"
-        >
-          {mode === "months" ? String(view.year) : monthTitle(view.year, view.month)}
-          <Icon name="chevron-down" className={cx("h-3.5 w-3.5 text-slate-500 transition-transform", mode === "months" && "rotate-180")} />
-        </button>
-        <button
-          type="button"
-          onClick={() => (mode === "months" ? setView((v) => ({ ...v, year: v.year + 1 })) : stepMonth(1))}
-          disabled={mode === "days" && nextDisabled}
-          aria-label={mode === "months" ? "Next year" : "Next month"}
-          className="flex h-8 w-8 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-navy-900 disabled:opacity-30 disabled:hover:bg-transparent"
+          onClick={() => (mode === "years" ? setYearStart((y) => y + YEARS_PER_PAGE) : mode === "months" ? setView((v) => ({ ...v, year: v.year + 1 })) : stepMonth(1))}
+          disabled={mode === "years" ? yearStart + YEARS_PER_PAGE > bounds.last : mode === "months" ? view.year + 1 > bounds.last : nextDisabled}
+          aria-label={mode === "years" ? `Next ${YEARS_PER_PAGE} years` : mode === "months" ? "Next year" : "Next month"}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-navy-900 disabled:opacity-30 disabled:hover:bg-transparent"
         >
           <Icon name="chevron-right" className="h-4 w-4" />
         </button>
       </div>
 
-      {mode === "months" ? (
-        <div className="grid grid-cols-3 gap-1 py-1">
+      {mode === "years" ? (
+        // 20 years, 4 across. Years the box doesn't allow are greyed out. Picking one opens its months.
+        <div ref={pickGridRef} className="grid grid-cols-4 gap-1 py-1" role="group" aria-label="Choose a year">
+          {yearPage(yearStart).map((y) => {
+            const off = y < bounds.first || y > bounds.last || isYearOutOfRange(y, min, max);
+            const isCurrent = y === view.year;
+            return (
+              <button
+                key={y}
+                type="button"
+                data-pick=""
+                data-current={isCurrent ? "" : undefined}
+                disabled={off}
+                aria-pressed={isCurrent}
+                onClick={() => {
+                  // keep the month, unless that month isn't allowed in the new year: then the first allowed one
+                  let month = view.month;
+                  if (isMonthOutOfRange(y, month, min, max)) month = Array.from({ length: 12 }, (_, i) => i + 1).find((m) => !isMonthOutOfRange(y, m, min, max)) ?? month;
+                  setView({ year: y, month, day: 1 });
+                  setFocus(clampIso(toIso(y, month, Math.min(parseIso(focus)!.day, 28)), min, max));
+                  setMode("months");
+                }}
+                className={cx(
+                  "relative rounded-md py-2 text-sm tabular-nums",
+                  isCurrent ? "bg-navy-800 font-medium text-white hover:bg-navy-800" : off ? "cursor-not-allowed text-slate-300" : "text-slate-700 hover:bg-navy-50",
+                )}
+              >
+                {y}
+                {y === parseIso(today)?.year && !isCurrent && <span className="absolute bottom-1 left-1/2 h-0.5 w-3.5 -translate-x-1/2 rounded-full bg-gold-500" aria-hidden="true" />}
+              </button>
+            );
+          })}
+        </div>
+      ) : mode === "months" ? (
+        <div ref={pickGridRef} className="grid grid-cols-3 gap-1 py-1" role="group" aria-label={`Choose a month in ${view.year}`}>
           {MONTH_NAMES.map((name, i) => {
             const isCurrent = view.month === i + 1;
+            const off = isMonthOutOfRange(view.year, i + 1, min, max);
             return (
               <button
                 key={name}
                 type="button"
+                data-pick=""
+                data-current={isCurrent ? "" : undefined}
+                disabled={off}
+                aria-label={`${name} ${view.year}`}
+                aria-pressed={isCurrent}
                 onClick={() => {
                   setView((v) => ({ ...v, month: i + 1 }));
                   setFocus(clampIso(toIso(view.year, i + 1, Math.min(parseIso(focus)!.day, 28)), min, max));
                   setMode("days");
                 }}
                 className={cx(
-                  "rounded-md py-2 text-sm hover:bg-navy-50",
-                  isCurrent ? "bg-navy-800 font-medium text-white hover:bg-navy-800" : "text-slate-700",
+                  "rounded-md py-2 text-sm",
+                  isCurrent ? "bg-navy-800 font-medium text-white hover:bg-navy-800" : off ? "cursor-not-allowed text-slate-300" : "text-slate-700 hover:bg-navy-50",
                 )}
               >
                 {name.slice(0, 3)}

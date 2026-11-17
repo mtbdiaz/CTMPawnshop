@@ -93,3 +93,37 @@ export function longDate(iso: string): string {
   const weekday = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay()];
   return `${weekday}, ${MONTH_NAMES[p.month - 1]} ${p.day}, ${p.year}`;
 }
+
+/* -------- year and month pickers (Nov 17, Wush): a birth date in the 1970s took ~50 clicks one year at a time -------- */
+
+export const YEARS_PER_PAGE = 20; // the year picker shows 20 years at a time (4 across, 5 down)
+export const EARLIEST_YEAR = 1900; // the oldest year offered when a box has no min of its own
+
+/** The first year of the 20-year page a year is on (2026 -> 2020, 1975 -> 1960). */
+export function yearPageStart(year: number): number {
+  return Math.floor(year / YEARS_PER_PAGE) * YEARS_PER_PAGE;
+}
+
+/** The years shown on the page that starts at `start`. */
+export function yearPage(start: number): number[] {
+  return Array.from({ length: YEARS_PER_PAGE }, (_, i) => start + i);
+}
+
+/** The years a box allows: from its min (or 1900) to its max (or 50 years after `todayIso`). */
+export function yearBounds(todayIso: string, min?: string, max?: string): { first: number; last: number } {
+  const lo = parseIso(min ?? "");
+  const hi = parseIso(max ?? "");
+  const now = parseIso(todayIso)?.year ?? new Date().getFullYear();
+  return { first: lo ? lo.year : EARLIEST_YEAR, last: hi ? hi.year : now + 50 };
+}
+
+/** True when no day of that year can be picked (the whole year is before min or after max). */
+export function isYearOutOfRange(year: number, min?: string, max?: string): boolean {
+  return isDisabledDay(toIso(year, 12, 31), min, undefined) || isDisabledDay(toIso(year, 1, 1), undefined, max);
+}
+
+/** True when no day of that month can be picked (the whole month is before min or after max). */
+export function isMonthOutOfRange(year: number, month: number, min?: string, max?: string): boolean {
+  return isDisabledDay(toIso(year, month, daysInMonth(year, month)), min, undefined) || isDisabledDay(toIso(year, month, 1), undefined, max);
+}
+
