@@ -2,8 +2,8 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { MOVEMENT_LABEL, entryTypeLabel, hasFilters, ledgerFilters, movementOf, shortDescription, type LedgerPage, type LedgerRow } from "@/lib/finance/ledger"; // CL1: the words and the address filters
-import { formatDate, formatDateTime, formatPeso } from "@/lib/format";
-import { Alert, Badge, Card, EmptyState, PageHeader, Pagination, StatCard, Table, TBody, TD, TH, THead, TR, pageParam } from "@/components/ui";
+import { formatDateTime, formatPeso } from "@/lib/format";
+import { Alert, Badge, Card, EmptyState, PageHeader, Pagination, Table, TBody, TD, TH, THead, TR, pageParam } from "@/components/ui";
 import { RecordCashEntryButton } from "./cash-entry-form";
 import { EntryDetails } from "./entry-details";
 import { LedgerFiltersBar } from "./ledger-filters";
@@ -44,8 +44,6 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   if (error) throw error; // shows the app's error page instead of made-up numbers
   const ledger = data as unknown as LedgerPage;
   const s = ledger.summary;
-  const net = Number(s.today_in) - Number(s.today_out); // both come from the database as exact amounts
-  const today = formatDate(s.today); // the Manila date the "today" numbers are for
 
   // the address of a page of the same filtered list
   const params = { q: f.q || undefined, type: f.type || undefined, flow: f.flow || undefined, source: f.source || undefined, from: f.from || undefined, to: f.to || undefined, check: f.check ? "1" : undefined };
@@ -59,22 +57,9 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
         actions={<RecordCashEntryButton recordedBy={`${user.profile.full_name} (${user.profile.role})`} locked={s.changes_locked} />}
       />
 
-      {/* the four numbers. "Today" is the shop's day (Manila time). The balance is CALCULATED from the entries;
-          it is not a count of the cash in the drawer, and the card says so */}
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatCard label="Cash in today" value={`${Number(s.today_in) > 0 ? "+" : ""}${formatPeso(Number(s.today_in))}`} hint={`${today} · cash received`} />
-        <StatCard label="Cash out today" value={`${Number(s.today_out) > 0 ? "−" : ""}${formatPeso(Number(s.today_out))}`} hint={`${today} · cash paid out`} />
-        <StatCard label="Net today" value={`${net < 0 ? "−" : net > 0 ? "+" : ""}${formatPeso(Math.abs(net))}`} hint="Cash in minus cash out" tone={net < 0 ? "warning" : "default"} />
-        <StatCard label="Ledger balance" value={formatPeso(Number(s.balance))} hint={
-            <>
-              {/* CL2: the warning first, right under the amount */}
-              {s.under_review && <span className="block font-medium text-amber-800">Includes entries under review.</span>}
-              Calculated from {s.entries.toLocaleString("en-PH")} entries. No cash drawer count is available.
-            </>
-          }
-        />
-      </div>
-
+      {/* Nov 19 (Wush, from the mentor): the four cards (Cash in today, Cash out today, Net today, Ledger balance) were
+          removed: they were confusing here and the same numbers are elsewhere. Today's cash in and out: the "Net cash today"
+          card on the Dashboard. Any period: Reports → Financial summary. The running balance is still the Balance column. */}
       {/* Admin only: the auction-sale entries that have no sale record. They ARE in the balance; nothing is hidden or removed */}
       {isAdmin && (s.check_count ?? 0) > 0 && (
         // CL2: one short line each for the fact and the amount, and a button to the list
@@ -226,22 +211,9 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
         {/* what the numbers mean, closed by default (the same fold-out box as Loans and Customers) */}
         <details className="border-t border-slate-200 px-4 py-2.5 text-sm text-slate-600">
           <summary className="cursor-pointer rounded font-medium text-navy-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500">
-            What do Cash in, Cash out, Net today and Ledger balance mean?
+            What do the Balance column and the labels mean?
           </summary>
           <dl className="mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <dt className="font-semibold text-slate-800">Cash in today</dt>
-              {/* LC7 (Nov 14): + "and liquidated damages" (a renewal also collects them since 0073). Before: "renewal interest" */}
-              <dd>Every cash entry that came in since 12:00 midnight today (Manila time): payments, renewal interest and liquidated damages, auction sales, other revenue.</dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-slate-800">Cash out today</dt>
-              <dd>Every cash entry that went out today: loans released and expenses.</dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-slate-800">Net today</dt>
-              <dd>Cash in today minus cash out today. A minus sign means more went out than came in.</dd>
-            </div>
             <div>
               <dt className="font-semibold text-slate-800">Ledger balance</dt>
               <dd>All cash in minus all cash out, from the first entry to now. It is calculated from the entries. It is not a count of the money in the drawer.</dd>
